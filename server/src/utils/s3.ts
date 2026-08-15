@@ -1,3 +1,4 @@
+import "../polyfills/dom-parser";
 import {
   DeleteObjectCommand,
   GetObjectCommand,

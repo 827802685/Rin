@@ -1,3 +1,4 @@
+import "./polyfills/dom-parser";
 import { handleFetch } from "./runtime/fetch-handler";
 import { handleQueue } from "./runtime/queue-handler";
 import { handleScheduled } from "./runtime/scheduled-handler";
