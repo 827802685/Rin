@@ -3,6 +3,17 @@
     "notfound": "Set the article alias to `about` to create an about page",
     "title": "About"
   },
+  "ai": {
+    "title": "AI",
+    "chat": {
+      "placeholder": "Type a message and press Enter to send",
+      "send": "Send",
+      "clear": "Clear conversation",
+      "disabled": "AI is not enabled yet. Enable AI summary and configure a provider in the admin settings.",
+      "empty": "Send a message to start chatting",
+      "error": "AI request failed. Please try again later."
+    }
+  },
   "admin": {
     "back_to_site": "Back to site",
     "compat_tasks_description": "Run compatibility jobs in bulk to backfill missing AI summaries and image blurhash metadata for older posts.",

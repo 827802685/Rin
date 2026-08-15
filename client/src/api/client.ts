@@ -29,6 +29,9 @@ import type {
   ConfigType,
   ConfigResponse,
   AIConfig,
+  AIChatMessage,
+  AIChatRequest,
+  AIChatResponse,
   UploadResponse,
   AuthStatus,
   LoginRequest,
@@ -151,6 +154,9 @@ export type {
   ConfigType,
   ConfigResponse,
   AIConfig,
+  AIChatMessage,
+  AIChatRequest,
+  AIChatResponse,
   UploadResponse,
   AuthStatus,
   LoginRequest,
@@ -559,6 +565,19 @@ class AIConfigAPI {
 }
 
 /**
+ * AI Chat API methods
+ */
+class ChatAPI {
+  constructor(private http: HttpClient) {}
+
+  // POST /api/ai/chat
+  async send(messages: AIChatMessage[]): Promise<ApiResponse<AIChatResponse>> {
+    const body: AIChatRequest = { messages };
+    return this.http.post<AIChatResponse>("/api/ai/chat", body);
+  }
+}
+
+/**
  * Storage API methods
  */
 class StorageAPI {
@@ -659,6 +678,7 @@ export class ApiClient {
   moments: MomentsAPI;
   config: ConfigAPI;
   aiConfig: AIConfigAPI;
+  chat: ChatAPI;
   storage: StorageAPI;
   search: SearchAPI;
   auth: AuthAPI;
@@ -675,6 +695,7 @@ export class ApiClient {
     this.moments = new MomentsAPI(this.http);
     this.config = new ConfigAPI(this.http);
     this.aiConfig = new AIConfigAPI(this.http);
+    this.chat = new ChatAPI(this.http);
     this.storage = new StorageAPI(this.http);
     this.search = new SearchAPI(this.http);
     this.auth = new AuthAPI(this.http);

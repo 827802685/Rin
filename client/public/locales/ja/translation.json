@@ -3,6 +3,17 @@
     "notfound": "About ページを作成するには、記事のエイリアスを about に設定します",
     "title": "概要"
   },
+  "ai": {
+    "title": "AI",
+    "chat": {
+      "placeholder": "メッセージを入力して Enter で送信",
+      "send": "送信",
+      "clear": "会話をクリア",
+      "disabled": "AI はまだ有効になっていません。管理画面の設定で AI 要約を有効にしてプロバイダーを構成してください。",
+      "empty": "メッセージを送信して会話を始めましょう",
+      "error": "AI の応答に失敗しました。後でもう一度お試しください。"
+    }
+  },
   "admin": {
     "back_to_site": "サイトに戻る",
     "compat_tasks_description": "過去記事向けの AI 要約と画像 blurhash メタデータを一括補完する互換タスクを実行します。",

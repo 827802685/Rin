@@ -3,6 +3,17 @@
     "notfound": "將文章別名設定為 about 可以創建關於頁面",
     "title": "關於"
   },
+  "ai": {
+    "title": "AI",
+    "chat": {
+      "placeholder": "輸入訊息，按 Enter 傳送",
+      "send": "傳送",
+      "clear": "清空對話",
+      "disabled": "AI 尚未啟用。請先在後台設定中啟用 AI 總結並配置供應商。",
+      "empty": "輸入訊息開始對話吧",
+      "error": "AI 回應失敗，請稍後重試"
+    }
+  },
   "admin": {
     "back_to_site": "返回站點",
     "compat_tasks_description": "批次觸發向前相容任務，用於補齊歷史文章缺失的 AI 摘要與圖片 blurhash 中繼資料。",

@@ -113,7 +113,11 @@ async function executeExternalAI(
         api_key: string;
         api_url: string;
     },
-    messages: Array<{ role: "system" | "user" | "assistant"; content: string }>
+    messages: Array<{ role: "system" | "user" | "assistant"; content: string }>,
+    options: {
+        maxTokens?: number;
+        temperature?: number;
+    } = {},
 ): Promise<string | null> {
     const { provider, model, api_key, api_url } = config;
 
@@ -132,8 +136,8 @@ async function executeExternalAI(
         body: JSON.stringify({
             model: model,
             messages,
-            max_tokens: 500,
-            temperature: 0.3,
+            max_tokens: options.maxTokens ?? 500,
+            temperature: options.temperature ?? 0.3,
         }),
     });
 
@@ -343,4 +347,70 @@ export function getAvailableModels(provider: string): string[] {
  */
 export function requiresApiKey(provider: string): boolean {
     return provider !== 'worker-ai';
+}
+
+export type AIChatMessage = {
+    role: "system" | "user" | "assistant";
+    content: string;
+};
+
+/**
+ * Generate a chat reply using the configured AI provider.
+ * Reuses the same provider/model/api_key/api_url as the AI summary feature.
+ */
+export async function generateAIChatReply(
+    env: Env,
+    serverConfig: ConfigReader,
+    messages: AIChatMessage[],
+): Promise<{ ok: true; content: string } | { ok: false; error: string }> {
+    const config = await getAIConfig(serverConfig);
+
+    if (!config.enabled) {
+        return { ok: false, error: "AI is not enabled" };
+    }
+
+    if (config.provider !== "worker-ai" && !config.api_key) {
+        return { ok: false, error: "API key not configured" };
+    }
+
+    try {
+        let result: string | null;
+
+        if (config.provider === "worker-ai") {
+            const fullModelName = getWorkerAIModelId(config.model);
+            result = await executeWorkerAI(env, fullModelName, messages);
+        } else {
+            result = await executeExternalAI(
+                config,
+                messages,
+                {
+                    maxTokens: 1000,
+                    temperature: 0.7,
+                },
+            );
+        }
+
+        if (!result || !result.trim()) {
+            return {
+                ok: false,
+                error: `Empty response from AI provider "${config.provider}" using model "${config.model}"`,
+            };
+        }
+
+        const cleaned = stripReasoningTags(result);
+        if (!cleaned.trim()) {
+            return {
+                ok: false,
+                error: `AI response contained only reasoning tags with no final answer (provider "${config.provider}", model "${config.model}")`,
+            };
+        }
+
+        return { ok: true, content: cleaned };
+    } catch (error) {
+        console.error("[AI Chat] Failed to generate reply:", error);
+        return {
+            ok: false,
+            error: error instanceof Error ? error.message : String(error),
+        };
+    }
 }

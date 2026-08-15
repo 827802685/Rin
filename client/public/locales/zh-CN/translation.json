@@ -3,6 +3,17 @@
     "notfound": "将文章别名设置为 about 可以创建关于页面",
     "title": "关于"
   },
+  "ai": {
+    "title": "AI",
+    "chat": {
+      "placeholder": "输入消息，按 Enter 发送",
+      "send": "发送",
+      "clear": "清空对话",
+      "disabled": "AI 尚未启用。请先在后台设置中启用 AI 总结并配置供应商。",
+      "empty": "输入消息开始对话吧",
+      "error": "AI 响应失败，请稍后重试"
+    }
+  },
   "admin": {
     "back_to_site": "返回站点",
     "compat_tasks_description": "批量触发向前兼容任务，用于补齐历史帖子缺失的 AI 摘要和图片 blurhash 元数据。",

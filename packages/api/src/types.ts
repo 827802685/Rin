@@ -279,6 +279,25 @@ export interface AIConfig {
 }
 
 // ============================================================================
+// AI Chat Types
+// ============================================================================
+
+export type AIChatRole = "system" | "user" | "assistant";
+
+export interface AIChatMessage {
+  role: AIChatRole;
+  content: string;
+}
+
+export interface AIChatRequest {
+  messages: AIChatMessage[];
+}
+
+export interface AIChatResponse {
+  content: string;
+}
+
+// ============================================================================
 // Storage Types
 // ============================================================================
 
@@ -358,6 +377,9 @@ export const API_PATHS = {
   AI_CONFIG_GET: '/ai-config',
   /** @deprecated Use CONFIG_UPDATE('server', {...}) instead. AI config is now part of server config. */
   AI_CONFIG_UPDATE: '/ai-config',
+
+  // AI Chat
+  AI_CHAT: '/ai/chat',
 
   // Storage
   STORAGE_UPLOAD: '/storage',
