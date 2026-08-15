@@ -178,11 +178,11 @@ describe('FaviconService', () => {
                     });
                 }
 
-                if (url === 'https://test-bucket.test.r2.cloudflarestorage.com/images/favicon.webp' && method === 'PUT') {
+                if (url.split('?')[0] === 'https://test-bucket.test.r2.cloudflarestorage.com/images/favicon.webp' && method === 'PUT') {
                     return new Response(null, { status: 200 });
                 }
 
-                if (url.endsWith('/images/favicon.webp')) {
+                if (url.split('?')[0] === 'https://test-bucket.test.r2.cloudflarestorage.com/images/favicon.webp') {
                     return new Response('missing', { status: 404 });
                 }
 

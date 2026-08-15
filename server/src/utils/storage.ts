@@ -1,5 +1,5 @@
 import { path_join } from "./path";
-import { buildS3ObjectUrl, createS3Client, putObject as putS3Object } from "./s3";
+import { createS3Client, getObject, headObject as headS3Object, putObject as putS3Object } from "./s3";
 
 type StorageTarget =
   | {
@@ -104,19 +104,7 @@ export async function getStorageObject(env: Env, storageKey: string): Promise<Re
   }
 
   const client = createS3Client(env);
-  const response = await client.fetch(buildS3ObjectUrl(env, storageKey), {
-    method: "GET",
-  });
-
-  if (response.status === 404) {
-    return null;
-  }
-
-  if (!response.ok) {
-    throw new Error(`Failed to fetch storage object: ${response.status} ${response.statusText}`);
-  }
-
-  return response;
+  return getObject(client, env, storageKey);
 }
 
 export async function headStorageObject(env: Env, storageKey: string): Promise<Response | null> {
@@ -129,19 +117,7 @@ export async function headStorageObject(env: Env, storageKey: string): Promise<R
   }
 
   const client = createS3Client(env);
-  const response = await client.fetch(buildS3ObjectUrl(env, storageKey), {
-    method: "HEAD",
-  });
-
-  if (response.status === 404) {
-    return null;
-  }
-
-  if (!response.ok) {
-    throw new Error(`Failed to inspect storage object: ${response.status} ${response.statusText}`);
-  }
-
-  return response;
+  return headS3Object(client, env, storageKey);
 }
 
 export function getStoragePublicUrl(env: Env, storageKey: string, baseUrl?: string) {

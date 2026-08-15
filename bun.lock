@@ -133,6 +133,7 @@
       "name": "rin-server",
       "version": "0.3.0",
       "dependencies": {
+        "@aws-sdk/client-s3": "^3.930.0",
         "@rin/api": "workspace:*",
         "@rin/config": "workspace:*",
         "arctic": "^3.7.0",
