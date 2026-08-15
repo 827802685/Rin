@@ -120,6 +120,15 @@ function isNotFoundError(error: unknown): boolean {
   if (typeof error !== "object" || error === null) {
     return false;
   }
-  const e = error as { name?: string; $metadata?: { httpStatusCode?: number } };
-  return e.name === "NotFound" || e.name === "NoSuchKey" || e.$metadata?.httpStatusCode === 404;
+  const e = error as {
+    name?: string;
+    $metadata?: { httpStatusCode?: number };
+    $response?: { statusCode?: number };
+  };
+  return (
+    e.name === "NotFound" ||
+    e.name === "NoSuchKey" ||
+    e.$metadata?.httpStatusCode === 404 ||
+    e.$response?.statusCode === 404
+  );
 }
