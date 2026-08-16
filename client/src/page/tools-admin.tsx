@@ -10,6 +10,7 @@ import {
   areSettingsDraftsEqual,
   createSettingsConfigWrappers,
   loadSettingsConfigState,
+  mergeSessionConfig,
   saveSettingsConfigState,
   type SettingsDraft,
   updateDraftConfig,
@@ -61,6 +62,7 @@ export function ToolsAdminPage() {
       const state = await saveSettingsConfigState(draft);
       setDraft(state.draft);
       setInitialDraft(state.draft);
+      mergeSessionConfig(state.draft.clientConfig);
       window.dispatchEvent(new Event("storage"));
       showAlert(t("settings.tools.save_success"));
     } catch (err) {

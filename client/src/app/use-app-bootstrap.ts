@@ -11,6 +11,20 @@ function applyViewportScaling() {
   document.documentElement.style.fontSize = window.screen.width >= highResolutionThreshold ? "125%" : "100%";
 }
 
+function readCachedSessionConfig(): Record<string, unknown> | null {
+  const cachedConfig = sessionStorage.getItem("config");
+  if (!cachedConfig) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(cachedConfig) as Record<string, unknown>;
+    return typeof parsed === "object" && parsed !== null ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
 export function useAppBootstrap() {
   const initializedRef = useRef(false);
   const [profile, setProfile] = useState<Profile | undefined | null>(undefined);
@@ -42,18 +56,32 @@ export function useAppBootstrap() {
       }
     });
 
-    const cachedConfig = sessionStorage.getItem("config");
+    const cachedConfig = readCachedSessionConfig();
     const bootstrappedConfig = readBootstrappedClientConfig();
 
     if (bootstrappedConfig) {
       updateClientConfig(bootstrappedConfig);
     } else if (cachedConfig) {
-      const configObject = JSON.parse(cachedConfig) as Record<string, unknown>;
-      setConfig(new ConfigWrapper(configObject, defaultClientConfig));
-      applyThemeColor(typeof configObject["theme.color"] === "string" ? configObject["theme.color"] : undefined);
+      setConfig(new ConfigWrapper(cachedConfig, defaultClientConfig));
+      applyThemeColor(typeof cachedConfig["theme.color"] === "string" ? cachedConfig["theme.color"] : undefined);
     }
 
     initializedRef.current = true;
+  }, []);
+
+  useEffect(() => {
+    const handleConfigUpdate = () => {
+      const configObject = readCachedSessionConfig();
+      if (!configObject) {
+        return;
+      }
+
+      setConfig(new ConfigWrapper(configObject, defaultClientConfig));
+      applyThemeColor(typeof configObject["theme.color"] === "string" ? configObject["theme.color"] : undefined);
+    };
+
+    window.addEventListener("storage", handleConfigUpdate);
+    return () => window.removeEventListener("storage", handleConfigUpdate);
   }, []);
 
   return { config, profile };
