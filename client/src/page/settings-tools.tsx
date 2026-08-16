@@ -59,41 +59,33 @@ export function ToolsSettings({
 
       {value.map((tool) => (
         <div key={tool.id} className="w-full">
-          <SettingsCard>
-            <SettingsCardRow
-              header={
-                <div className="min-w-0 flex-1 flex items-center gap-3">
-                  <ToolIcon tool={tool} />
-                  <div className="min-w-0">
-                    <p className="truncate text-base font-semibold tracking-[-0.02em] t-primary">{tool.name}</p>
-                    <p className="truncate text-sm text-neutral-500 dark:text-neutral-400">{tool.description || tool.url}</p>
-                  </div>
-                </div>
-              }
-              action={
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => openEdit(tool)}
-                    title={t("settings.tools.edit")}
-                    aria-label={t("settings.tools.edit")}
-                    className="flex h-9 w-9 items-center justify-center rounded-full bg-secondary t-primary bg-button transition-colors"
-                  >
-                    <i className="ri-edit-line" aria-hidden="true" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleDelete(tool)}
-                    title={t("settings.tools.delete.title")}
-                    aria-label={t("settings.tools.delete.title")}
-                    className="flex h-9 w-9 items-center justify-center rounded-full bg-secondary t-primary bg-button transition-colors"
-                  >
-                    <i className="ri-delete-bin-line" aria-hidden="true" />
-                  </button>
-                </div>
-              }
-            />
-          </SettingsCard>
+          <div className="flex items-center gap-3 rounded-xl border border-neutral-200/80 bg-w px-4 py-3 dark:border-neutral-800/80">
+            <ToolIcon tool={tool} />
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-semibold tracking-[-0.02em] t-primary">{tool.name}</p>
+              <p className="truncate text-xs text-neutral-500 dark:text-neutral-400">{tool.description || tool.url}</p>
+            </div>
+            <div className="flex shrink-0 items-center gap-2">
+              <button
+                type="button"
+                onClick={() => openEdit(tool)}
+                title={t("settings.tools.edit")}
+                aria-label={t("settings.tools.edit")}
+                className="flex h-8 w-8 items-center justify-center rounded-full bg-secondary t-primary bg-button transition-colors"
+              >
+                <i className="ri-edit-line" aria-hidden="true" />
+              </button>
+              <button
+                type="button"
+                onClick={() => handleDelete(tool)}
+                title={t("settings.tools.delete.title")}
+                aria-label={t("settings.tools.delete.title")}
+                className="flex h-8 w-8 items-center justify-center rounded-full bg-secondary t-primary bg-button transition-colors"
+              >
+                <i className="ri-delete-bin-line" aria-hidden="true" />
+              </button>
+            </div>
+          </div>
         </div>
       ))}
 
@@ -117,15 +109,15 @@ function ToolIcon({ tool }: { tool: ToolItem }) {
       <img
         src={tool.icon}
         alt={tool.name}
-        className="h-10 w-10 shrink-0 rounded-xl object-cover border border-black/10 dark:border-white/10"
+        className="h-9 w-9 shrink-0 rounded-xl object-cover border border-black/10 dark:border-white/10"
         onError={() => setImageFailed(true)}
       />
     );
   }
 
   return (
-    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-theme/10 text-theme">
-      <i className="ri-apps-2-line text-lg" aria-hidden="true" />
+    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-theme/10 text-theme">
+      <i className="ri-apps-2-line text-base" aria-hidden="true" />
     </div>
   );
 }
@@ -146,8 +138,8 @@ const MODAL_STYLE = {
     justifyContent: "center",
     alignItems: "center",
     background: "transparent",
-    maxWidth: "40rem",
-    width: "90vw",
+    maxWidth: "36rem",
+    width: "min(92vw, 36rem)",
   },
   overlay: {
     backgroundColor: "rgba(0, 0, 0, 0.5)",
@@ -217,18 +209,18 @@ function ToolEditModal({
       style={MODAL_STYLE}
       contentLabel={initial ? t("settings.tools.edit") : t("settings.tools.add")}
     >
-      <div className="flex flex-col bg-w w-full rounded-2xl shadow-lg p-8">
-        <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-bold t-primary">{initial ? t("settings.tools.edit") : t("settings.tools.add")}</h1>
+      <div className="flex max-h-[85vh] w-full flex-col overflow-hidden rounded-2xl bg-w shadow-lg">
+        <div className="flex items-center justify-between border-b border-black/5 px-6 py-4 dark:border-white/5">
+          <h1 className="text-xl font-bold t-primary">{initial ? t("settings.tools.edit") : t("settings.tools.add")}</h1>
           <button type="button" onClick={onClose} aria-label={t("close")} className="rounded-full p-2 text-neutral-500 transition-colors hover:bg-black/5 dark:hover:bg-white/10">
             <i className="ri-close-line text-lg" aria-hidden="true" />
           </button>
         </div>
 
-        {error && <p className="mt-4 text-sm text-red-500">{error}</p>}
+        {error && <p className="px-6 pt-4 text-sm text-red-500">{error}</p>}
 
-        <div className="mt-6 space-y-6">
-          <div className="flex flex-col items-start space-y-4">
+        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-6 py-4">
+          <div className="flex flex-col items-start space-y-3">
             <label className="text-sm font-medium t-secondary">{t("settings.tools.icon")}</label>
             <div className="w-full">
               <ImageUploadInput value={icon} onChange={setIcon} onError={setError} placeholder={t("settings.tools.icon_placeholder")} shape="rounded" maxFileSize={2 * 1024 * 1024} />
@@ -258,7 +250,7 @@ function ToolEditModal({
               value={description}
               onChange={(event) => setDescription(event.target.value)}
               placeholder={t("settings.tools.description_placeholder")}
-              className="min-h-24 w-full rounded-xl border border-black/10 bg-w px-4 py-3 text-sm t-primary outline-none transition-colors placeholder:text-neutral-400 focus:border-black/20 focus:ring-2 focus:ring-theme/10 dark:border-white/10 dark:placeholder:text-neutral-500 dark:focus:border-white/20"
+              className="min-h-20 w-full rounded-xl border border-black/10 bg-w px-4 py-3 text-sm t-primary outline-none transition-colors placeholder:text-neutral-400 focus:border-black/20 focus:ring-2 focus:ring-theme/10 dark:border-white/10 dark:placeholder:text-neutral-500 dark:focus:border-white/20"
             />
           </div>
 
@@ -266,11 +258,11 @@ function ToolEditModal({
             <label className="text-sm font-medium t-secondary">{t("settings.tools.url")}</label>
             <Input value={url} setValue={setUrl} placeholder={t("settings.tools.url_placeholder")} />
           </div>
+        </div>
 
-          <div className="flex flex-row items-center justify-end space-x-2 pt-4">
-            <Button secondary title={t("cancel")} onClick={onClose} />
-            <Button title={initial ? t("save") : t("settings.tools.add")} onClick={handleSubmit} />
-          </div>
+        <div className="flex items-center justify-end gap-2 border-t border-black/5 px-6 py-4 dark:border-white/5">
+          <Button secondary title={t("cancel")} onClick={onClose} />
+          <Button title={initial ? t("save") : t("settings.tools.add")} onClick={handleSubmit} />
         </div>
       </div>
     </Modal>

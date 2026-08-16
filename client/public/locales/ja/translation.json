@@ -21,6 +21,7 @@
     "queue_status_description": "AI 要約キューの進行状況、最近のタスク結果、失敗内容を確認します。",
     "settings_description": "サイトの挙動、連携設定、公開ルールを一か所で管理します。",
     "title": "管理画面",
+    "tools_description": "「ツール集」ページに表示するオンラインツール（アイコン・説明・リンク）を管理します。",
     "writing_description": "非公開の管理ワークスペースから記事を作成、編集、公開します。"
   },
   "compat_tasks": {
@@ -543,7 +544,13 @@
         "title": "削除",
         "confirm_title": "ツールを削除",
         "confirm_desc": "「{{name}}」を削除してもよろしいですか？"
-      }
+      },
+      "save": {
+        "title": "ツール設定を保存",
+        "desc": "ツール設定をデータベースに保存します"
+      },
+      "save_success": "保存しました",
+      "unsaved_changes": "未保存の変更があります"
     },
     "update_failed$message": "更新に失敗しました: {{message}}",
     "wordpress": {

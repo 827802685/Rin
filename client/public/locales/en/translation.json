@@ -21,6 +21,7 @@
     "queue_status_description": "Inspect AI summary queue progress, recent task results, and failures.",
     "settings_description": "Manage site behavior, integrations, and publishing rules in one place.",
     "title": "Admin",
+    "tools_description": "Manage the online tools shown on the Tools page, including icon, description, and link.",
     "writing_description": "Write, edit, and publish content from the private management workspace."
   },
   "compat_tasks": {
@@ -552,7 +553,13 @@
         "title": "Delete",
         "confirm_title": "Delete tool",
         "confirm_desc": "Are you sure you want to delete \"{{name}}\"?"
-      }
+      },
+      "save": {
+        "title": "Save tools settings",
+        "desc": "Save tools settings to the database"
+      },
+      "save_success": "Saved successfully",
+      "unsaved_changes": "You have unsaved changes"
     },
     "update_failed$message": "Update failed: {{message}}",
     "wordpress": {

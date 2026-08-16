@@ -28,6 +28,7 @@ import { SearchPage } from "../page/search";
 import { Settings } from "../page/settings";
 import { TimelinePage } from "../page/timeline";
 import { ToolsPage } from "../page/tools";
+import { ToolsAdminPage } from "../page/tools-admin";
 import { WritingPage } from "../page/writing";
 import { ProfileContext } from "../state/profile";
 import { tryInt } from "../utils/int";
@@ -80,6 +81,10 @@ export function AppRoutes() {
 
       <AdminRoute path="/admin/health" requirePermission title={t("health.title")} description={t("admin.health_description")}>
         <HealthPage />
+      </AdminRoute>
+
+      <AdminRoute path="/admin/tools" requirePermission title={t("tools.title")} description={t("admin.tools_description")}>
+        <ToolsAdminPage />
       </AdminRoute>
 
       <AdminRoute path="/admin/queue-status" requirePermission title={t("queue_status.title")} description={t("admin.queue_status_description")}>

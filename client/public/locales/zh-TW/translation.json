@@ -21,6 +21,7 @@
     "queue_status_description": "查看 AI 摘要佇列進度、最近任務結果與失敗資訊。",
     "settings_description": "在統一的後台空間中管理站點行為、整合配置與發佈規則。",
     "title": "後台管理",
+    "tools_description": "管理「工具集」頁面顯示的線上工具，包括圖示、描述與連結。",
     "writing_description": "在獨立的管理工作區中編寫、編輯並發佈內容。"
   },
   "compat_tasks": {
@@ -552,7 +553,13 @@
         "title": "刪除",
         "confirm_title": "刪除工具",
         "confirm_desc": "確定要刪除「{{name}}」嗎？"
-      }
+      },
+      "save": {
+        "title": "儲存工具設定",
+        "desc": "將工具設定儲存到資料庫"
+      },
+      "save_success": "儲存成功",
+      "unsaved_changes": "您有未儲存的變更"
     },
     "update_failed$message": "更新失敗: {{message}}",
     "wordpress": {

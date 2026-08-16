@@ -21,8 +21,6 @@ import { useSiteConfig } from "../hooks/useSiteConfig";
 import { applyThemeColor, normalizeThemeColor } from "../utils/theme-color";
 import { AISummarySettings } from "./settings-ai";
 import { ItemButton, ItemImageInput, ItemInput, ItemSwitch, ItemTitle, ItemWithUpload } from "./settings-items";
-import { ToolsSettings } from "./settings-tools";
-import { parseToolsConfig, serializeToolsConfig } from "../utils/tools";
 import {
   areSettingsDraftsEqual,
   buildAIConfigDraftValue,
@@ -98,7 +96,6 @@ export function Settings() {
 
   const { clientConfig, serverConfig } = useMemo(() => createSettingsConfigWrappers(draft), [draft]);
   const aiValue = useMemo(() => buildAIConfigDraftValue(draft, hasStoredAiApiKey), [draft, hasStoredAiApiKey]);
-  const toolsValue = useMemo(() => parseToolsConfig(clientConfig.get("tools")), [clientConfig]);
   const hasUnsavedChanges = !areSettingsDraftsEqual(draft, initialDraft);
   const themeColorValue = normalizeThemeColor(String(clientConfig.get("theme.color") ?? "#fc466b"));
   const feedLayoutValue = normalizeFeedLayout(String(clientConfig.get("feed.layout") ?? "list"));
@@ -649,13 +646,6 @@ export function Settings() {
               if (updates.apiKey !== undefined) {
                 setConfigValue("server", "ai_summary.api_key", updates.apiKey);
               }
-            }}
-          />
-
-          <ToolsSettings
-            value={toolsValue}
-            onChange={(tools) => {
-              setConfigValue("client", "tools", serializeToolsConfig(tools));
             }}
           />
 
