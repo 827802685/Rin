@@ -528,6 +528,32 @@
       "title": "RSS 訂閱連結"
     },
     "title": "設定",
+    "tools": {
+      "title": "工具集設定",
+      "manage": {
+        "title": "管理工具",
+        "desc": "新增常用線上工具，設定圖示、描述與連結，儲存後展示在「工具集」頁面"
+      },
+      "add": "新增工具",
+      "edit": "編輯工具",
+      "name": "工具名稱",
+      "name_placeholder": "輸入工具名稱",
+      "name_required": "工具名稱不能為空",
+      "description": "工具描述",
+      "description_placeholder": "簡單描述這個工具的用途",
+      "url": "連結位址",
+      "url_placeholder": "https://example.com",
+      "url_required": "連結位址不能為空",
+      "icon": "工具圖示",
+      "icon_placeholder": "輸入圖示 URL 或上傳圖片",
+      "icon_hint": "也可以點擊右側按鈕自動取得站點圖示",
+      "fetch_icon": "從連結取得圖示",
+      "delete": {
+        "title": "刪除",
+        "confirm_title": "刪除工具",
+        "confirm_desc": "確定要刪除「{{name}}」嗎？"
+      }
+    },
     "update_failed$message": "更新失敗: {{message}}",
     "wordpress": {
       "desc": "上傳 WordPress 匯出的 XML 文件",
@@ -540,6 +566,12 @@
   "summary": "簡介",
   "tags": "標籤",
   "timeline": "時間軸",
+  "tools": {
+    "title": "工具集",
+    "description": "常用線上工具的快速入口",
+    "empty": "還沒有新增任何工具，請在後台設定中新增",
+    "open": "開啟"
+  },
   "title": "標題",
   "title_empty": "標題不能為空",
   "top": {

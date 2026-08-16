@@ -27,6 +27,7 @@ import { QueueStatusPage } from "../page/queue-status";
 import { SearchPage } from "../page/search";
 import { Settings } from "../page/settings";
 import { TimelinePage } from "../page/timeline";
+import { ToolsPage } from "../page/tools";
 import { WritingPage } from "../page/writing";
 import { ProfileContext } from "../state/profile";
 import { tryInt } from "../utils/int";
@@ -55,6 +56,10 @@ export function AppRoutes() {
 
       <AppRoute path="/ai">
         <AIPage />
+      </AppRoute>
+
+      <AppRoute path="/tools">
+        <ToolsPage />
       </AppRoute>
 
       <AppRoute path="/hashtags">

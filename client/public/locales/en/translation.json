@@ -528,6 +528,32 @@
       "title": "RSS Subscription Link"
     },
     "title": "Settings",
+    "tools": {
+      "title": "Tools Settings",
+      "manage": {
+        "title": "Manage tools",
+        "desc": "Add commonly used online tools with icon, description and link. Saved tools are shown on the Tools page."
+      },
+      "add": "Add tool",
+      "edit": "Edit tool",
+      "name": "Tool name",
+      "name_placeholder": "Enter tool name",
+      "name_required": "Tool name is required",
+      "description": "Description",
+      "description_placeholder": "Briefly describe what this tool does",
+      "url": "Link",
+      "url_placeholder": "https://example.com",
+      "url_required": "Link is required",
+      "icon": "Tool icon",
+      "icon_placeholder": "Enter an icon URL or upload an image",
+      "icon_hint": "Or click the button to fetch the site icon automatically",
+      "fetch_icon": "Fetch icon from link",
+      "delete": {
+        "title": "Delete",
+        "confirm_title": "Delete tool",
+        "confirm_desc": "Are you sure you want to delete \"{{name}}\"?"
+      }
+    },
     "update_failed$message": "Update failed: {{message}}",
     "wordpress": {
       "desc": "Upload the XML file exported from WordPress",
@@ -540,6 +566,12 @@
   "summary": "Summary",
   "tags": "Tags",
   "timeline": "Timeline",
+  "tools": {
+    "title": "Tools",
+    "description": "Quick access to useful online tools",
+    "empty": "No tools yet. Add them in the admin settings.",
+    "open": "Open"
+  },
   "title": "Title",
   "title_empty": "Title cannot be empty",
   "top": {

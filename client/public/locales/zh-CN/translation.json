@@ -528,6 +528,32 @@
       "title": "RSS 订阅链接"
     },
     "title": "设置",
+    "tools": {
+      "title": "工具集设置",
+      "manage": {
+        "title": "管理工具",
+        "desc": "添加常用在线工具，设置图标、描述和链接，保存后展示在「工具集」页面"
+      },
+      "add": "添加工具",
+      "edit": "编辑工具",
+      "name": "工具名称",
+      "name_placeholder": "输入工具名称",
+      "name_required": "工具名称不能为空",
+      "description": "工具描述",
+      "description_placeholder": "简单描述这个工具的用途",
+      "url": "链接地址",
+      "url_placeholder": "https://example.com",
+      "url_required": "链接地址不能为空",
+      "icon": "工具图标",
+      "icon_placeholder": "输入图标 URL 或上传图片",
+      "icon_hint": "也可以点击右侧按钮自动获取站点图标",
+      "fetch_icon": "从链接获取图标",
+      "delete": {
+        "title": "删除",
+        "confirm_title": "删除工具",
+        "confirm_desc": "确定要删除「{{name}}」吗？"
+      }
+    },
     "update_failed$message": "更新失败: {{message}}",
     "wordpress": {
       "desc": "上传 WordPress 导出的 XML 文件",
@@ -540,6 +566,12 @@
   "summary": "简介",
   "tags": "标签",
   "timeline": "时间轴",
+  "tools": {
+    "title": "工具集",
+    "description": "常用在线工具的快捷入口",
+    "empty": "还没有添加任何工具，请在后台设置中添加",
+    "open": "打开"
+  },
   "title": "标题",
   "title_empty": "标题不能为空",
   "top": {

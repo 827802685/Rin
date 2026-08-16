@@ -519,6 +519,32 @@
       "title": "RSS 購読リンク"
     },
     "title": "設定",
+    "tools": {
+      "title": "ツール集の設定",
+      "manage": {
+        "title": "ツールの管理",
+        "desc": "よく使うオンラインツールを追加し、アイコン・説明・リンクを設定します。保存後は「ツール集」ページに表示されます。"
+      },
+      "add": "ツールを追加",
+      "edit": "ツールを編集",
+      "name": "ツール名",
+      "name_placeholder": "ツール名を入力",
+      "name_required": "ツール名は必須です",
+      "description": "説明",
+      "description_placeholder": "このツールの用途を簡単に説明",
+      "url": "リンク",
+      "url_placeholder": "https://example.com",
+      "url_required": "リンクは必須です",
+      "icon": "ツールのアイコン",
+      "icon_placeholder": "アイコンURLを入力するか、画像をアップロード",
+      "icon_hint": "または右のボタンでサイトアイコンを自動取得",
+      "fetch_icon": "リンクからアイコンを取得",
+      "delete": {
+        "title": "削除",
+        "confirm_title": "ツールを削除",
+        "confirm_desc": "「{{name}}」を削除してもよろしいですか？"
+      }
+    },
     "update_failed$message": "更新に失敗しました: {{message}}",
     "wordpress": {
       "desc": "WordPressからエクスポートされたXMLファイルをアップロードする",
@@ -531,6 +557,12 @@
   "summary": "概要",
   "tags": "タグ",
   "timeline": "タイムライン",
+  "tools": {
+    "title": "ツール集",
+    "description": "よく使うオンラインツールへのクイックアクセス",
+    "empty": "ツールがまだありません。管理設定で追加してください。",
+    "open": "開く"
+  },
   "title": "タイトル",
   "title_empty": "タイトルは空にできません",
   "top": {
