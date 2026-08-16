@@ -2,16 +2,6 @@ import type { AIConfig } from "@rin/api";
 
 export const WEBHOOK_URL_KEY = "WEBHOOK_URL";
 
-export const DEFAULT_TOOLS_CONFIG = JSON.stringify([
-  { id: "chat", name: "Chat", description: "AI 在线对话助手", icon: "https://chat.zjkl.dpdns.org/favicon.ico", url: "https://chat.zjkl.dpdns.org/" },
-  { id: "rag", name: "RAG", description: "RAG 知识库检索问答", icon: "https://rag.zjkl0330.dpdns.org/favicon.ico", url: "https://rag.zjkl0330.dpdns.org/" },
-  { id: "rss", name: "RSS", description: "RSS 订阅阅读器", icon: "https://rss.zjkl.qzz.io/favicon.ico", url: "https://rss.zjkl.qzz.io/" },
-  { id: "video", name: "视频解析", description: "在线视频解析工具", icon: "https://video.zjkl.dpdns.org/favicon.ico", url: "https://video.zjkl.dpdns.org/" },
-  { id: "jtb", name: "JTB 工具箱", description: "综合在线工具箱", icon: "https://jtb.zjkl0716.dpdns.org/favicon.ico", url: "https://jtb.zjkl0716.dpdns.org/" },
-  { id: "news", name: "News", description: "新闻资讯聚合", icon: "https://news.zjkl0330.dpdns.org/favicon.ico", url: "https://news.zjkl0330.dpdns.org/" },
-  { id: "uuid", name: "UUID", description: "UUID 生成器", icon: "https://uuid.zjkl0426.dpdns.org/favicon.ico", url: "https://uuid.zjkl0426.dpdns.org/" },
-]);
-
 export const CLIENT_CONFIG_DEFAULTS = new Map(
   Object.entries({
     "cache.enabled": false,
@@ -28,7 +18,6 @@ export const CLIENT_CONFIG_DEFAULTS = new Map(
     "site.description": "A lightweight personal blogging system",
     "site.avatar": "",
     "site.page_size": 5,
-    "tools": DEFAULT_TOOLS_CONFIG,
   }),
 );
 
