@@ -1,6 +1,6 @@
 import { describe, expect, it, beforeEach, afterEach } from "bun:test";
 import type { Database } from "bun:sqlite";
-import { buildServerConfigResponse, resolveWebhookConfig } from "../config-helpers";
+import { buildServerConfigResponse, getClientConfigWithDefaults, resolveWebhookConfig } from "../config-helpers";
 import { cleanupTestDB, createMockDB } from "../../../tests/fixtures";
 
 describe("buildServerConfigResponse", () => {
@@ -60,6 +60,52 @@ describe("buildServerConfigResponse", () => {
         });
 
         expect(response["webhook_url"]).toBe("https://stored.example.com/webhook");
+    });
+});
+
+describe("getClientConfigWithDefaults", () => {
+    const emptyEnv = {
+        NAME: "",
+        DESCRIPTION: "",
+        AVATAR: "",
+        PAGE_SIZE: "",
+    };
+
+    function clientConfigWith(entries: [string, unknown][]) {
+        return {
+            async all() {
+                return new Map<string, unknown>(entries);
+            },
+            async set() {},
+            async save() {},
+        };
+    }
+
+    it("normalizes a deserialized tools array back to a JSON string", async () => {
+        const config = await getClientConfigWithDefaults(
+            clientConfigWith([
+                ["tools", [{ id: "chat", name: "Chat", url: "https://chat.example.com/" }]],
+            ]),
+            emptyEnv as any,
+        );
+
+        expect(config["tools"]).toBe('[{"id":"chat","name":"Chat","url":"https://chat.example.com/"}]');
+    });
+
+    it("leaves an already-string tools value untouched", async () => {
+        const stored = '[{"id":"chat","name":"Chat","url":"https://chat.example.com/"}]';
+        const config = await getClientConfigWithDefaults(
+            clientConfigWith([["tools", stored]]),
+            emptyEnv as any,
+        );
+
+        expect(config["tools"]).toBe(stored);
+    });
+
+    it("falls back to the default page size when unset", async () => {
+        const config = await getClientConfigWithDefaults(clientConfigWith([]), emptyEnv as any);
+
+        expect(config["site.page_size"]).toBe(5);
     });
 });
 

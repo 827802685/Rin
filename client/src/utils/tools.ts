@@ -7,29 +7,35 @@ export type ToolItem = {
 };
 
 export function parseToolsConfig(value: unknown): ToolItem[] {
-  if (typeof value !== "string" || value.trim().length === 0) {
-    return [];
-  }
+  let parsed: unknown = value;
 
-  try {
-    const parsed = JSON.parse(value);
-    if (!Array.isArray(parsed)) {
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (trimmed.length === 0) {
       return [];
     }
 
-    return parsed
-      .filter((item): item is Record<string, unknown> => item !== null && typeof item === "object")
-      .map((item, index) => ({
-        id: String(item.id ?? `tool-${index}`),
-        name: String(item.name ?? ""),
-        description: String(item.description ?? ""),
-        icon: String(item.icon ?? ""),
-        url: String(item.url ?? ""),
-      }))
-      .filter((tool) => tool.name.trim().length > 0);
-  } catch {
+    try {
+      parsed = JSON.parse(trimmed);
+    } catch {
+      return [];
+    }
+  }
+
+  if (!Array.isArray(parsed)) {
     return [];
   }
+
+  return parsed
+    .filter((item): item is Record<string, unknown> => item !== null && typeof item === "object")
+    .map((item, index) => ({
+      id: String(item.id ?? `tool-${index}`),
+      name: String(item.name ?? ""),
+      description: String(item.description ?? ""),
+      icon: String(item.icon ?? ""),
+      url: String(item.url ?? ""),
+    }))
+    .filter((tool) => tool.name.trim().length > 0);
 }
 
 export function serializeToolsConfig(tools: ToolItem[]): string {

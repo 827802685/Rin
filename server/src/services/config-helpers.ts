@@ -194,6 +194,10 @@ export async function getClientConfigWithDefaults(
     result["site.page_size"] = 5;
   }
 
+  if (result["tools"] !== undefined && typeof result["tools"] !== "string") {
+    result["tools"] = JSON.stringify(result["tools"]);
+  }
+
   return result;
 }
 
