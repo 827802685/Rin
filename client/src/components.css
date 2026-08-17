@@ -4,4 +4,8 @@
     .border-card {
         @apply shadow-lg border dark:border-neutral-600 shadow-deep rounded-xl p-4 bg-w text-sm t-secondary font-normal flex flex-col items-start mt-2 space-y-2
     }
+
+    .anchor-link {
+        @apply no-underline text-neutral-300 dark:text-neutral-600 ml-1 text-base font-normal align-baseline transition hover:text-theme;
+    }
 }

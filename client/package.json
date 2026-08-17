@@ -20,6 +20,7 @@
     "@rin/ui": "workspace:*",
     "@astroimg/timeago": "^1.1.6",
     "@monaco-editor/react": "^4.6.0",
+    "monaco-editor": "^0.56.0",
     "@prosemirror-adapter/react": "^0.2.6",
     "@radix-ui/react-switch": "^1.1.0",
     "@tailwindcss/typography": "^0.5.13",

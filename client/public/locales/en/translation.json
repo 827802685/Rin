@@ -20,6 +20,7 @@
     "health_description": "Review required configuration, missing integrations, and risks that can affect runtime behavior.",
     "queue_status_description": "Inspect AI summary queue progress, recent task results, and failures.",
     "settings_description": "Manage site behavior, integrations, and publishing rules in one place.",
+    "theme_description": "Customize appearance, accent color, and interactive widgets for your site.",
     "title": "Admin",
     "tools_description": "Manage the online tools shown on the Tools page, including icon, description, and link.",
     "writing_description": "Write, edit, and publish content from the private management workspace."
@@ -517,6 +518,7 @@
       "desc": "Choose the accent color used by buttons, highlights, and interactive elements",
       "custom": "Custom",
       "options": {
+        "furina": "Furina",
         "rose": "Rose",
         "violet": "Violet",
         "blue": "Blue",
@@ -804,5 +806,115 @@
   "sort_latest": "Latest",
   "sort_popular": "Popular",
   "total_tags": "Total {{count}} tags",
-  "anonymous": "Anonymous"
+  "anonymous": "Anonymous",
+  "theme": {
+    "title": "Theme",
+    "color_section": {
+      "title": "Accent color"
+    },
+    "widgets": {
+      "title": "Widgets"
+    },
+    "save_success": "Theme settings saved",
+    "unsaved_changes": "You have unsaved theme changes",
+    "live2d": {
+      "enable": {
+        "title": "Live2D mascot",
+        "desc": "Show the Furina Live2D model on your site"
+      },
+      "position": {
+        "title": "Mascot on the left",
+        "desc": "Place the mascot on the left edge instead of the right"
+      },
+      "model": {
+        "title": "Model file",
+        "desc": "Path to the .model3.json model file",
+        "label": "Model path"
+      },
+      "scale": {
+        "title": "Mascot scale",
+        "desc": "Display scale of the Live2D model",
+        "label": "Scale"
+      },
+      "show": "Show mascot",
+      "hide": "Hide mascot"
+    },
+    "cursor": {
+      "enable": {
+        "title": "Furina cursors",
+        "desc": "Replace system cursors with Furina-style ones"
+      },
+      "default": {
+        "title": "Default cursor",
+        "desc": "Cursor image used for normal pointing"
+      },
+      "pointer": {
+        "title": "Pointer cursor",
+        "desc": "Cursor image used for links and buttons"
+      },
+      "text": {
+        "title": "Text cursor",
+        "desc": "Cursor image used over editable text"
+      }
+    },
+    "firework": {
+      "enable": {
+        "title": "Click fireworks",
+        "desc": "Show a particle burst where you click"
+      },
+      "disable_mobile": {
+        "title": "Disable on mobile",
+        "desc": "Do not run the firework effect on touch devices"
+      }
+    },
+    "player": {
+      "enable": {
+        "title": "Music player",
+        "desc": "Show a floating music player widget"
+      },
+      "autoplay": {
+        "title": "Autoplay",
+        "desc": "Start playing automatically when loaded"
+      },
+      "audio": {
+        "title": "Playlist",
+        "desc": "JSON array of tracks with name, artist, url and cover",
+        "example": "Insert example",
+        "clear": "Clear"
+      },
+      "play": "Play",
+      "pause": "Pause",
+      "prev": "Previous track",
+      "next": "Next track",
+      "unknown_artist": "Unknown artist"
+    },
+    "share": {
+      "enable": {
+        "title": "Share bar",
+        "desc": "Show share buttons under each article"
+      },
+      "networks": {
+        "title": "Networks",
+        "desc": "Comma-separated network keys (weibo,qq,weixin,telegram,x,facebook,qzone,copy)",
+        "label": "Share networks"
+      },
+      "title": "Share",
+      "copied": "Copied"
+    },
+    "anchor": {
+      "enable": {
+        "title": "Heading anchors",
+        "desc": "Show anchor links on article headings"
+      },
+      "auto": {
+        "title": "Auto anchors",
+        "desc": "Add anchors to all headings automatically"
+      },
+      "length": {
+        "title": "Anchor slug length",
+        "desc": "Maximum length of the auto-generated anchor text",
+        "label": "Length"
+      }
+    }
+  }
 }

@@ -20,6 +20,7 @@
     "health_description": "必須設定、未構成の連携、動作に影響するリスクを確認します。",
     "queue_status_description": "AI 要約キューの進行状況、最近のタスク結果、失敗内容を確認します。",
     "settings_description": "サイトの挙動、連携設定、公開ルールを一か所で管理します。",
+    "theme_description": "サイトの外観、アクセントカラー、インタラクティブウィジェットをカスタマイズします。",
     "title": "管理画面",
     "tools_description": "「ツール集」ページに表示するオンラインツール（アイコン・説明・リンク）を管理します。",
     "writing_description": "非公開の管理ワークスペースから記事を作成、編集、公開します。"
@@ -508,6 +509,7 @@
       "desc": "ボタンや強調表示、操作要素に使うアクセントカラーを選びます",
       "custom": "カスタム",
       "options": {
+        "furina": "フリーナ",
         "rose": "ローズ",
         "violet": "バイオレット",
         "blue": "ブルー",
@@ -795,5 +797,115 @@
   "sort_latest": "新着",
   "sort_popular": "人気",
   "total_tags": "全 {{count}} 個のタグ",
-  "anonymous": "匿名"
+  "anonymous": "匿名",
+  "theme": {
+    "title": "テーマ",
+    "color_section": {
+      "title": "アクセントカラー"
+    },
+    "widgets": {
+      "title": "ウィジェット"
+    },
+    "save_success": "テーマ設定を保存しました",
+    "unsaved_changes": "未保存のテーマ変更があります",
+    "live2d": {
+      "enable": {
+        "title": "Live2D マスコット",
+        "desc": "サイトにフリーナの Live2D モデルを表示します"
+      },
+      "position": {
+        "title": "マスコットを左に",
+        "desc": "マスコットを右ではなく左端に配置します"
+      },
+      "model": {
+        "title": "モデルファイル",
+        "desc": ".model3.json モデルファイルのパス",
+        "label": "モデルパス"
+      },
+      "scale": {
+        "title": "マスコットの拡大率",
+        "desc": "Live2D モデルの表示倍率",
+        "label": "拡大率"
+      },
+      "show": "マスコットを表示",
+      "hide": "マスコットを非表示"
+    },
+    "cursor": {
+      "enable": {
+        "title": "フリーナカーソル",
+        "desc": "システムカーソルをフリーナ風に置き換えます"
+      },
+      "default": {
+        "title": "通常カーソル",
+        "desc": "通常ポインティング時に使うカーソル画像"
+      },
+      "pointer": {
+        "title": "リンクカーソル",
+        "desc": "リンクやボタンで使うカーソル画像"
+      },
+      "text": {
+        "title": "テキストカーソル",
+        "desc": "編集可能なテキスト上で使うカーソル画像"
+      }
+    },
+    "firework": {
+      "enable": {
+        "title": "クリック花火",
+        "desc": "クリックした場所にパーティクル爆発を表示します"
+      },
+      "disable_mobile": {
+        "title": "モバイルで無効化",
+        "desc": "タッチデバイスでは花火効果を実行しません"
+      }
+    },
+    "player": {
+      "enable": {
+        "title": "ミュージックプレイヤー",
+        "desc": "フローティングミュージックプレイヤーを表示します"
+      },
+      "autoplay": {
+        "title": "自動再生",
+        "desc": "読み込み後に自動で再生を開始します"
+      },
+      "audio": {
+        "title": "プレイリスト",
+        "desc": "name、artist、url、cover を持つトラックの JSON 配列",
+        "example": "例を挿入",
+        "clear": "クリア"
+      },
+      "play": "再生",
+      "pause": "一時停止",
+      "prev": "前の曲",
+      "next": "次の曲",
+      "unknown_artist": "アーティスト不明"
+    },
+    "share": {
+      "enable": {
+        "title": "共有バー",
+        "desc": "各記事の下に共有ボタンを表示します"
+      },
+      "networks": {
+        "title": "共有先",
+        "desc": "カンマ区切りの共有先キー（weibo,qq,weixin,telegram,x,facebook,qzone,copy）",
+        "label": "共有先"
+      },
+      "title": "共有",
+      "copied": "コピーしました"
+    },
+    "anchor": {
+      "enable": {
+        "title": "見出しアンカー",
+        "desc": "記事見出しにアンカーリンクを表示します"
+      },
+      "auto": {
+        "title": "自動アンカー",
+        "desc": "すべての見出しに自動でアンカーを追加します"
+      },
+      "length": {
+        "title": "アンカー文字数",
+        "desc": "自動生成するアンカー文字列の最大長",
+        "label": "文字数"
+      }
+    }
+  }
 }

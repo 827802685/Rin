@@ -20,6 +20,7 @@
     "health_description": "檢查關鍵配置、缺失的整合項，以及可能影響服務正常運行的風險。",
     "queue_status_description": "查看 AI 摘要佇列進度、最近任務結果與失敗資訊。",
     "settings_description": "在統一的後台空間中管理站點行為、整合配置與發佈規則。",
+    "theme_description": "自訂站點外觀、強調色與互動掛件。",
     "title": "後台管理",
     "tools_description": "管理「工具集」頁面顯示的線上工具，包括圖示、描述與連結。",
     "writing_description": "在獨立的管理工作區中編寫、編輯並發佈內容。"
@@ -517,6 +518,7 @@
       "desc": "選擇按鈕、強調與互動元素使用的主色",
       "custom": "自訂",
       "options": {
+        "furina": "芙寧娜",
         "rose": "玫紅",
         "violet": "紫色",
         "blue": "藍色",
@@ -804,5 +806,115 @@
   "sort_latest": "最新",
   "sort_popular": "熱門",
   "total_tags": "共 {{count}} 個標籤",
-  "anonymous": "匿名"
+  "anonymous": "匿名",
+  "theme": {
+    "title": "主題",
+    "color_section": {
+      "title": "強調色"
+    },
+    "widgets": {
+      "title": "掛件"
+    },
+    "save_success": "主題設定已儲存",
+    "unsaved_changes": "存在未儲存的主題變更",
+    "live2d": {
+      "enable": {
+        "title": "Live2D 看板娘",
+        "desc": "在站點上展示芙寧娜 Live2D 模型"
+      },
+      "position": {
+        "title": "看板娘靠左",
+        "desc": "將看板娘放在左側邊緣而非右側"
+      },
+      "model": {
+        "title": "模型檔案",
+        "desc": ".model3.json 模型檔案的路徑",
+        "label": "模型路徑"
+      },
+      "scale": {
+        "title": "看板娘縮放",
+        "desc": "Live2D 模型的顯示縮放比例",
+        "label": "縮放"
+      },
+      "show": "顯示看板娘",
+      "hide": "隱藏看板娘"
+    },
+    "cursor": {
+      "enable": {
+        "title": "芙寧娜滑鼠指標",
+        "desc": "將系統指標替換為芙寧娜風格指標"
+      },
+      "default": {
+        "title": "預設指標",
+        "desc": "一般指向時使用的指標圖片"
+      },
+      "pointer": {
+        "title": "連結指標",
+        "desc": "連結與按鈕上的指標圖片"
+      },
+      "text": {
+        "title": "文字指標",
+        "desc": "可編輯文字上的指標圖片"
+      }
+    },
+    "firework": {
+      "enable": {
+        "title": "點擊煙火特效",
+        "desc": "在點擊位置顯示粒子爆發"
+      },
+      "disable_mobile": {
+        "title": "行動裝置停用",
+        "desc": "在觸控裝置上不執行煙火特效"
+      }
+    },
+    "player": {
+      "enable": {
+        "title": "音樂播放器",
+        "desc": "顯示浮動音樂播放器掛件"
+      },
+      "autoplay": {
+        "title": "自動播放",
+        "desc": "載入完成後自動開始播放"
+      },
+      "audio": {
+        "title": "播放清單",
+        "desc": "包含 name、artist、url 與 cover 的曲目 JSON 陣列",
+        "example": "插入範例",
+        "clear": "清空"
+      },
+      "play": "播放",
+      "pause": "暫停",
+      "prev": "上一曲",
+      "next": "下一曲",
+      "unknown_artist": "未知藝術家"
+    },
+    "share": {
+      "enable": {
+        "title": "分享列",
+        "desc": "在每篇文章下方顯示分享按鈕"
+      },
+      "networks": {
+        "title": "分享管道",
+        "desc": "逗號分隔的管道鍵（weibo,qq,weixin,telegram,x,facebook,qzone,copy）",
+        "label": "分享管道"
+      },
+      "title": "分享",
+      "copied": "已複製"
+    },
+    "anchor": {
+      "enable": {
+        "title": "標題錨點",
+        "desc": "在文章標題上顯示錨點連結"
+      },
+      "auto": {
+        "title": "自動錨點",
+        "desc": "自動為所有標題新增錨點"
+      },
+      "length": {
+        "title": "錨點文字長度",
+        "desc": "自動產生錨點文字的最大長度",
+        "label": "長度"
+      }
+    }
+  }
 }

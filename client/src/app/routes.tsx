@@ -26,6 +26,7 @@ import { ProfilePage } from "../page/profile";
 import { QueueStatusPage } from "../page/queue-status";
 import { SearchPage } from "../page/search";
 import { Settings } from "../page/settings";
+import { SettingsTheme } from "../page/settings-theme";
 import { TimelinePage } from "../page/timeline";
 import { ToolsPage } from "../page/tools";
 import { ToolsAdminPage } from "../page/tools-admin";
@@ -77,6 +78,10 @@ export function AppRoutes() {
 
       <AdminRoute path="/admin/settings" requirePermission title={t("settings.title")} description={t("admin.settings_description")}>
         <Settings />
+      </AdminRoute>
+
+      <AdminRoute path="/admin/theme" requirePermission title={t("theme.title")} description={t("admin.theme_description")}>
+        <SettingsTheme />
       </AdminRoute>
 
       <AdminRoute path="/admin/health" requirePermission title={t("health.title")} description={t("admin.health_description")}>

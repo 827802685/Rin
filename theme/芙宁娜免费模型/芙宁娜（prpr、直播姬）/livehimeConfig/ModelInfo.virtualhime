@@ -1,0 +1,46 @@
+{
+  "Visible": true,
+  "Position": {
+    "x": 0.636111259,
+    "y": -2.033333,
+    "z": 0.0
+  },
+  "Rotation": {
+    "x": 0.0,
+    "y": 0.0,
+    "z": 0.0
+  },
+  "Scale": {
+    "x": 4.39999866,
+    "y": 4.39999866,
+    "z": 1.0
+  },
+  "LayerOrder": 0,
+  "IconPath": "",
+  "CustomName": "",
+  "IdleMotion": "motions/待机动画.motion3.json",
+  "OnUsePhysical": true,
+  "PhysicalStrength": 1.0,
+  "PosPhysicalStrength": 0.0,
+  "WindPhysicalStrength": 0.0,
+  "RoleRigidSetModel": {
+    "RigidHardnessValue": 0.5,
+    "IsRigidEffect": true,
+    "IsCannotRigid": false,
+    "RigidSize": {
+      "X": 0.5,
+      "Y": 1.0,
+      "Z": 1.0
+    },
+    "RigidOffset": {
+      "X": 0.0,
+      "Y": 0.0,
+      "Z": 0.0
+    },
+    "RigidScale": {
+      "X": 1.0,
+      "Y": 1.0,
+      "Z": 1.0
+    }
+  }
+}

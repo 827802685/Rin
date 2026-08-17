@@ -1,5 +1,5 @@
 import "katex/dist/katex.min.css";
-import React, { cloneElement, isValidElement, useEffect, useMemo, useRef } from "react";
+import React, { cloneElement, isValidElement, useContext, useEffect, useMemo, useRef } from "react";
 import ReactMarkdown from "react-markdown";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import {
@@ -13,6 +13,8 @@ import remarkMermaid from "../remark/remarkMermaid";
 import { remarkAlert } from "remark-github-blockquote-alert";
 import remarkMath from "remark-math";
 import remarkBreaks from "remark-breaks";
+import { remarkAnchor } from "../remark/remarkAnchor";
+import { ClientConfigContext } from "../state/config";
 import Lightbox, { SlideImage } from "yet-another-react-lightbox";
 import Counter from "yet-another-react-lightbox/plugins/counter";
 import Download from "yet-another-react-lightbox/plugins/download";
@@ -115,6 +117,7 @@ function MarkdownImage({
 
 export function Markdown({ content }: { content: string }) {
   const colorMode = useColorMode();
+  const config = useContext(ClientConfigContext);
   const [index, setIndex] = React.useState(-1);
   const slides = useRef<SlideImage[]>();
 
@@ -122,12 +125,14 @@ export function Markdown({ content }: { content: string }) {
     slides.current = undefined;
   }, [content]);
 
-
+  const anchorEnabled = config.getBoolean("widget.anchor.enabled");
+  const anchorAuto = config.getBoolean("widget.anchor.auto");
+  const anchorLength = Number(config.get("widget.anchor.length") ?? 60);
 
   const Content = useMemo(() => (
     <ReactMarkdown
       className="toc-content dark:text-neutral-300"
-      remarkPlugins={[gfm, remarkMermaid, remarkMath, remarkAlert, remarkBreaks]}
+      remarkPlugins={[gfm, remarkMermaid, remarkMath, remarkAlert, remarkBreaks, [remarkAnchor, { enabled: anchorEnabled, auto: anchorAuto, length: anchorLength }]]}
       children={content}
       rehypePlugins={[rehypeKatex, rehypeRaw]}
       components={{
@@ -429,7 +434,7 @@ export function Markdown({ content }: { content: string }) {
           return <div {...props}>{children}</div>;
         },
       }}
-    />), [content])
+    />), [content, anchorEnabled, anchorAuto, anchorLength])
 
 
 

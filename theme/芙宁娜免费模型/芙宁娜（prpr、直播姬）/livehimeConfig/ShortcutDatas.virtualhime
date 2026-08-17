@@ -1,0 +1,472 @@
+{
+  "SwitchMode": 0,
+  "RemoveAllExpKeys": [
+    0,
+    0,
+    0
+  ],
+  "MotionShortcutKeyDatas": {
+    "motions/变芒.motion3.json": {
+      "MotionName": "motions/变芒.motion3.json",
+      "IsEnable": true,
+      "IsGlobal": true,
+      "PlayMaxTime": 0.0,
+      "Mode": 0,
+      "Keys": [
+        119,
+        0,
+        0
+      ],
+      "FadeDuration": 0.5
+    },
+    "motions/变荒.motion3.json": {
+      "MotionName": "motions/变荒.motion3.json",
+      "IsEnable": true,
+      "IsGlobal": true,
+      "PlayMaxTime": 0.0,
+      "Mode": 0,
+      "Keys": [
+        101,
+        0,
+        0
+      ],
+      "FadeDuration": 0.5
+    },
+    "motions/待机动画.motion3.json": {
+      "MotionName": "motions/待机动画.motion3.json",
+      "IsEnable": true,
+      "IsGlobal": true,
+      "PlayMaxTime": 0.0,
+      "Mode": 0,
+      "Keys": [
+        0,
+        0,
+        0
+      ],
+      "FadeDuration": 0.5
+    },
+    "motions/摊手动画.motion3.json": {
+      "MotionName": "motions/摊手动画.motion3.json",
+      "IsEnable": true,
+      "IsGlobal": true,
+      "PlayMaxTime": 0.0,
+      "Mode": 0,
+      "Keys": [
+        114,
+        0,
+        0
+      ],
+      "FadeDuration": 0.5
+    }
+  },
+  "ExpShortcutKeyDatas": {
+    "expressions/呆毛电风扇.exp3.json": {
+      "ExpName": "expressions/呆毛电风扇.exp3.json",
+      "IsEnable": true,
+      "IsGlobal": true,
+      "Keys": [
+        122,
+        0,
+        0
+      ],
+      "Mode": 1,
+      "FadeDuration": 0.5
+    },
+    "expressions/哭.exp3.json": {
+      "ExpName": "expressions/哭.exp3.json",
+      "IsEnable": true,
+      "IsGlobal": true,
+      "Keys": [
+        120,
+        0,
+        0
+      ],
+      "Mode": 1,
+      "FadeDuration": 0.5
+    },
+    "expressions/喝饮料.exp3.json": {
+      "ExpName": "expressions/喝饮料.exp3.json",
+      "IsEnable": true,
+      "IsGlobal": true,
+      "Keys": [
+        99,
+        0,
+        0
+      ],
+      "Mode": 1,
+      "FadeDuration": 0.5
+    },
+    "expressions/大聪明.exp3.json": {
+      "ExpName": "expressions/大聪明.exp3.json",
+      "IsEnable": true,
+      "IsGlobal": true,
+      "Keys": [
+        118,
+        0,
+        0
+      ],
+      "Mode": 1,
+      "FadeDuration": 0.5
+    },
+    "expressions/小脸红.exp3.json": {
+      "ExpName": "expressions/小脸红.exp3.json",
+      "IsEnable": true,
+      "IsGlobal": true,
+      "Keys": [
+        98,
+        0,
+        0
+      ],
+      "Mode": 1,
+      "FadeDuration": 0.5
+    },
+    "expressions/帽子.exp3.json": {
+      "ExpName": "expressions/帽子.exp3.json",
+      "IsEnable": true,
+      "IsGlobal": true,
+      "Keys": [
+        110,
+        0,
+        0
+      ],
+      "Mode": 1,
+      "FadeDuration": 0.5
+    },
+    "expressions/托脸.exp3.json": {
+      "ExpName": "expressions/托脸.exp3.json",
+      "IsEnable": true,
+      "IsGlobal": true,
+      "Keys": [
+        109,
+        0,
+        0
+      ],
+      "Mode": 1,
+      "FadeDuration": 0.5
+    },
+    "expressions/拿勺子.exp3.json": {
+      "ExpName": "expressions/拿勺子.exp3.json",
+      "IsEnable": true,
+      "IsGlobal": true,
+      "Keys": [
+        97,
+        0,
+        0
+      ],
+      "Mode": 1,
+      "FadeDuration": 0.5
+    },
+    "expressions/拿蛋糕.exp3.json": {
+      "ExpName": "expressions/拿蛋糕.exp3.json",
+      "IsEnable": true,
+      "IsGlobal": true,
+      "Keys": [
+        115,
+        0,
+        0
+      ],
+      "Mode": 1,
+      "FadeDuration": 0.5
+    },
+    "expressions/捂嘴.exp3.json": {
+      "ExpName": "expressions/捂嘴.exp3.json",
+      "IsEnable": true,
+      "IsGlobal": true,
+      "Keys": [
+        100,
+        0,
+        0
+      ],
+      "Mode": 1,
+      "FadeDuration": 0.5
+    },
+    "expressions/星星.exp3.json": {
+      "ExpName": "expressions/星星.exp3.json",
+      "IsEnable": true,
+      "IsGlobal": true,
+      "Keys": [
+        103,
+        0,
+        0
+      ],
+      "Mode": 1,
+      "FadeDuration": 0.5
+    },
+    "expressions/汗.exp3.json": {
+      "ExpName": "expressions/汗.exp3.json",
+      "IsEnable": true,
+      "IsGlobal": true,
+      "Keys": [
+        104,
+        0,
+        0
+      ],
+      "Mode": 1,
+      "FadeDuration": 0.5
+    },
+    "expressions/牌子.exp3.json": {
+      "ExpName": "expressions/牌子.exp3.json",
+      "IsEnable": true,
+      "IsGlobal": true,
+      "Keys": [
+        102,
+        0,
+        0
+      ],
+      "Mode": 0,
+      "FadeDuration": 0.5
+    },
+    "expressions/猫猫嘴.exp3.json": {
+      "ExpName": "expressions/猫猫嘴.exp3.json",
+      "IsEnable": true,
+      "IsGlobal": true,
+      "Keys": [
+        106,
+        0,
+        0
+      ],
+      "Mode": 1,
+      "FadeDuration": 0.5
+    },
+    "expressions/生气.exp3.json": {
+      "ExpName": "expressions/生气.exp3.json",
+      "IsEnable": true,
+      "IsGlobal": true,
+      "Keys": [
+        107,
+        0,
+        0
+      ],
+      "Mode": 1,
+      "FadeDuration": 0.5
+    },
+    "expressions/走路切换.exp3.json": {
+      "ExpName": "expressions/走路切换.exp3.json",
+      "IsEnable": true,
+      "IsGlobal": true,
+      "Keys": [
+        113,
+        0,
+        0
+      ],
+      "Mode": 1,
+      "FadeDuration": 0.5
+    },
+    "expressions/鱼鱼.exp3.json": {
+      "ExpName": "expressions/鱼鱼.exp3.json",
+      "IsEnable": true,
+      "IsGlobal": true,
+      "Keys": [
+        108,
+        0,
+        0
+      ],
+      "Mode": 0,
+      "FadeDuration": 0.5
+    },
+    "cc_芙宁娜.cfg_Param": {
+      "ExpName": "cc_芙宁娜.cfg_Param",
+      "IsEnable": true,
+      "IsGlobal": true,
+      "Keys": [
+        0,
+        0,
+        0
+      ],
+      "Mode": 1,
+      "FadeDuration": 0.5
+    },
+    "cc_芙宁娜.cfg_Param2": {
+      "ExpName": "cc_芙宁娜.cfg_Param2",
+      "IsEnable": true,
+      "IsGlobal": true,
+      "Keys": [
+        0,
+        0,
+        0
+      ],
+      "Mode": 1,
+      "FadeDuration": 0.5
+    },
+    "cc_芙宁娜.cfg_Param5": {
+      "ExpName": "cc_芙宁娜.cfg_Param5",
+      "IsEnable": true,
+      "IsGlobal": true,
+      "Keys": [
+        0,
+        0,
+        0
+      ],
+      "Mode": 1,
+      "FadeDuration": 0.5
+    },
+    "cc_芙宁娜.cfg_Param6": {
+      "ExpName": "cc_芙宁娜.cfg_Param6",
+      "IsEnable": true,
+      "IsGlobal": true,
+      "Keys": [
+        0,
+        0,
+        0
+      ],
+      "Mode": 1,
+      "FadeDuration": 0.5
+    },
+    "cc_芙宁娜.cfg_Param7": {
+      "ExpName": "cc_芙宁娜.cfg_Param7",
+      "IsEnable": true,
+      "IsGlobal": true,
+      "Keys": [
+        0,
+        0,
+        0
+      ],
+      "Mode": 1,
+      "FadeDuration": 0.5
+    },
+    "cc_芙宁娜.cfg_Param8": {
+      "ExpName": "cc_芙宁娜.cfg_Param8",
+      "IsEnable": true,
+      "IsGlobal": true,
+      "Keys": [
+        0,
+        0,
+        0
+      ],
+      "Mode": 1,
+      "FadeDuration": 0.5
+    },
+    "cc_芙宁娜.cfg_Param9": {
+      "ExpName": "cc_芙宁娜.cfg_Param9",
+      "IsEnable": true,
+      "IsGlobal": true,
+      "Keys": [
+        0,
+        0,
+        0
+      ],
+      "Mode": 1,
+      "FadeDuration": 0.5
+    },
+    "cc_芙宁娜.cfg_Param10": {
+      "ExpName": "cc_芙宁娜.cfg_Param10",
+      "IsEnable": true,
+      "IsGlobal": true,
+      "Keys": [
+        0,
+        0,
+        0
+      ],
+      "Mode": 1,
+      "FadeDuration": 0.5
+    },
+    "cc_芙宁娜.cfg_Param11": {
+      "ExpName": "cc_芙宁娜.cfg_Param11",
+      "IsEnable": true,
+      "IsGlobal": true,
+      "Keys": [
+        0,
+        0,
+        0
+      ],
+      "Mode": 1,
+      "FadeDuration": 0.5
+    },
+    "cc_芙宁娜.cfg_Param12": {
+      "ExpName": "cc_芙宁娜.cfg_Param12",
+      "IsEnable": true,
+      "IsGlobal": true,
+      "Keys": [
+        0,
+        0,
+        0
+      ],
+      "Mode": 1,
+      "FadeDuration": 0.5
+    },
+    "cc_芙宁娜.cfg_Param13": {
+      "ExpName": "cc_芙宁娜.cfg_Param13",
+      "IsEnable": true,
+      "IsGlobal": true,
+      "Keys": [
+        0,
+        0,
+        0
+      ],
+      "Mode": 1,
+      "FadeDuration": 0.5
+    },
+    "cc_芙宁娜.cfg_Param19": {
+      "ExpName": "cc_芙宁娜.cfg_Param19",
+      "IsEnable": true,
+      "IsGlobal": true,
+      "Keys": [
+        0,
+        0,
+        0
+      ],
+      "Mode": 1,
+      "FadeDuration": 0.5
+    },
+    "cc_芙宁娜.cfg_Param20": {
+      "ExpName": "cc_芙宁娜.cfg_Param20",
+      "IsEnable": true,
+      "IsGlobal": true,
+      "Keys": [
+        0,
+        0,
+        0
+      ],
+      "Mode": 1,
+      "FadeDuration": 0.5
+    },
+    "cc_芙宁娜.cfg_Param21": {
+      "ExpName": "cc_芙宁娜.cfg_Param21",
+      "IsEnable": true,
+      "IsGlobal": true,
+      "Keys": [
+        0,
+        0,
+        0
+      ],
+      "Mode": 1,
+      "FadeDuration": 0.5
+    },
+    "cc_芙宁娜.cfg_Param14": {
+      "ExpName": "cc_芙宁娜.cfg_Param14",
+      "IsEnable": true,
+      "IsGlobal": true,
+      "Keys": [
+        0,
+        0,
+        0
+      ],
+      "Mode": 1,
+      "FadeDuration": 0.5
+    },
+    "cc_芙宁娜.cfg_Param15": {
+      "ExpName": "cc_芙宁娜.cfg_Param15",
+      "IsEnable": true,
+      "IsGlobal": true,
+      "Keys": [
+        0,
+        0,
+        0
+      ],
+      "Mode": 1,
+      "FadeDuration": 0.5
+    },
+    "cc_芙宁娜.cfg_Param16": {
+      "ExpName": "cc_芙宁娜.cfg_Param16",
+      "IsEnable": true,
+      "IsGlobal": true,
+      "Keys": [
+        0,
+        0,
+        0
+      ],
+      "Mode": 1,
+      "FadeDuration": 0.5
+    }
+  }
+}

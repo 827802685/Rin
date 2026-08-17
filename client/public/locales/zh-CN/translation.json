@@ -20,6 +20,7 @@
     "health_description": "检查关键配置、缺失的集成项，以及可能影响服务正常运行的风险。",
     "queue_status_description": "查看 AI 摘要队列进度、最近任务结果和失败信息。",
     "settings_description": "在统一的后台空间中管理站点行为、集成配置和发布规则。",
+    "theme_description": "自定义站点外观、强调色和交互挂件。",
     "title": "后台管理",
     "tools_description": "管理「工具集」页面展示的在线工具，包括图标、描述和链接。",
     "writing_description": "在独立的管理工作区中编写、编辑和发布内容。"
@@ -517,6 +518,7 @@
       "desc": "选择按钮、高亮和交互元素使用的强调色",
       "custom": "自定义",
       "options": {
+        "furina": "芙宁娜",
         "rose": "玫红",
         "violet": "紫色",
         "blue": "蓝色",
@@ -804,5 +806,115 @@
   "sort_latest": "最新",
   "sort_popular": "热门",
   "total_tags": "共 {{count}} 个标签",
-  "anonymous": "匿名"
+  "anonymous": "匿名",
+  "theme": {
+    "title": "主题",
+    "color_section": {
+      "title": "强调色"
+    },
+    "widgets": {
+      "title": "挂件"
+    },
+    "save_success": "主题设置已保存",
+    "unsaved_changes": "存在未保存的主题更改",
+    "live2d": {
+      "enable": {
+        "title": "Live2D 看板娘",
+        "desc": "在站点上展示芙宁娜 Live2D 模型"
+      },
+      "position": {
+        "title": "看板娘靠左",
+        "desc": "将看板娘放在左侧边缘而非右侧"
+      },
+      "model": {
+        "title": "模型文件",
+        "desc": ".model3.json 模型文件的路径",
+        "label": "模型路径"
+      },
+      "scale": {
+        "title": "看板娘缩放",
+        "desc": "Live2D 模型的显示缩放比例",
+        "label": "缩放"
+      },
+      "show": "显示看板娘",
+      "hide": "隐藏看板娘"
+    },
+    "cursor": {
+      "enable": {
+        "title": "芙宁娜鼠标指针",
+        "desc": "将系统指针替换为芙宁娜风格指针"
+      },
+      "default": {
+        "title": "默认指针",
+        "desc": "普通指向时使用的指针图片"
+      },
+      "pointer": {
+        "title": "链接指针",
+        "desc": "链接和按钮上的指针图片"
+      },
+      "text": {
+        "title": "文本指针",
+        "desc": "可编辑文本上的指针图片"
+      }
+    },
+    "firework": {
+      "enable": {
+        "title": "点击烟花特效",
+        "desc": "在点击位置显示粒子爆发"
+      },
+      "disable_mobile": {
+        "title": "移动端禁用",
+        "desc": "在触屏设备上不运行烟花特效"
+      }
+    },
+    "player": {
+      "enable": {
+        "title": "音乐播放器",
+        "desc": "显示浮动音乐播放器挂件"
+      },
+      "autoplay": {
+        "title": "自动播放",
+        "desc": "加载完成后自动开始播放"
+      },
+      "audio": {
+        "title": "播放列表",
+        "desc": "包含 name、artist、url 和 cover 的曲目 JSON 数组",
+        "example": "插入示例",
+        "clear": "清空"
+      },
+      "play": "播放",
+      "pause": "暂停",
+      "prev": "上一曲",
+      "next": "下一曲",
+      "unknown_artist": "未知艺术家"
+    },
+    "share": {
+      "enable": {
+        "title": "分享栏",
+        "desc": "在每篇文章下方显示分享按钮"
+      },
+      "networks": {
+        "title": "分享渠道",
+        "desc": "逗号分隔的渠道键（weibo,qq,weixin,telegram,x,facebook,qzone,copy）",
+        "label": "分享渠道"
+      },
+      "title": "分享",
+      "copied": "已复制"
+    },
+    "anchor": {
+      "enable": {
+        "title": "标题锚点",
+        "desc": "在文章标题上显示锚点链接"
+      },
+      "auto": {
+        "title": "自动锚点",
+        "desc": "自动为所有标题添加锚点"
+      },
+      "length": {
+        "title": "锚点文本长度",
+        "desc": "自动生成锚点文本的最大长度",
+        "label": "长度"
+      }
+    }
+  }
 }
