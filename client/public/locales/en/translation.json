@@ -837,7 +837,15 @@
         "label": "Scale"
       },
       "show": "Show mascot",
-      "hide": "Hide mascot"
+      "hide": "Hide mascot",
+      "poke": "Pat",
+      "talk": {
+        "idle1": "Hi there, I am Furina!",
+        "idle2": "Let's work hard together today!",
+        "poke1": "Hey! Don't poke me like that~",
+        "poke2": "That tickles... what are you doing?",
+        "poke3": "Keep patting and I'll start charging~"
+      }
     },
     "cursor": {
       "enable": {
@@ -886,7 +894,12 @@
       "pause": "Pause",
       "prev": "Previous track",
       "next": "Next track",
-      "unknown_artist": "Unknown artist"
+      "unknown_artist": "Unknown artist",
+      "collapse": "Collapse",
+      "expand": "Expand",
+      "playlist": "Playlist",
+      "playlist_title": "Up next",
+      "volume": "Volume"
     },
     "share": {
       "enable": {

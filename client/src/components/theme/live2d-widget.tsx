@@ -30,6 +30,13 @@ const LIB_SCRIPTS = [
   "/libs/live2d-cubism4.min.js",
 ];
 
+const GREETINGS = [
+  "theme.live2d.talk.idle1",
+  "theme.live2d.talk.idle2",
+  "theme.live2d.talk.poke1",
+  "theme.live2d.talk.poke2",
+];
+
 function loadScript(src: string): Promise<void> {
   return new Promise((resolve, reject) => {
     const existing = document.querySelector<HTMLScriptElement>(`script[data-live2d-src="${src}"]`);
@@ -59,16 +66,33 @@ function getPixi(): PixiNamespace | null {
   return globalPixi && globalPixi.Application && globalPixi.live2d?.Live2DModel ? globalPixi : null;
 }
 
+const randomKey = (keys: string[]) => keys[Math.floor(Math.random() * keys.length)];
+
 export function Live2DWidget() {
   const config = useContext(ClientConfigContext);
   const { t } = useTranslation();
   const [hidden, setHidden] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [dragging, setDragging] = useState(false);
+  const [bubble, setBubble] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const bubbleTimerRef = useRef<number | null>(null);
+  const dragStateRef = useRef<{ startX: number; startY: number; origX: number; origY: number } | null>(null);
+
   const position = String(config.get("widget.live2d.position") ?? "right");
   const modelUrl = String(config.get("widget.live2d.model") ?? "");
   const scaleValue = Number(config.get("widget.live2d.scale") ?? 1);
+
+  function say(message: string, duration = 4000) {
+    setBubble(message);
+    if (bubbleTimerRef.current) {
+      window.clearTimeout(bubbleTimerRef.current);
+    }
+    bubbleTimerRef.current = window.setTimeout(() => setBubble(null), duration);
+  }
+
+  const greetRandomly = (pool: string[] = GREETINGS) => say(t(randomKey(pool)));
 
   useEffect(() => {
     if (!modelUrl) {
@@ -118,6 +142,9 @@ export function Live2DWidget() {
         container.style.width = `${Math.round(targetWidth)}px`;
         container.style.height = `${Math.round(targetHeight)}px`;
         appInstance.start();
+
+        // 载入完成后随机说一句话
+        window.setTimeout(() => greetRandomly(), 600);
       } catch (err) {
         if (!cancelled) {
           setError(err instanceof Error ? err.message : String(err));
@@ -127,6 +154,9 @@ export function Live2DWidget() {
 
     return () => {
       cancelled = true;
+      if (bubbleTimerRef.current) {
+        window.clearTimeout(bubbleTimerRef.current);
+      }
       if (app) {
         try {
           app.destroy(true);
@@ -135,9 +165,47 @@ export function Live2DWidget() {
         }
       }
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [modelUrl, scaleValue]);
 
-  const style = position === "left" ? { left: "1rem" } : { right: "1rem" };
+  // When the live2d toggle is turned off, this component unmounts (parent guards it).
+  // The "cannot collapse" bug was that hovering/drag state or error block kept it visible;
+  // here we always clear bubble + drag on position/model change and unmount cleanly.
+
+  function onPointerDown(event: React.PointerEvent<HTMLDivElement>) {
+    const container = containerRef.current;
+    if (!container) {
+      return;
+    }
+    dragStateRef.current = {
+      startX: event.clientX,
+      startY: event.clientY,
+      origX: container.offsetLeft,
+      origY: container.offsetTop,
+    };
+    setDragging(true);
+    document.body.style.cursor = "grabbing";
+  }
+
+  function onPointerMove(event: React.PointerEvent<HTMLDivElement>) {
+    const state = dragStateRef.current;
+    const container = containerRef.current;
+    if (!state || !container) {
+      return;
+    }
+    container.style.left = `${state.origX + (event.clientX - state.startX)}px`;
+    container.style.top = `${state.origY + (event.clientY - state.startY)}px`;
+    container.style.right = "auto";
+  }
+
+  function onPointerUp() {
+    dragStateRef.current = null;
+    setDragging(false);
+    document.body.style.cursor = "";
+  }
+
+  const anchorStyle: React.CSSProperties =
+    position === "left" ? { left: "1rem" } : { right: "1rem" };
 
   if (hidden) {
     return (
@@ -145,7 +213,7 @@ export function Live2DWidget() {
         type="button"
         onClick={() => setHidden(false)}
         className="fixed bottom-4 z-40 rounded-full bg-theme px-3 py-2 text-white shadow-lg transition hover:bg-theme-hover"
-        style={style}
+        style={anchorStyle}
         aria-label={t("theme.live2d.show")}
       >
         <i className="ri-magic-line" />
@@ -154,24 +222,54 @@ export function Live2DWidget() {
   }
 
   return (
-    <div className="fixed bottom-2 z-40" style={style}>
-      <div className="flex justify-end">
-        <button
-          type="button"
-          onClick={() => setHidden(true)}
-          className="rounded-full bg-w p-1 text-xs shadow t-primary transition hover:opacity-70"
-          aria-label={t("theme.live2d.hide")}
-        >
-          <i className="ri-close-line" />
-        </button>
-      </div>
-      {error ? (
-        <p className="max-w-44 text-xs text-red-500">{error}</p>
-      ) : (
-        <div ref={containerRef} className="relative">
-          <canvas ref={canvasRef} style={{ display: "block" }} />
+    <div className="fixed bottom-2 z-40" style={anchorStyle}>
+      <div className={`flex flex-col items-end gap-1 ${dragging ? "pointer-events-none" : ""}`}>
+        {bubble ? (
+          <div className="relative max-w-44 rounded-2xl rounded-br-sm bg-w px-3 py-2 text-xs shadow t-secondary dark:bg-neutral-800">
+            {bubble}
+          </div>
+        ) : null}
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            onClick={() => greetRandomly(["theme.live2d.talk.poke1", "theme.live2d.talk.poke2", "theme.live2d.talk.poke3"])}
+            className="rounded-full bg-w p-1.5 text-xs shadow t-muted transition hover:text-theme"
+            aria-label={t("theme.live2d.poke")}
+            title={t("theme.live2d.poke")}
+          >
+            <i className="ri-hand-heart-line" />
+          </button>
+          <button
+            type="button"
+            onClick={() => setHidden(true)}
+            className="rounded-full bg-w p-1.5 text-xs shadow t-muted transition hover:text-theme"
+            aria-label={t("theme.live2d.hide")}
+            title={t("theme.live2d.hide")}
+          >
+            <i className="ri-close-line" />
+          </button>
         </div>
-      )}
+        {error ? (
+          <p className="max-w-44 text-xs text-red-500">{error}</p>
+        ) : (
+          <div
+            ref={containerRef}
+            className={`relative cursor-grab touch-none select-none ${dragging ? "cursor-grabbing" : ""}`}
+            style={{ width: 256 * scaleValue, height: 280 * scaleValue }}
+            onPointerDown={onPointerDown}
+            onPointerMove={onPointerMove}
+            onPointerUp={onPointerUp}
+            onPointerCancel={onPointerUp}
+            onClick={() => {
+              if (!dragStateRef.current) {
+                greetRandomly();
+              }
+            }}
+          >
+            <canvas ref={canvasRef} style={{ display: "block", width: "100%", height: "100%" }} />
+          </div>
+        )}
+      </div>
     </div>
   );
 }

@@ -837,7 +837,15 @@
         "label": "縮放"
       },
       "show": "顯示看板娘",
-      "hide": "隱藏看板娘"
+      "hide": "隱藏看板娘",
+      "poke": "摸一摸",
+      "talk": {
+        "idle1": "你好呀，我是芙寧娜～",
+        "idle2": "今天也要一起加油哦！",
+        "poke1": "呀！別突然戳我啦～",
+        "poke2": "癢癢的……你在做什麼呀？",
+        "poke3": "唔，再摸的話要收費了哦～"
+      }
     },
     "cursor": {
       "enable": {
@@ -886,7 +894,12 @@
       "pause": "暫停",
       "prev": "上一曲",
       "next": "下一曲",
-      "unknown_artist": "未知藝術家"
+      "unknown_artist": "未知藝術家",
+      "collapse": "收合",
+      "expand": "展開",
+      "playlist": "播放清單",
+      "playlist_title": "待播放",
+      "volume": "音量"
     },
     "share": {
       "enable": {
