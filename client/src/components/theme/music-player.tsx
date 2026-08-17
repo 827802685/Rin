@@ -102,13 +102,18 @@ export function MusicPlayer() {
   const enabled = config.getBoolean("widget.player.enabled");
   const autoplay = config.getBoolean("widget.player.autoplay");
   const metingApi = String(config.get("widget.player.meting_api") ?? "").trim();
-  const metingQueryRaw = String(config.get("widget.player.meting") ?? "").trim();
+  const metingQueryRaw = config.get("widget.player.meting");
+  const metingQueryKey = typeof metingQueryRaw === "object" ? JSON.stringify(metingQueryRaw) : String(metingQueryRaw ?? "");
   const metingQuery: MetingQuery | null = (() => {
     if (!metingQueryRaw) {
       return null;
     }
+    // 兼容对象与 JSON 字符串两种存储格式
+    if (typeof metingQueryRaw === "object") {
+      return metingQueryRaw as MetingQuery;
+    }
     try {
-      const parsed = JSON.parse(metingQueryRaw);
+      const parsed = JSON.parse(String(metingQueryRaw));
       if (parsed && typeof parsed === "object") {
         return parsed as MetingQuery;
       }
@@ -137,7 +142,7 @@ export function MusicPlayer() {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [enabled, metingApi, metingQueryRaw]);
+  }, [enabled, metingApi, metingQueryKey]);
 
   const tracks = metingTracks.length > 0 ? metingTracks : staticTracks;
   const track = tracks[index] || undefined;
