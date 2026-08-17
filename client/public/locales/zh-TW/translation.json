@@ -914,7 +914,17 @@
       "expand": "展開",
       "playlist": "播放清單",
       "playlist_title": "待播放",
-      "volume": "音量"
+      "volume": "音量",
+      "meting_api": {
+        "title": "Meting API 位址",
+        "desc": "meting 服務的 API 基礎位址，例如 https://music.example.com/api",
+        "label": "API 位址"
+      },
+      "meting": {
+        "title": "Meting 來源",
+        "desc": "查詢條件 JSON：server/type/id。設定後將從 meting 拉取播放清單並優先播放",
+        "label": "查詢條件"
+      }
     },
     "share": {
       "enable": {

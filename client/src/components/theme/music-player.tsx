@@ -27,6 +27,54 @@ function parseTracks(raw: unknown): PlayerTrack[] {
   }
 }
 
+type MetingQuery = {
+  server?: string;
+  type?: string;
+  id?: string;
+};
+
+// 从 meting 服务拉取歌单/搜索结果，返回可直接播放的曲目列表。
+// meting 的 playlist/search 响应每项已自带带鉴权的 url/pic/lrc。
+async function fetchMetingTracks(apiBase: string, query: MetingQuery): Promise<PlayerTrack[]> {
+  const params = new URLSearchParams({
+    server: query.server || "netease",
+    type: query.type || "playlist",
+    id: query.id || "",
+  });
+  const response = await fetch(`${apiBase.replace(/\/+$/, "")}/api?${params.toString()}`, {
+    headers: { Accept: "application/json" },
+  });
+  if (!response.ok) {
+    throw new Error(`Meting API ${response.status}`);
+  }
+  const data = (await response.json()) as unknown;
+  if (!Array.isArray(data)) {
+    return [];
+  }
+  return data.flatMap((item) => {
+    if (!item || typeof item !== "object") {
+      return [];
+    }
+    const record = item as { title?: unknown; author?: unknown; url?: unknown; pic?: unknown };
+    if (typeof record.title !== "string" || typeof record.url !== "string") {
+      return [];
+    }
+    const author = Array.isArray(record.author)
+      ? record.author.join(" / ")
+      : typeof record.author === "string"
+        ? record.author
+        : undefined;
+    return [
+      {
+        name: record.title,
+        artist: author,
+        url: record.url,
+        cover: typeof record.pic === "string" ? record.pic : undefined,
+      },
+    ];
+  });
+}
+
 function formatTime(seconds: number) {
   const rounded = Math.floor(Number.isFinite(seconds) ? seconds : 0);
   return `${Math.floor(rounded / 60)}:${String(rounded % 60).padStart(2, "0")}`;
@@ -35,7 +83,8 @@ function formatTime(seconds: number) {
 export function MusicPlayer() {
   const config = useContext(ClientConfigContext);
   const { t } = useTranslation();
-  const [tracks] = useState<PlayerTrack[]>(() => parseTracks(config.get("widget.player.audio")));
+  const [staticTracks] = useState<PlayerTrack[]>(() => parseTracks(config.get("widget.player.audio")));
+  const [metingTracks, setMetingTracks] = useState<PlayerTrack[]>([]);
   const [index, setIndex] = useState(0);
   const [playing, setPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -52,7 +101,46 @@ export function MusicPlayer() {
 
   const enabled = config.getBoolean("widget.player.enabled");
   const autoplay = config.getBoolean("widget.player.autoplay");
-  const track = tracks[index];
+  const metingApi = String(config.get("widget.player.meting_api") ?? "").trim();
+  const metingQueryRaw = String(config.get("widget.player.meting") ?? "").trim();
+  const metingQuery: MetingQuery | null = (() => {
+    if (!metingQueryRaw) {
+      return null;
+    }
+    try {
+      const parsed = JSON.parse(metingQueryRaw);
+      if (parsed && typeof parsed === "object") {
+        return parsed as MetingQuery;
+      }
+    } catch {
+      // ignore malformed config
+    }
+    return null;
+  })();
+
+  // fetch meting tracks once when enabled and api+query are configured
+  useEffect(() => {
+    if (!enabled || !metingApi || !metingQuery) {
+      return;
+    }
+    let cancelled = false;
+    fetchMetingTracks(metingApi, metingQuery)
+      .then((tracks) => {
+        if (!cancelled) {
+          setMetingTracks(tracks);
+        }
+      })
+      .catch(() => {
+        // keep static tracks as fallback when meting fetch fails
+      });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [enabled, metingApi, metingQueryRaw]);
+
+  const tracks = metingTracks.length > 0 ? metingTracks : staticTracks;
+  const track = tracks[index] || undefined;
   const trackUrl = track?.url;
 
   // persist volume across sessions

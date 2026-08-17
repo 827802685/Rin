@@ -914,7 +914,17 @@
       "expand": "展开",
       "playlist": "播放列表",
       "playlist_title": "待播放",
-      "volume": "音量"
+      "volume": "音量",
+      "meting_api": {
+        "title": "Meting API 地址",
+        "desc": "meting 服务的 API 基础地址，如 https://music.example.com/api",
+        "label": "API 地址"
+      },
+      "meting": {
+        "title": "Meting 源",
+        "desc": "查询条件 JSON：server/type/id。配置后将从 meting 拉取歌单并优先播放",
+        "label": "查询条件"
+      }
     },
     "share": {
       "enable": {

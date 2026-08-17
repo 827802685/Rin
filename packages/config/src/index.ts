@@ -31,6 +31,8 @@ export const CLIENT_CONFIG_DEFAULTS = new Map(
     "widget.player.enabled": false,
     "widget.player.autoplay": false,
     "widget.player.audio": "[]",
+    "widget.player.meting_api": "",
+    "widget.player.meting": "",
     "widget.share.enabled": false,
     "widget.share.networks": "weibo,qq,weixin,telegram,x,facebook,qzone,copy",
     "widget.anchor.enabled": false,

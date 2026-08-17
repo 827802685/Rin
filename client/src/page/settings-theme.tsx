@@ -147,6 +147,8 @@ export function SettingsTheme() {
   const playerEnabled = clientConfig.getBoolean("widget.player.enabled");
   const playerAutoplay = clientConfig.getBoolean("widget.player.autoplay");
   const playerAudio = String(clientConfig.get("widget.player.audio") ?? "[]");
+  const playerMetingApi = String(clientConfig.get("widget.player.meting_api") ?? "");
+  const playerMeting = String(clientConfig.get("widget.player.meting") ?? "");
   const shareEnabled = clientConfig.getBoolean("widget.share.enabled");
   const shareNetworks = String(clientConfig.get("widget.share.networks") ?? "");
   const anchorEnabled = clientConfig.getBoolean("widget.anchor.enabled");
@@ -592,6 +594,26 @@ export function SettingsTheme() {
                   </SettingsCardBody>
                 </SettingsCard>
               </div>
+              <ItemInput
+                title={t("theme.player.meting_api.title")}
+                description={t("theme.player.meting_api.desc")}
+                configKeyTitle={t("theme.player.meting_api.label")}
+                value={playerMetingApi}
+                placeholder="https://music.example.com/api"
+                onChange={(value) => {
+                  setConfigValue("widget.player.meting_api", value);
+                }}
+              />
+              <ItemInput
+                title={t("theme.player.meting.title")}
+                description={t("theme.player.meting.desc")}
+                configKeyTitle={t("theme.player.meting.label")}
+                value={playerMeting}
+                placeholder='{"server":"netease","type":"playlist","id":"60198"}'
+                onChange={(value) => {
+                  setConfigValue("widget.player.meting", value);
+                }}
+              />
             </>
           ) : null}
 

@@ -914,7 +914,17 @@
       "expand": "Expand",
       "playlist": "Playlist",
       "playlist_title": "Up next",
-      "volume": "Volume"
+      "volume": "Volume",
+      "meting_api": {
+        "title": "Meting API URL",
+        "desc": "Base URL of the meting service, e.g. https://music.example.com/api",
+        "label": "API URL"
+      },
+      "meting": {
+        "title": "Meting source",
+        "desc": "Query condition JSON: server/type/id. When set, tracks will be fetched from meting and played first",
+        "label": "Query"
+      }
     },
     "share": {
       "enable": {

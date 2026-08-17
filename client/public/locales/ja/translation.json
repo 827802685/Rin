@@ -905,7 +905,17 @@
       "expand": "展開",
       "playlist": "プレイリスト",
       "playlist_title": "次に再生",
-      "volume": "音量"
+      "volume": "音量",
+      "meting_api": {
+        "title": "Meting API アドレス",
+        "desc": "meting サービスの API ベースURL。例: https://music.example.com/api",
+        "label": "API アドレス"
+      },
+      "meting": {
+        "title": "Meting ソース",
+        "desc": "クエリ条件 JSON: server/type/id。設定すると meting から曲を取得し優先再生します",
+        "label": "クエリ"
+      }
     },
     "share": {
       "enable": {
