@@ -845,6 +845,21 @@
         "poke1": "Hey! Don't poke me like that~",
         "poke2": "That tickles... what are you doing?",
         "poke3": "Keep patting and I'll start charging~"
+      },
+      "feed": {
+        "button": "Feed",
+        "food": "Feed {}",
+        "name": {
+          "cake": "Cake",
+          "donut": "Donut",
+          "fish": "Sashimi",
+          "dessert": "Pudding"
+        },
+        "yum1": "Wow! Thanks for feeding me, it's delicious~",
+        "yum2": "Mmm, so sweet! I love it!",
+        "yum3": "So happy, one more bite please~",
+        "cake": "The cake is really tasty!",
+        "generic": "So delicious!"
       }
     },
     "cursor": {

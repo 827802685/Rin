@@ -13,6 +13,7 @@ type PixiModel = {
   width: number;
   height: number;
   scale: { set(x: number, y?: number): void };
+  motion(group?: string, index?: number, priority?: number): Promise<unknown> | undefined;
 };
 
 type PixiNamespace = {
@@ -35,6 +36,19 @@ const GREETINGS = [
   "theme.live2d.talk.idle2",
   "theme.live2d.talk.poke1",
   "theme.live2d.talk.poke2",
+];
+
+const FOOD_REPLIES = [
+  "theme.live2d.feed.yum1",
+  "theme.live2d.feed.yum2",
+  "theme.live2d.feed.yum3",
+];
+
+const FOODS = [
+  { key: "cake", icon: "🍰" },
+  { key: "donut", icon: "🍩" },
+  { key: "fish", icon: "🍣" },
+  { key: "dessert", icon: "🍮" },
 ];
 
 function loadScript(src: string): Promise<void> {
@@ -75,8 +89,11 @@ export function Live2DWidget() {
   const [error, setError] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
   const [bubble, setBubble] = useState<string | null>(null);
+  const [feeding, setFeeding] = useState(false);
+  const [showFood, setShowFood] = useState(false);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const modelRef = useRef<PixiModel | null>(null);
   const bubbleTimerRef = useRef<number | null>(null);
   const dragStateRef = useRef<{ startX: number; startY: number; origX: number; origY: number } | null>(null);
 
@@ -93,6 +110,25 @@ export function Live2DWidget() {
   }
 
   const greetRandomly = (pool: string[] = GREETINGS) => say(t(randomKey(pool)));
+
+  function feedModel(item?: { key: string; icon: string }) {
+    const model = modelRef.current;
+    // trigger a motion if available, then speak a happy reply
+    const motionPromise = model?.motion ? model.motion("Tap", 0, 3) : undefined;
+    if (motionPromise && typeof (motionPromise as Promise<unknown>).then === "function") {
+      void motionPromise.catch(() => undefined);
+    }
+    say(t(randomKey(FOOD_REPLIES)), 3600);
+    setShowFood(false);
+    setFeeding(true);
+    window.setTimeout(() => setFeeding(false), 500);
+    if (item) {
+      // brief floating feedback with the selected food icon
+      window.setTimeout(() => {
+        say(t(item.key === "cake" ? "theme.live2d.feed.cake" : "theme.live2d.feed.generic"), 2000);
+      }, 800);
+    }
+  }
 
   useEffect(() => {
     if (!modelUrl) {
@@ -133,6 +169,7 @@ export function Live2DWidget() {
         if (cancelled) {
           return;
         }
+        modelRef.current = model;
         appInstance.stage.addChild(model);
 
         const targetHeight = 280 * scaleValue;
@@ -154,6 +191,7 @@ export function Live2DWidget() {
 
     return () => {
       cancelled = true;
+      modelRef.current = null;
       if (bubbleTimerRef.current) {
         window.clearTimeout(bubbleTimerRef.current);
       }
@@ -232,6 +270,15 @@ export function Live2DWidget() {
         <div className="flex items-center gap-1">
           <button
             type="button"
+            onClick={() => setShowFood((value) => !value)}
+            className={`rounded-full bg-w p-1.5 text-xs shadow transition ${showFood ? "text-theme" : "t-muted hover:text-theme"}`}
+            aria-label={t("theme.live2d.feed.button")}
+            title={t("theme.live2d.feed.button")}
+          >
+            <i className="ri-spoon-line" />
+          </button>
+          <button
+            type="button"
             onClick={() => greetRandomly(["theme.live2d.talk.poke1", "theme.live2d.talk.poke2", "theme.live2d.talk.poke3"])}
             className="rounded-full bg-w p-1.5 text-xs shadow t-muted transition hover:text-theme"
             aria-label={t("theme.live2d.poke")}
@@ -249,6 +296,27 @@ export function Live2DWidget() {
             <i className="ri-close-line" />
           </button>
         </div>
+        {showFood && !error ? (
+          <div className="flex items-center gap-1 rounded-full border border-black/10 bg-w px-2 py-1 shadow dark:border-white/10">
+            {FOODS.map((food) => (
+              <button
+                key={food.key}
+                type="button"
+                onClick={() => feedModel(food)}
+                className="flex h-8 w-8 items-center justify-center rounded-full text-base transition hover:scale-110 hover:bg-neutral-100 dark:hover:bg-white/10"
+                aria-label={t("theme.live2d.feed.food", { food: t(`theme.live2d.feed.name.${food.key}`) })}
+                title={t(`theme.live2d.feed.name.${food.key}`)}
+              >
+                {food.icon}
+              </button>
+            ))}
+          </div>
+        ) : null}
+        {feeding ? (
+          <div className="pointer-events-none fixed bottom-3 z-50 text-3xl transition-all duration-500">
+            <i className="ri-heart-3-fill text-theme" />
+          </div>
+        ) : null}
         {error ? (
           <p className="max-w-44 text-xs text-red-500">{error}</p>
         ) : (
