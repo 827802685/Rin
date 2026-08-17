@@ -171,7 +171,7 @@ export function SettingsTheme() {
       initialDraftRef.current = state.draft;
       mergeSessionConfig(state.draft.clientConfig);
       window.dispatchEvent(new Event("storage"));
-      showAlert(t("settings.theme.save_success"));
+      showAlert(t("theme.save_success"));
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       showAlert(t("settings.update_failed$message", { message }));
@@ -654,8 +654,8 @@ export function SettingsTheme() {
                   header={
                     <SettingsCardHeader
                       title={t("settings.ai_summary.save.title")}
-                      description={t("settings.theme.unsaved_changes")}
-                      badge={<SettingsBadge tone="warning">{t("settings.theme.unsaved_changes")}</SettingsBadge>}
+                      description={t("theme.unsaved_changes")}
+                      badge={<SettingsBadge tone="warning">{t("theme.unsaved_changes")}</SettingsBadge>}
                     />
                   }
                   action={
