@@ -887,6 +887,11 @@
       "error": {
         "webgl": "当前浏览器不支持 WebGL，无法渲染 Live2D 模型",
         "load_failed": "Live2D 模型加载失败，请检查模型地址或稍后重试"
+      },
+      "loading": {
+        "connecting": "正在连接模型…",
+        "downloading": "正在下载模型",
+        "stalled": "模型下载停滞，请检查网络后刷新重试"
       }
     },
     "cursor": {

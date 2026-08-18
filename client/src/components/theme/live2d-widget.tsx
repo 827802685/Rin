@@ -2,41 +2,61 @@ import { useContext, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ClientConfigContext } from "../../state/config";
 
-type PixiApp = {
-  stage: { addChild(node: unknown): unknown };
-  start(): void;
-  stop?(): void;
-  destroy(removeView?: boolean, stageOptions?: boolean): void;
-  renderer?: { gl?: WebGLRenderingContext };
-};
+/**
+ * Live2D 看板娘组件 —— live2d-widget 插件接入版（复刻 Demo autoload.js）
+ *
+ * 渲染引擎：stevenjoezhang/live2d-widget（827802685 的 fork，暴露 window.initWidget），
+ * 与 Demo（https://827802685.github.io/Live2D/）完全同源：
+ *   1. 动态加载 waifu.css + waifu-tips.js（判重）；
+ *   2. 安装 fetch 下载进度追踪（只统计 /model/ 请求），驱动加载进度条；
+ *   3. 调用 window.initWidget({ waifuPath, cdnPath, cubism2Path, cubism5Path,
+ *      tools, modelId:0, drag:false })；
+ *   4. 插件拉取 cdnPath 下 model_list.json + model/furina/index.json，
+ *      动态 import chunk/index2.js（Cubism5 渲染器）下载 moc3/贴图并渲染，
+ *      派发 live2d:loaded / live2d:rendered；
+ *   5. 渲染门控：live2d:rendered 前保持 loading 态，渲染完成后再显示模型。
+ *
+ * 与 Demo 的差异（为适配博客）：
+ *   - 模型源：优先 github.io 直连（实测最快、同源 CORS），失败自动回退加速代理；
+ *   - 隐藏插件自带的 #waifu-tips / #waifu-tool / #waifu-toggle，气泡与按钮交给 React 外壳；
+ *   - 不加载 config-panel.js（参数面板），保持博客干净；
+ *   - 保留 React 外壳：文件夹拖拽、气泡 speak、FOODS 喂食、Hide 按钮、错误提示 setError。
+ */
 
-type PixiModel = {
-  width: number;
-  height: number;
-  scale: { set(x: number, y?: number): void };
-  motion(group?: string, index?: number, priority?: number): Promise<unknown> | undefined;
-};
+// 插件资源根目录（相对 waifu-tips.js 所在处）
+const DIST = "https://827802685.github.io/Live2D/dist/";
+const WIDGET_CSS = `${DIST}waifu.css`;
+const WIDGET_SCRIPT = `${DIST}waifu-tips.js`;
+const WIDGET_JSON = `${DIST}waifu-tips.json`;
+const CUBISM2_PATH = `${DIST}live2d.min.js`;
+const CUBISM5_PATH = `${DIST}live2dcubismcore.min.js`;
 
-type PixiNamespace = {
-  Application: new (options: Record<string, unknown>) => PixiApp;
-  live2d: {
-    Live2DModel: {
-      from(url: string, options?: Record<string, unknown>): Promise<PixiModel>;
-    };
-  };
-  Texture: {
-    from(source: HTMLCanvasElement | string): unknown;
-  };
-  utils: {
-    TextureCache: Record<string, unknown>;
-  };
-};
-
-const LIB_SCRIPTS = [
-  "/libs/pixi.min.js",
-  "/libs/live2dcubismcore.min.js",
-  "/libs/live2d-cubism4.min.js",
+// 模型根地址候选：优先 github.io 直连（实测最快、同源 CORS），失败回退加速代理（Demo 默认）
+const CDN_CANDIDATES = [
+  "https://827802685.github.io/Live2D/",
+  "https://raw-githubusercontent-com-gh.zjkl0330.dpdns.org/827802685/Live2D/refs/heads/master/",
 ];
+
+// 首次加载模型文件总字节数（moc3 91MB + 4K 贴图 8MB + physics + cdi + idle 动作），作为进度分母
+const EXPECTED_TOTAL = 103740290;
+
+// initWidget 的配置结构（对应 stevenjoezhang/live2d-widget 的 dist/autoload.js）
+type InitWidgetConfig = {
+  waifuPath: string;
+  cdnPath?: string;
+  cubism2Path?: string;
+  cubism5Path?: string;
+  tools?: string[];
+  modelId?: number;
+  logLevel?: string;
+  drag?: boolean;
+};
+type WidgetLoader = (config: InitWidgetConfig) => void;
+
+// 用于标记我们注入的 <link>/<script>，便于卸载时定向清理（尽量不误删页面其它资源）
+const CSS_MARK = "rin-live2d-widget--css";
+const SCRIPT_MARK = "rin-live2d-widget--script";
+const OVERRIDE_STYLE_ID = "rin-live2d-widget--override";
 
 const GREETINGS = [
   "theme.live2d.talk.idle1",
@@ -58,9 +78,38 @@ const FOODS = [
   { key: "dessert", icon: "🍮" },
 ];
 
-function loadScript(src: string): Promise<void> {
+// 复刻 Demo 的工具集。刻意去掉 "quit"：
+// 插件自带 quit 会独立把 #waifu 永久隐藏并写入 waifu-disabled/waifu-display，
+// 与 React 的 Hide 逻辑冲突且无法从外面恢复，因此交还给 React 的 Hide 按钮统一管理。
+// 工具列本身会被覆盖样式隐藏（#waifu-tool{display:none}），交互交给 React 外壳。
+const TOOLS = ["hitokoto", "photo", "info"];
+
+// 判重式加载 <link rel="stylesheet">
+function loadStylesheet(href: string): Promise<void> {
   return new Promise((resolve, reject) => {
-    const existing = document.querySelector<HTMLScriptElement>(`script[data-live2d-src="${src}"]`);
+    const existing = document.querySelector<HTMLLinkElement>(
+      `link[data-rin-live2d-widget="${CSS_MARK}"]`,
+    );
+    if (existing) {
+      resolve();
+      return;
+    }
+    const link = document.createElement("link");
+    link.rel = "stylesheet";
+    link.href = href;
+    link.dataset.rinLive2dWidget = CSS_MARK;
+    link.onload = () => resolve();
+    link.onerror = () => reject(new Error(`Failed to load stylesheet ${href}`));
+    document.head.appendChild(link);
+  });
+}
+
+// 判重式加载 <script type="module">（waifu-tips.js 内含 export，必须按 module 注入）
+function loadModuleScript(src: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const existing = document.querySelector<HTMLScriptElement>(
+      `script[data-rin-live2d-widget="${SCRIPT_MARK}"]`,
+    );
     if (existing) {
       if (existing.dataset.loaded === "true") {
         resolve();
@@ -71,8 +120,9 @@ function loadScript(src: string): Promise<void> {
       return;
     }
     const script = document.createElement("script");
+    script.type = "module";
     script.src = src;
-    script.dataset.live2dSrc = src;
+    script.dataset.rinLive2dWidget = SCRIPT_MARK;
     script.onload = () => {
       script.dataset.loaded = "true";
       resolve();
@@ -82,169 +132,109 @@ function loadScript(src: string): Promise<void> {
   });
 }
 
-function getPixi(): PixiNamespace | null {
-  const globalPixi = (window as unknown as { PIXI?: PixiNamespace }).PIXI;
-  return globalPixi && globalPixi.Application && globalPixi.live2d?.Live2DModel ? globalPixi : null;
-}
-
-// registerWebGPU 供部分 Live2D 运行时使用，缺失时安全忽略
-function ensureWebGPURegistration() {
-  const anyGlobal = window as unknown as { live2dcubismcore?: { Live2D_WebGL?: { registerWebGPU?: () => boolean } } };
-  try {
-    anyGlobal.live2dcubismcore?.Live2D_WebGL?.registerWebGPU?.();
-  } catch {
-    // ignore
+// 复刻 Demo：把 window.Image 包一层默认 crossOrigin=anonymous。
+// 模型贴图来自跨域 CDN，统一加 crossOrigin 避免纹理因跨域被 Canvas 污染/加载失败。
+let originalImage: typeof window.Image | null = null;
+function patchGlobalImage() {
+  if (typeof window === "undefined" || originalImage) {
+    return;
   }
-}
-
-// 检测当前浏览器是否支持 WebGL（Live2D 渲染依赖 WebGL）。
-// 用独立的测试 canvas，避免影响主渲染 canvas。
-function isWebGLSupported(): boolean {
-  try {
-    const testCanvas = document.createElement("canvas");
-    return !!(
-      testCanvas.getContext("webgl") ||
-      testCanvas.getContext("experimental-webgl") ||
-      testCanvas.getContext("webgl2")
-    );
-  } catch {
-    return false;
-  }
-}
-
-function loadImage(url: string): Promise<HTMLImageElement> {
-  return new Promise((resolve, reject) => {
-    const img = new Image();
+  originalImage = window.Image;
+  function PatchedImage(this: unknown, ...args: ConstructorParameters<typeof Image>) {
+    const img = new (originalImage as typeof Image)(...args);
     img.crossOrigin = "anonymous";
-    img.onload = () => resolve(img);
-    img.onerror = () => reject(new Error(`Failed to load image ${url}`));
-    img.src = url;
-  });
+    return img as typeof img;
+  }
+  PatchedImage.prototype = (originalImage as typeof Image).prototype;
+  (window as unknown as { Image: typeof Image }).Image =
+    PatchedImage as unknown as typeof Image;
+}
+function restoreGlobalImage() {
+  if (originalImage) {
+    (window as unknown as { Image: typeof Image }).Image = originalImage;
+    originalImage = null;
+  }
 }
 
-// 将超大贴图（如 8192 分辨率）缩小到安全尺寸，避免纹理过大导致渲染失败。
-// 缩小后的纹理缓存到 PIXI.TextureCache，Live2D 库加载时会命中缓存，不再重复下载。
-async function preloadScaledTextures(
-  model3Url: string,
-  pixi: PixiNamespace,
-  maxTextureSize: number,
-): Promise<void> {
-  const base = model3Url.substring(0, model3Url.lastIndexOf("/") + 1);
-  type ModelSettings = { FileReferences?: { Textures?: string[] } };
-  let settings: ModelSettings | null = null;
-  try {
-    const res = await fetch(model3Url, { mode: "cors" });
-    if (!res.ok) {
-      return;
-    }
-    settings = (await res.json()) as ModelSettings;
-  } catch {
-    return;
-  }
-  const textures = settings?.FileReferences?.Textures ?? [];
-  if (textures.length === 0) {
-    return;
-  }
-  // 安全上限：即使 GPU 支持 8192，超大纹理也会耗尽显存导致渲染失败。
-  // 取 GPU 上限与 2048 的较小值（2048 是此前能正常渲染的尺寸）。
-  const safeLimit = Math.min(maxTextureSize, 2048);
-  await Promise.all(
-    textures.map(async (texUrl) => {
-      const fullUrl = texUrl.startsWith("http") ? texUrl : `${base}${texUrl}`;
-      if (pixi.utils?.TextureCache?.[fullUrl]) {
-        return;
-      }
-      try {
-        const img = await loadImage(fullUrl);
-        const maxDim = Math.max(img.width, img.height);
-        if (maxDim <= safeLimit) {
-          return; // 纹理没超限，让 Live2D 库自己加载
-        }
-        const scale = safeLimit / maxDim;
-        const canvas = document.createElement("canvas");
-        canvas.width = Math.max(1, Math.round(img.width * scale));
-        canvas.height = Math.max(1, Math.round(img.height * scale));
-        const ctx = canvas.getContext("2d");
-        if (!ctx) {
-          return;
-        }
-        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-        // PIXI v6 没有 Texture.fromCanvas，用 Texture.from(canvas) 创建纹理
-        const texture = pixi.Texture.from(canvas);
-        pixi.utils.TextureCache[fullUrl] = texture;
-      } catch (err) {
-        // 缩小失败不影响后续加载，但记录日志便于排查
-        console.warn("[live2d] texture downscale failed:", err);
-      }
-    }),
-  );
-}
+type ProgressState = { loaded: number; total: number };
 
-// 预取模型及其大资源（moc3 / 贴图）。模型文件很大（动辄数十 MB），
-// 在加载 model3.json 后立即并行预取 moc3/贴图/物理/动作，避免逐项串行等待。
-function prefetchModelAssets(model3Url: string): void {
-  if (typeof document === "undefined") {
-    return;
-  }
-  const base = model3Url.substring(0, model3Url.lastIndexOf("/") + 1);
+// 全局 fetch 包装：统计 /model/ 请求的下载字节数（复刻 Demo autoload.js 的 installProgressTracker）。
+// 必须在 initWidget 之前安装，才能拦到模型下载请求。返回卸载时恢复 window.fetch 的函数。
+function installProgressTracker(onProgress: (p: ProgressState) => void): () => void {
+  const state: ProgressState = { loaded: 0, total: EXPECTED_TOTAL };
+  const origFetch = window.fetch.bind(window);
+  let rafPending = false;
 
-  const addPreload = (relUrl: string | undefined, important: boolean) => {
-    if (!relUrl) {
-      return;
-    }
-    const href = relUrl.startsWith("http") ? relUrl : `${base}${relUrl}`;
-    const id = `rin-live2d-preload-${idForUrl(href)}`;
-    if (document.getElementById(id)) {
-      return;
-    }
-    const link = document.createElement("link");
-    link.rel = "preload";
-    link.as = important ? "fetch" : "fetch";
-    link.href = href;
-    link.crossOrigin = "anonymous";
-    link.id = id;
-    link.fetchPriority = important ? "high" : "low";
-    document.head.appendChild(link);
+  const notify = () => {
+    if (rafPending) return;
+    rafPending = true;
+    requestAnimationFrame(() => {
+      rafPending = false;
+      onProgress({ loaded: state.loaded, total: state.total });
+    });
   };
 
-  // 先从 model3.json 解析出引用，以便尽早并行预取大文件
-  fetch(model3Url, { mode: "cors" })
-    .then((res) => (res.ok ? res.json() : Promise.reject(new Error(`model3 fetch ${res.status}`))))
-    .then((settings: {
-      FileReferences?: {
-        Moc?: string;
-        Textures?: string[];
-        Physics?: string;
-        DisplayInfo?: string;
-        Motions?: Record<string, Array<{ File?: string }>>;
-      };
-    }) => {
-      const refs = settings.FileReferences;
-      if (!refs) {
-        return;
+  const wrapped: typeof window.fetch = (input, init) => {
+    const url =
+      typeof input === "string"
+        ? input
+        : input instanceof URL
+          ? input.href
+          : (input as Request).url || "";
+    // 只拦截模型文件请求（URL 含 /model/），其余请求原样放行
+    if (url.indexOf("/model/") === -1) {
+      return origFetch(input, init);
+    }
+    return origFetch(input, init).then(async (resp) => {
+      if (!resp || !resp.body) return resp;
+      const reader = resp.body.getReader();
+      const chunks: Uint8Array[] = [];
+      let loaded = 0;
+      for (;;) {
+        const r = await reader.read();
+        if (r.done) break;
+        chunks.push(r.value);
+        loaded += r.value.byteLength;
       }
-      // moc3 与贴图最大，给 high 优先级；其余 low
-      addPreload(refs.Moc, true);
-      refs.Textures?.forEach((tex) => addPreload(tex, true));
-      addPreload(refs.Physics, false);
-      addPreload(refs.DisplayInfo, false);
-      const motions = refs.Motions;
-      if (motions) {
-        Object.values(motions).forEach((group) => {
-          group?.forEach((m) => addPreload(m.File, false));
-        });
-      }
-    })
-    .catch(() => {
-      // 预取失败不影响后续正式加载
+      state.loaded += loaded;
+      notify();
+      // 重建 Response：去掉压缩相关头，避免与已解码的 Blob 体积不一致
+      const headers = new Headers(resp.headers);
+      headers.delete("content-encoding");
+      headers.delete("content-length");
+      headers.delete("transfer-encoding");
+      const body = new Blob(chunks as BlobPart[]);
+      return new Response(body, {
+        status: resp.status,
+        statusText: resp.statusText,
+        headers,
+      });
     });
+  };
+
+  window.fetch = wrapped;
+  return () => {
+    window.fetch = origFetch;
+  };
 }
 
-function idForUrl(url: string): string {
-  return url.split("/").pop() || url;
+// 探测可用的模型源：依次请求 model_list.json，返回第一个能正常返回模型清单的根地址
+async function pickCdnRoot(): Promise<string> {
+  for (const root of CDN_CANDIDATES) {
+    try {
+      const res = await fetch(`${root}model_list.json`, { mode: "cors" });
+      if (res.ok) {
+        const data = (await res.json()) as { models?: unknown[] };
+        if (data && Array.isArray(data.models) && data.models.length > 0) {
+          return root;
+        }
+      }
+    } catch {
+      // 尝试下一个候选
+    }
+  }
+  return CDN_CANDIDATES[0];
 }
-
-const randomKey = (keys: string[]) => keys[Math.floor(Math.random() * keys.length)];
 
 // 拖动位置持久化 key
 const POS_KEY = "rin.live2d.pos";
@@ -272,23 +262,33 @@ export function Live2DWidget() {
   const { t } = useTranslation();
   const [hidden, setHidden] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [rendered, setRendered] = useState(false);
+  const [progress, setProgress] = useState<ProgressState | null>(null);
   const [dragging, setDragging] = useState(false);
   const [bubble, setBubble] = useState<string | null>(null);
   const [feeding, setFeeding] = useState(false);
   const [showFood, setShowFood] = useState(false);
-  const containerRef = useRef<HTMLDivElement | null>(null);
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const modelAreaRef = useRef<HTMLDivElement | null>(null);
   const outerRef = useRef<HTMLDivElement | null>(null);
-  const modelRef = useRef<PixiModel | null>(null);
   const bubbleTimerRef = useRef<number | null>(null);
   const dragStateRef = useRef<{ startX: number; startY: number; origLeft: number; origTop: number } | null>(null);
+  const renderedRef = useRef(false);
+  const lastProgressAtRef = useRef(Date.now());
   const [pos, setPos] = useState<{ left: number; top: number } | null>(() => loadSavedPos());
 
   const position = String(config.get("widget.live2d.position") ?? "right");
+  // modelUrl 保留读取，兼容既有配置；插件模式下改为 cdnPath + modelId，
+  // 因此该 URL 不再被直接使用，为空也不影响渲染
   const modelUrl = String(config.get("widget.live2d.model") ?? "");
+  // 显式引用一次，示意这是"按需保留"；插件模式实际用 cdnPath+modelId，此值仅供扩展
+  void modelUrl;
   const rawScale = Number(config.get("widget.live2d.scale") ?? 1);
   // 防止配置被误调成超大值导致模型挡住整个页面：限制在安全范围内
   const scaleValue = Number.isFinite(rawScale) ? Math.min(Math.max(rawScale, 0.1), 2) : 1;
+
+  // 模型容器尺寸：与插件 #waifu-canvas 的 300x300 一致，随配置缩放
+  const boxW = Math.round(300 * scaleValue);
+  const boxH = Math.round(300 * scaleValue);
 
   function say(message: string, duration = 4000) {
     setBubble(message);
@@ -298,16 +298,17 @@ export function Live2DWidget() {
     bubbleTimerRef.current = window.setTimeout(() => setBubble(null), duration);
   }
 
+  const randomKey = (keys: string[]) => keys[Math.floor(Math.random() * keys.length)];
   const greetRandomly = (pool: string[] = GREETINGS) => say(t(randomKey(pool)));
 
   function feedModel(item?: { key: string; icon: string }) {
-    const model = modelRef.current;
-    // trigger a motion if available, then speak a happy reply
-    // Live2D 仓库的芙宁娜模型使用 "TapBody" 动画分组（tap.motion3.json），没有 "Tap" 分组。
-    // 用实际存在的分组，确保喂食时播放动画。
-    const motionPromise = model?.motion ? model.motion("TapBody", 0, 3) : undefined;
-    if (motionPromise && typeof (motionPromise as Promise<unknown>).then === "function") {
-      void motionPromise.catch(() => undefined);
+    // 插件模式无法从外部直接调用 Cubism 动作接口；但模型自身被点击时
+    // （chunk/index2.js 的 onTap）会派发 window "live2d:tapbody"。
+    // 这里往透传该事件：若插件保留了 tapBody 提示，会一起响应。
+    try {
+      window.dispatchEvent(new Event("live2d:tapbody"));
+    } catch {
+      // ignore
     }
     say(t(randomKey(FOOD_REPLIES)), 3600);
     setShowFood(false);
@@ -321,120 +322,165 @@ export function Live2DWidget() {
     }
   }
 
-  useEffect(() => {
-    if (!modelUrl) {
-      return;
+  /**
+   * 插件被加载后同步插入 #waifu（其内含 #waifu-canvas > canvas#live2d、#waifu-tips、#waifu-tool）。
+   * 这里把它「请」进 React 的模型容器，使其随文件夹一起定位/缩放；同时隐藏插件自带的
+   * #waifu-toggle（显示/隐藏交给 React 的 Hide 按钮）。
+   */
+  function adoptPluginDom() {
+    const cage = modelAreaRef.current;
+    const waifu = document.getElementById("waifu");
+    if (cage && waifu && waifu.parentElement !== cage) {
+      cage.appendChild(waifu);
     }
-    let cancelled = false;
-    let app: PixiApp | null = null;
+    const toggle = document.getElementById("waifu-toggle");
+    if (toggle && toggle.id) {
+      toggle.style.display = "none";
+    }
+  }
 
-    // 尽早开始预取大资源（moc3 / 贴图），与库脚本加载并行。
-    // 仅在 WebGL 可用时预取，避免不支持 WebGL 的环境白白下载大文件。
-    if (isWebGLSupported()) {
-      prefetchModelAssets(modelUrl);
+  useEffect(() => {
+    let disposed = false;
+
+    // ---- 首次挂载，清掉可能残留的插件会话状态，保证每次挂载都从干净状态开始 ----
+    try {
+      localStorage.removeItem("waifu-disabled");
+      localStorage.removeItem("waifu-display");
+      sessionStorage.removeItem("waifu-message-priority");
+      // model 总数 = 1（models:[furina]），显式把 modelId 固定为 0，避免历史遗留值越界
+      localStorage.setItem("modelId", "0");
+    } catch {
+      // ignore
     }
+
+    // ---- 注入我们自己的覆盖样式：把插件 #waifu 定位进 React 容器，减少与博主题冲突 ----
+    const overrideStyle = document.createElement("style");
+    overrideStyle.id = OVERRIDE_STYLE_ID;
+    overrideStyle.textContent = [
+      `#${OVERRIDE_STYLE_ID}{}`,
+      `#waifu{position:absolute !important;top:0;left:0;bottom:auto !important;`,
+      `transform:none !important;transition:none !important;z-index:0 !important;`,
+      `width:100%;height:100%;margin:0}`,
+      `#waifu.waifu-active{bottom:auto !important}`,
+      `#waifu:hover{transform:none !important}`,
+      `#waifu-canvas{width:100% !important;height:100% !important;margin:0}`,
+      `#live2d{width:100% !important;height:100% !important;position:relative;display:block}`,
+      // #waifu-tips 由 React 的 speak 气泡承担；#waifu-tool 由 React 的按钮承担；#waifu-toggle 交给 React 的 Hide
+      `#waifu-tips,#waifu-tool,#waifu-toggle{display:none !important}`,
+    ].join("\n");
+    document.head.appendChild(overrideStyle);
+
+    // ---- 复刻 Demo：给图片加载统一加 crossOrigin ----
+    patchGlobalImage();
+
+    // ---- 下载进度追踪（必须在 initWidget 之前安装）----
+    const restoreFetch = installProgressTracker((p) => {
+      lastProgressAtRef.current = Date.now();
+      if (!disposed) setProgress(p);
+    });
+
+    // ---- 渲染门控：live2d:rendered 后放行模型 ----
+    const onRendered = () => {
+      if (disposed) return;
+      renderedRef.current = true;
+      setRendered(true);
+      setError(null);
+    };
+    window.addEventListener("live2d:rendered", onRendered);
+
+    // ---- 兜底：下载停滞（连续 2 分钟无进展且未渲染）时提示用户 ----
+    const stallTimer = window.setInterval(() => {
+      if (disposed) return;
+      if (renderedRef.current) {
+        window.clearInterval(stallTimer);
+        return;
+      }
+      if (Date.now() - lastProgressAtRef.current > 120000) {
+        setError(t("theme.live2d.loading.stalled"));
+        window.clearInterval(stallTimer);
+      }
+    }, 30000);
 
     (async () => {
       try {
-        for (const src of LIB_SCRIPTS) {
-          await loadScript(src);
-        }
-        if (cancelled) {
-          return;
-        }
-        ensureWebGPURegistration();
-        const pixi = getPixi();
-        if (!pixi) {
-          throw new Error("Live2D libraries are not available");
-        }
-        // WebGL 不可用时给出友好提示，避免 PIXI 抛出难懂的错误
-        if (!isWebGLSupported()) {
-          throw new Error(t("theme.live2d.error.webgl"));
-        }
-        const canvas = canvasRef.current;
-        const container = containerRef.current;
-        if (!canvas || !container) {
-          return;
+        // 不做 WebGL 前置检查：与 Demo 的 live2d-widget 插件行为一致。
+        // 插件在运行时直接创建 WebGL 上下文，若浏览器不支持会自行在控制台报错并降级，
+        // 而不是像旧的自研组件那样在渲染前就抛错（旧逻辑导致部分设备上提前失败）。
+
+        // 1) 探测可用的模型源（github.io 优先，失败回退代理）
+        const cdnRoot = await pickCdnRoot();
+        if (disposed) return;
+
+        // 2) 加载样式与插件脚本（均为判重，可安全重复挂载）
+        await loadStylesheet(WIDGET_CSS);
+        await loadModuleScript(WIDGET_SCRIPT);
+        if (disposed) return;
+
+        // 3) 等待 window.initWidget 就绪
+        const loader = (window as unknown as { initWidget?: WidgetLoader }).initWidget;
+        if (typeof loader !== "function") {
+          throw new Error(
+            "initWidget is not available. Check that waifu-tips.js was loaded from " + DIST,
+          );
         }
 
-        const appInstance = new pixi.Application({
-          view: canvas,
-          backgroundAlpha: 0,
-          autoStart: true,
-          antialias: true,
-          resizeTo: container,
-          resolution: window.devicePixelRatio || 1,
+        // 4) 复刻 Demo 的调用方式（cdnPath + modelId；毛豆 furina 为 Cubism5 / 使用 cubism5Path）
+        loader({
+          waifuPath: WIDGET_JSON,
+          cdnPath: cdnRoot,
+          cubism2Path: CUBISM2_PATH,
+          cubism5Path: CUBISM5_PATH,
+          tools: TOOLS,
+          modelId: 0,
+          logLevel: "info",
+          // 插件自带拖拽关闭，交给 React 文件夹拖拽统一处理
+          drag: false,
         });
-        app = appInstance;
+        if (disposed) return;
 
-        // 获取 GPU 最大纹理尺寸，把超大贴图（如 8192）缩小到可渲染范围，
-        // 避免纹理过大导致 Live2D 模型渲染失败。
-        const gl = appInstance.renderer?.gl;
-        const maxTexSize = gl ? gl.getParameter(gl.MAX_TEXTURE_SIZE) : 4096;
-        await preloadScaledTextures(modelUrl, pixi, maxTexSize);
-
-        // 模型加载失败时重试一次（网络抖动/资源未就绪）
-        let model: PixiModel;
-        try {
-          model = await pixi.live2d.Live2DModel.from(modelUrl, { autoInteract: true });
-        } catch (loadErr) {
-          if (cancelled) {
-            return;
-          }
-          model = await pixi.live2d.Live2DModel.from(modelUrl, { autoInteract: true });
-        }
-        if (cancelled) {
-          return;
-        }
-        modelRef.current = model;
-        appInstance.stage.addChild(model);
-
-        // 模型成功加载后，尝试把模型资源写入浏览器 Cache Storage，
-        // 这样下次进入页面时由 Service Worker 直接命中本地缓存，不再重新下载近百 MB 模型。
-        if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
-          navigator.serviceWorker.controller.postMessage({
-            type: 'CACHE_LIVE2D',
-            urls: [modelUrl],
-          });
-        }
-
-        const targetHeight = 280 * scaleValue;
-        const aspect = model.width / model.height;
-        const targetWidth = targetHeight * aspect;
-        model.scale.set(targetWidth / model.width);
-        container.style.width = `${Math.round(targetWidth)}px`;
-        container.style.height = `${Math.round(targetHeight)}px`;
-        appInstance.start();
-
-        // 载入完成后随机说一句话
-        window.setTimeout(() => greetRandomly(), 600);
+        // 5) initWidget 同步执行到 r() 的第一步（插入 #waifu）后即返回，
+        //    因此在调用返回后立刻把 #waifu 放进 React 容器
+        adoptPluginDom();
       } catch (err) {
-        if (!cancelled) {
+        if (!disposed) {
           setError(err instanceof Error ? err.message : String(err));
         }
       }
     })();
 
     return () => {
-      cancelled = true;
-      modelRef.current = null;
+      disposed = true;
+      window.removeEventListener("live2d:rendered", onRendered);
+      window.clearInterval(stallTimer);
+      restoreFetch();
       if (bubbleTimerRef.current) {
         window.clearTimeout(bubbleTimerRef.current);
       }
-      if (app) {
-        try {
-          app.destroy(true);
-        } catch {
-          // ignore teardown errors
-        }
+
+      // ---- 卸载时清理插件注入的 DOM / 脚本，尽量不破坏页面其它区域 ----
+      // 注：插件会在 window/document 上注册一些监听器与 setInterval，这些全局引用
+      // 无法在此移除（插件没有暴露销毁句柄）；已把可移除的 DOM/脚本/样式/图片补丁清理干净。
+      document.getElementById("waifu")?.remove();
+      document.getElementById("waifu-toggle")?.remove();
+      document.getElementById(OVERRIDE_STYLE_ID)?.remove();
+      document
+        .querySelector(`link[data-rin-live2d-widget="${CSS_MARK}"]`)
+        ?.remove();
+      document
+        .querySelector(`script[data-rin-live2d-widget="${SCRIPT_MARK}"]`)
+        ?.remove();
+      restoreGlobalImage();
+      try {
+        localStorage.removeItem("waifu-disabled");
+        localStorage.removeItem("waifu-display");
+        sessionStorage.removeItem("waifu-message-priority");
+      } catch {
+        // ignore
       }
     };
+    // 仅在挂载时加载一次；组件内部 re-render（隐藏/拖动等）不重载插件
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [modelUrl, scaleValue]);
-
-  // When the live2d toggle is turned off, this component unmounts (parent guards it).
-  // The "cannot collapse" bug was that hovering/drag state or error block kept it visible;
-  // here we always clear bubble + drag on position/model change and unmount cleanly.
+  }, []);
 
   function onPointerDown(event: React.PointerEvent<HTMLDivElement>) {
     if (event.button !== 0) {
@@ -505,96 +551,124 @@ export function Live2DWidget() {
     ? { left: `${pos.left}px`, top: `${pos.top}px` }
     : anchorStyle;
 
-  if (hidden) {
-    return (
-      <button
-        type="button"
-        onClick={() => setHidden(false)}
-        className="fixed bottom-4 z-40 rounded-full bg-theme px-3 py-2 text-white shadow-lg transition hover:bg-theme-hover"
-        style={anchorStyle}
-        aria-label={t("theme.live2d.show")}
-      >
-        <i className="ri-magic-line" />
-      </button>
-    );
-  }
+  // 加载进度百分比（0-100）
+  const pct = progress
+    ? Math.min(100, Math.round((progress.loaded / progress.total) * 100))
+    : 0;
 
   return (
-    <div ref={outerRef} className="fixed bottom-2 z-40" style={positionStyle}>
-      <div className={`flex flex-col items-end gap-1 ${dragging ? "pointer-events-none" : ""}`}>
-        {bubble ? (
-          <div className="relative max-w-44 rounded-2xl rounded-br-sm bg-w px-3 py-2 text-xs shadow t-secondary dark:bg-neutral-800">
-            {bubble}
+    <>
+      {hidden ? (
+        <button
+          type="button"
+          onClick={() => setHidden(false)}
+          className="fixed bottom-4 z-40 rounded-full bg-theme px-3 py-2 text-white shadow-lg transition hover:bg-theme-hover"
+          style={anchorStyle}
+          aria-label={t("theme.live2d.show")}
+        >
+          <i className="ri-magic-line" />
+        </button>
+      ) : null}
+      <div
+        ref={outerRef}
+        className="fixed bottom-2 z-40"
+        style={{ ...positionStyle, ...(hidden ? { display: "none" } : {}) }}
+      >
+        <div className={`flex flex-col items-end gap-1 ${dragging ? "pointer-events-none" : ""}`}>
+          {bubble ? (
+            <div className="relative max-w-44 rounded-2xl rounded-br-sm bg-w px-3 py-2 text-xs shadow t-secondary dark:bg-neutral-800">
+              {bubble}
+            </div>
+          ) : null}
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              onClick={() => setShowFood((value) => !value)}
+              className={`rounded-full bg-w p-1.5 text-xs shadow transition ${showFood ? "text-theme" : "t-muted hover:text-theme"}`}
+              aria-label={t("theme.live2d.feed.button")}
+              title={t("theme.live2d.feed.button")}
+            >
+              <i className="ri-spoon-line" />
+            </button>
+            <button
+              type="button"
+              onClick={() => greetRandomly(["theme.live2d.talk.poke1", "theme.live2d.talk.poke2", "theme.live2d.talk.poke3"])}
+              className="rounded-full bg-w p-1.5 text-xs shadow t-muted transition hover:text-theme"
+              aria-label={t("theme.live2d.poke")}
+              title={t("theme.live2d.poke")}
+            >
+              <i className="ri-hand-heart-line" />
+            </button>
+            <button
+              type="button"
+              onClick={() => setHidden(true)}
+              className="rounded-full bg-w p-1.5 text-xs shadow t-muted transition hover:text-theme"
+              aria-label={t("theme.live2d.hide")}
+              title={t("theme.live2d.hide")}
+            >
+              <i className="ri-close-line" />
+            </button>
           </div>
-        ) : null}
-        <div className="flex items-center gap-1">
-          <button
-            type="button"
-            onClick={() => setShowFood((value) => !value)}
-            className={`rounded-full bg-w p-1.5 text-xs shadow transition ${showFood ? "text-theme" : "t-muted hover:text-theme"}`}
-            aria-label={t("theme.live2d.feed.button")}
-            title={t("theme.live2d.feed.button")}
-          >
-            <i className="ri-spoon-line" />
-          </button>
-          <button
-            type="button"
-            onClick={() => greetRandomly(["theme.live2d.talk.poke1", "theme.live2d.talk.poke2", "theme.live2d.talk.poke3"])}
-            className="rounded-full bg-w p-1.5 text-xs shadow t-muted transition hover:text-theme"
-            aria-label={t("theme.live2d.poke")}
-            title={t("theme.live2d.poke")}
-          >
-            <i className="ri-hand-heart-line" />
-          </button>
-          <button
-            type="button"
-            onClick={() => setHidden(true)}
-            className="rounded-full bg-w p-1.5 text-xs shadow t-muted transition hover:text-theme"
-            aria-label={t("theme.live2d.hide")}
-            title={t("theme.live2d.hide")}
-          >
-            <i className="ri-close-line" />
-          </button>
+          {showFood && !error ? (
+            <div className="flex items-center gap-1 rounded-full border border-black/10 bg-w px-2 py-1 shadow dark:border-white/10">
+              {FOODS.map((food) => (
+                <button
+                  key={food.key}
+                  type="button"
+                  onClick={() => feedModel(food)}
+                  className="flex h-8 w-8 items-center justify-center rounded-full text-base transition hover:scale-110 hover:bg-neutral-100 dark:hover:bg-white/10"
+                  aria-label={t("theme.live2d.feed.food", { food: t(`theme.live2d.feed.name.${food.key}`) })}
+                  title={t(`theme.live2d.feed.name.${food.key}`)}
+                >
+                  {food.icon}
+                </button>
+              ))}
+            </div>
+          ) : null}
+          {feeding ? (
+            <div className="pointer-events-none fixed bottom-3 z-50 text-3xl transition-all duration-500">
+              <i className="ri-heart-3-fill text-theme" />
+            </div>
+          ) : null}
+          {error ? (
+            <p className="max-w-44 text-xs text-red-500">{error}</p>
+          ) : (
+            <div
+              className="relative"
+              style={{ width: boxW, height: boxH }}
+            >
+              {/* 模型容器：插件生成的 #waifu 会被移入这里。
+                  注意：此容器不能有 React 子节点，否则手动 appendChild 的 #waifu 会在 re-render 时被 React 清掉。 */}
+              <div
+                ref={modelAreaRef}
+                className={`absolute inset-0 cursor-grab touch-none select-none overflow-hidden ${dragging ? "cursor-grabbing" : ""}`}
+                onPointerDown={onPointerDown}
+                onClick={() => {
+                  if (!dragStateRef.current) {
+                    greetRandomly();
+                  }
+                }}
+              />
+              {/* 加载进度覆盖层：渲染完成前显示（作为兄弟节点，不干扰 #waifu） */}
+              {!rendered ? (
+                <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 rounded-xl bg-w/90 text-xs shadow-inner dark:bg-neutral-900/90">
+                  <div className="h-1.5 w-28 overflow-hidden rounded-full bg-neutral-200 dark:bg-neutral-700">
+                    <div
+                      className="h-full rounded-full bg-theme transition-[width] duration-300"
+                      style={{ width: `${pct}%` }}
+                    />
+                  </div>
+                  <span className="t-muted">
+                    {progress
+                      ? `${t("theme.live2d.loading.downloading")} ${pct}%`
+                      : t("theme.live2d.loading.connecting")}
+                  </span>
+                </div>
+              ) : null}
+            </div>
+          )}
         </div>
-        {showFood && !error ? (
-          <div className="flex items-center gap-1 rounded-full border border-black/10 bg-w px-2 py-1 shadow dark:border-white/10">
-            {FOODS.map((food) => (
-              <button
-                key={food.key}
-                type="button"
-                onClick={() => feedModel(food)}
-                className="flex h-8 w-8 items-center justify-center rounded-full text-base transition hover:scale-110 hover:bg-neutral-100 dark:hover:bg-white/10"
-                aria-label={t("theme.live2d.feed.food", { food: t(`theme.live2d.feed.name.${food.key}`) })}
-                title={t(`theme.live2d.feed.name.${food.key}`)}
-              >
-                {food.icon}
-              </button>
-            ))}
-          </div>
-        ) : null}
-        {feeding ? (
-          <div className="pointer-events-none fixed bottom-3 z-50 text-3xl transition-all duration-500">
-            <i className="ri-heart-3-fill text-theme" />
-          </div>
-        ) : null}
-        {error ? (
-          <p className="max-w-44 text-xs text-red-500">{error}</p>
-        ) : (
-          <div
-            ref={containerRef}
-            className={`relative cursor-grab touch-none select-none ${dragging ? "cursor-grabbing" : ""}`}
-            style={{ width: 256 * scaleValue, height: 280 * scaleValue }}
-            onPointerDown={onPointerDown}
-            onClick={() => {
-              if (!dragStateRef.current) {
-                greetRandomly();
-              }
-            }}
-          >
-            <canvas ref={canvasRef} style={{ display: "block", width: "100%", height: "100%" }} />
-          </div>
-        )}
       </div>
-    </div>
+    </>
   );
 }
