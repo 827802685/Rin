@@ -337,30 +337,28 @@ export function MusicPlayer() {
 
       {/* 卡片本体 */}
       <div className="overflow-hidden rounded-2xl border border-black/10 bg-w shadow-2xl dark:border-white/10">
-        {/* 顶部：大专辑图 + 右侧信息列（歌词 + 进度条，列宽与专辑图一致） */}
-        <div className="flex gap-2.5 p-2.5">
-          {/* 大专辑图 */}
-          <div className="h-28 w-28 shrink-0 overflow-hidden rounded-xl bg-neutral-100 dark:bg-white/5">
+        {/* 顶部：小专辑图 + 右侧信息（歌名/歌手 + 窄进度条） */}
+        <div className="flex items-center gap-2.5 p-2.5">
+          {/* 专辑图 */}
+          <div className="h-12 w-12 shrink-0 overflow-hidden rounded-lg bg-neutral-100 dark:bg-white/5">
             {track.cover ? (
               <img src={track.cover} alt="" className="h-full w-full object-cover" />
             ) : (
               <div className="flex h-full w-full items-center justify-center bg-theme/10 text-theme">
-                <i className="ri-music-2-line text-3xl" />
+                <i className="ri-music-2-line text-lg" />
               </div>
             )}
           </div>
 
-          {/* 右侧信息列：宽度对齐专辑图 */}
-          <div className="flex h-28 w-28 flex-col justify-between py-0.5">
-            <div className="min-w-0">
-              <p className="truncate text-sm font-semibold t-primary">{track.name}</p>
-              <p className="mt-0.5 truncate text-xs text-neutral-500 dark:text-neutral-400">
-                {track.artist || t("theme.player.unknown_artist")}
-              </p>
-            </div>
+          {/* 右侧信息 */}
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-sm font-medium t-primary">{track.name}</p>
+            <p className="truncate text-xs text-neutral-500 dark:text-neutral-400">
+              {track.artist || t("theme.player.unknown_artist")}
+            </p>
 
-            {/* 进度条 */}
-            <div className="flex items-center gap-1.5">
+            {/* 窄进度条 */}
+            <div className="mt-1.5 flex items-center gap-1.5">
               <span className="shrink-0 text-[10px] tabular-nums text-neutral-400 dark:text-neutral-500">
                 {formatTime(currentTime)}
               </span>
@@ -379,7 +377,7 @@ export function MusicPlayer() {
                   setProgress((target / (audio.duration || 1)) * 100);
                 }}
                 aria-label={t("theme.player.seek")}
-                className="h-1 flex-1 cursor-pointer appearance-none rounded-full"
+                className="h-1 min-w-0 flex-1 cursor-pointer appearance-none rounded-full"
                 style={{
                   background: `linear-gradient(to right, var(--theme, #5ab0d8) ${progress}%, rgb(229 229 229) ${progress}%)`,
                 }}
