@@ -194,6 +194,7 @@ export async function runCloudflareDeploy(target: "all" | "server" | "client" = 
       [assets]
       directory = "./dist/client"
       binding = "ASSETS"
+      exclude = ["models/**"]
       ${buildWranglerTriggersConfig(preview)}
       ${buildWranglerObservabilityConfig(preview)}
 
