@@ -389,6 +389,15 @@ export function Live2DWidget() {
         modelRef.current = model;
         appInstance.stage.addChild(model);
 
+        // 模型成功加载后，尝试把模型资源写入浏览器 Cache Storage，
+        // 这样下次进入页面时由 Service Worker 直接命中本地缓存，不再重新下载近百 MB 模型。
+        if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+          navigator.serviceWorker.controller.postMessage({
+            type: 'CACHE_LIVE2D',
+            urls: [modelUrl],
+          });
+        }
+
         const targetHeight = 280 * scaleValue;
         const aspect = model.width / model.height;
         const targetWidth = targetHeight * aspect;
