@@ -108,6 +108,14 @@ export function AppRoutes() {
         {({ id }) => <WritingPage id={tryInt(0, id)} />}
       </AdminRoute>
 
+      <AppRoute path="/writing" requirePermission>
+        <WritingPage />
+      </AppRoute>
+
+      <AppRoute path="/writing/:id" requirePermission>
+        {({ id }) => <WritingPage id={tryInt(0, id)} />}
+      </AppRoute>
+
       <AppRoute path="/callback">
         <CallbackPage />
       </AppRoute>

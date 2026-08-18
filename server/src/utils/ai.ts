@@ -13,16 +13,31 @@ const AI_PROVIDER_URLS: Record<string, string> = {
 };
 
 // Cloudflare Worker AI models mapping (short name -> full model ID)
+// Current valid catalog (2026): https://developers.cloudflare.com/workers-ai/models/
 export const WORKER_AI_MODELS: Record<string, string> = {
-    "llama-3-8b": "@cf/meta/llama-3-8b-instruct",
-    "llama-3-1-8b": "@cf/meta/llama-3.1-8b-instruct",
-    "llama-2-7b": "@cf/meta/llama-2-7b-chat-int8",
-    "mistral-7b": "@cf/mistral/mistral-7b-instruct-v0.1",
-    "mistral-7b-v2": "@cf/mistral/mistral-7b-instruct-v0.2-lora",
-    "gemma-2b": "@cf/google/gemma-2b-it-lora",
-    "gemma-7b": "@cf/google/gemma-7b-it-lora",
-    "deepseek-coder": "@cf/deepseek-ai/deepseek-coder-6.7b-base-awq",
-    "qwen-7b": "@cf/qwen/qwen1.5-7b-chat-awq",
+    // Meta Llama 4
+    "llama-4-scout-17b-16e-instruct": "@cf/meta/llama-4-scout-17b-16e-instruct",
+    // OpenAI gpt-oss
+    "gpt-oss-120b": "@cf/openai/gpt-oss-120b",
+    "gpt-oss-20b": "@cf/openai/gpt-oss-20b",
+    // Zhipu GLM
+    "glm-4.7-flash": "@cf/zai-org/glm-4.7-flash",
+    "glm-5.2": "@cf/zai-org/glm-5.2",
+    // Moonshot Kimi
+    "kimi-k2.7-code": "@cf/moonshotai/kimi-k2.7-code",
+    "kimi-k2.6": "@cf/moonshotai/kimi-k2.6",
+    // DeepSeek
+    "deepseek-v4-flash-0731": "@cf/deepseek-ai/deepseek-v4-flash-0731",
+    // Qwen
+    "qwen3.8-27b": "@cf/qwen/qwen3.8-27b",
+    // Google Gemma
+    "gemma-4-26b-a4b-it": "@cf/google/gemma-4-26b-a4b-it",
+    // NVIDIA Nemotron
+    "nemotron-3-120b-a12b": "@cf/nvidia/nemotron-3-120b-a12b",
+    // IBM Granite
+    "granite-4.0-h-micro": "@cf/ibm-granite/granite-4.0-h-micro",
+    // DeepSeek R1 distilled
+    "deepseek-r1-distill-qwen-32b": "@cf/deepseek-ai/deepseek-r1-distill-qwen-32b",
 };
 
 export const AI_SUMMARY_SYSTEM_PROMPT =
