@@ -97,6 +97,8 @@ export function MusicPlayer() {
   const [collapsed, setCollapsed] = useState(false);
   const [listOpen, setListOpen] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const rootRef = useRef<HTMLDivElement | null>(null);
+  const didAutoSelectRef = useRef(false);
 
   const enabled = config.getBoolean("widget.player.enabled");
   const autoplay = config.getBoolean("widget.player.autoplay");
@@ -146,6 +148,38 @@ export function MusicPlayer() {
   const tracks = metingTracks.length > 0 ? metingTracks : staticTracks;
   const track = tracks[index] || undefined;
   const trackUrl = track?.url;
+
+  // 歌单就绪后，若未手动切歌，自动选中默认曲目「轻涟」（La vaguelette）
+  useEffect(() => {
+    if (didAutoSelectRef.current || metingTracks.length === 0) {
+      return;
+    }
+    const defaultIndex = metingTracks.findIndex(
+      (item) => item.name.includes("轻涟") || item.name.toLowerCase().includes("vaguelette"),
+    );
+    if (defaultIndex >= 0) {
+      didAutoSelectRef.current = true;
+      setIndex(defaultIndex);
+    }
+  }, [metingTracks]);
+
+  // 点击页面任意空白处：播放器自动收起成小磁贴，播放列表自动关闭
+  useEffect(() => {
+    if (!enabled) {
+      return;
+    }
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target as Node | null;
+      const root = rootRef.current;
+      if (!root || !target || root.contains(target)) {
+        return;
+      }
+      setCollapsed(true);
+      setListOpen(false);
+    };
+    document.addEventListener("pointerdown", onPointerDown);
+    return () => document.removeEventListener("pointerdown", onPointerDown);
+  }, [enabled]);
 
   // persist volume across sessions
   useEffect(() => {
@@ -235,54 +269,19 @@ export function MusicPlayer() {
     return null;
   }
 
-  const collapseButton = (
-    <button
-      type="button"
-      onClick={() => setCollapsed(true)}
-      className="shrink-0 rounded-full p-2 t-primary transition hover:bg-neutral-100 dark:hover:bg-white/10"
-      aria-label={t("theme.player.collapse")}
-      title={t("theme.player.collapse")}
-    >
-      <i className="ri-arrow-down-s-line text-xl" />
-    </button>
-  );
-
-  // 收起状态：靠左只剩一个专辑图磁贴，点击展开回底部通栏
-  if (collapsed) {
-    return (
-      <div className="fixed bottom-0 left-0 z-40">
-        <audio ref={audioRef} />
-        <div className="flex items-center gap-2 p-2">
-          <button
-            type="button"
-            onClick={() => setCollapsed(false)}
-            className="group relative block h-14 w-14 overflow-hidden rounded-2xl border border-black/10 bg-w shadow-xl transition hover:scale-105 dark:border-white/10"
-            aria-expanded={false}
-            aria-label={t("theme.player.expand")}
-            title={track.name}
-          >
-            {track.cover ? (
-              <img src={track.cover} alt="" className="h-full w-full object-cover" />
-            ) : (
-              <span className="flex h-full w-full items-center justify-center bg-theme/10 text-theme">
-                <i className="ri-music-2-line text-xl" />
-              </span>
-            )}
-            <span className="absolute inset-0 flex items-center justify-center bg-black/30 text-white opacity-0 transition group-hover:opacity-100">
-              <i className="ri-expand-up-line text-lg" />
-            </span>
-          </button>
-          {collapseButton}
-        </div>
-      </div>
+  const coverNode = track.cover ? (
+      <img src={track.cover} alt="" className="h-full w-full object-cover" />
+    ) : (
+      <span className="flex h-full w-full items-center justify-center bg-theme/10 text-theme">
+        <i className="ri-music-2-line text-xl" />
+      </span>
     );
-  }
 
   return (
-    <div className="fixed bottom-4 left-4 z-40">
+    <div ref={rootRef} className="fixed bottom-2 left-2 z-40">
       <audio ref={audioRef} />
 
-      {/* 歌单列表：展开时在卡片右上弹出 */}
+      {/* 歌单列表：展开时在卡片上方弹出 */}
       {listOpen && totalCount > 0 ? (
         <div className="absolute bottom-full left-0 mb-2 max-h-[min(60vh,20rem)] w-[min(20rem,70vw)] overflow-hidden rounded-2xl border border-black/10 bg-w shadow-2xl dark:border-white/10">
           <div className="flex items-center justify-between border-b border-black/5 px-4 py-2.5 dark:border-white/5">
@@ -335,30 +334,41 @@ export function MusicPlayer() {
         </div>
       ) : null}
 
-      {/* 卡片本体 */}
-      <div className="overflow-hidden rounded-2xl border border-black/10 bg-w shadow-2xl dark:border-white/10">
-        {/* 顶部：小专辑图 + 右侧信息（歌名/歌手 + 窄进度条） */}
-        <div className="flex items-center gap-2.5 p-2.5">
-          {/* 专辑图 */}
-          <div className="h-12 w-12 shrink-0 overflow-hidden rounded-lg bg-neutral-100 dark:bg-white/5">
-            {track.cover ? (
-              <img src={track.cover} alt="" className="h-full w-full object-cover" />
-            ) : (
-              <div className="flex h-full w-full items-center justify-center bg-theme/10 text-theme">
-                <i className="ri-music-2-line text-lg" />
-              </div>
-            )}
-          </div>
+      {/* 播放器本体：展开-收起用统一的容器，带宽度/透明度过渡动画 */}
+      <div
+        className={`flex items-center justify-between overflow-hidden rounded-2xl border border-black/10 bg-w shadow-2xl transition-all duration-300 ease-out dark:border-white/10 ${
+          collapsed ? "w-[3.5rem]" : "w-[min(20rem,calc(100vw-1rem))]"
+        }`}
+      >
+        {/* 专辑图（始终显示；收起时作为展开入口） */}
+        <button
+          type="button"
+          onClick={() => setCollapsed((current) => !current)}
+          className={`group relative block shrink-0 overflow-hidden transition-all duration-300 ${
+            collapsed ? "h-14 w-14" : "h-11 w-11"
+          }`}
+          aria-expanded={!collapsed}
+          aria-label={collapsed ? t("theme.player.expand") : t("theme.player.collapse")}
+          title={collapsed ? t("theme.player.expand") : t("theme.player.collapse")}
+        >
+          <span className="block h-full w-full">{coverNode}</span>
+          <span className="absolute inset-0 flex items-center justify-center bg-black/30 text-white opacity-0 transition group-hover:opacity-100">
+            <i className={collapsed ? "ri-arrow-up-s-line text-xl" : "ri-arrow-down-s-line text-xl"} />
+          </span>
+        </button>
 
-          {/* 右侧信息 */}
+        {/* 展开部分：信息 + 进度条 + 控制 */}
+        <div
+          className={`flex min-w-0 flex-1 items-center gap-2 overflow-hidden pl-1 pr-1.5 transition-all duration-300 ${
+            collapsed ? "pointer-events-none opacity-0" : "opacity-100"
+          }`}
+        >
           <div className="min-w-0 flex-1">
             <p className="truncate text-sm font-medium t-primary">{track.name}</p>
             <p className="truncate text-xs text-neutral-500 dark:text-neutral-400">
               {track.artist || t("theme.player.unknown_artist")}
             </p>
-
-            {/* 窄进度条 */}
-            <div className="mt-1.5 flex items-center gap-1.5">
+            <div className="mt-0.5 flex items-center gap-1.5">
               <span className="shrink-0 text-[10px] tabular-nums text-neutral-400 dark:text-neutral-500">
                 {formatTime(currentTime)}
               </span>
@@ -387,29 +397,25 @@ export function MusicPlayer() {
               </span>
             </div>
           </div>
-        </div>
 
-        {/* 底部：控件 上一首 / 播放 / 下一首 */}
-        <div className="flex items-center gap-1 border-t border-black/5 px-2 py-2 dark:border-white/5">
-          <button
-            type="button"
-            onClick={() => setListOpen((current) => !current)}
-            className={`rounded-full p-2 text-lg t-primary transition hover:bg-neutral-100 dark:hover:bg-white/10 ${
-              listOpen ? "text-theme" : ""
-            }`}
-            aria-expanded={listOpen}
-            aria-label={t("theme.player.playlist")}
-            title={t("theme.player.playlist")}
-          >
-            <i className="ri-play-list-2-line" />
-          </button>
-
-          <div className="flex flex-1 items-center justify-center gap-4">
+          <div className="flex shrink-0 items-center gap-0.5">
+            <button
+              type="button"
+              onClick={() => setListOpen((current) => !current)}
+              className={`rounded-full p-1.5 text-base t-primary transition hover:bg-neutral-100 dark:hover:bg-white/10 ${
+                listOpen ? "text-theme" : ""
+              }`}
+              aria-expanded={listOpen}
+              aria-label={t("theme.player.playlist")}
+              title={t("theme.player.playlist")}
+            >
+              <i className="ri-play-list-2-line" />
+            </button>
             {totalCount > 1 ? (
               <button
                 type="button"
                 onClick={() => jumpTo(index - 1)}
-                className="rounded-full p-2 text-xl t-primary transition hover:scale-105 hover:bg-neutral-100 dark:hover:bg-white/10"
+                className="rounded-full p-1.5 text-base t-primary transition hover:scale-105 hover:bg-neutral-100 dark:hover:bg-white/10"
                 aria-label={t("theme.player.prev")}
               >
                 <i className="ri-skip-back-line" />
@@ -418,7 +424,7 @@ export function MusicPlayer() {
             <button
               type="button"
               onClick={togglePlay}
-              className="flex h-11 w-11 items-center justify-center rounded-full bg-theme text-xl text-white shadow-md transition hover:scale-105 hover:bg-theme-hover"
+              className="flex h-9 w-9 items-center justify-center rounded-full bg-theme text-base text-white shadow-md transition hover:scale-105 hover:bg-theme-hover"
               aria-label={playing ? t("theme.player.pause") : t("theme.player.play")}
             >
               <i className={playing ? "ri-pause-fill" : "ri-play-fill"} />
@@ -427,15 +433,13 @@ export function MusicPlayer() {
               <button
                 type="button"
                 onClick={() => jumpTo(index + 1)}
-                className="rounded-full p-2 text-xl t-primary transition hover:scale-105 hover:bg-neutral-100 dark:hover:bg-white/10"
+                className="rounded-full p-1.5 text-base t-primary transition hover:scale-105 hover:bg-neutral-100 dark:hover:bg-white/10"
                 aria-label={t("theme.player.next")}
               >
                 <i className="ri-skip-forward-line" />
               </button>
             ) : null}
           </div>
-
-          {collapseButton}
         </div>
       </div>
     </div>
