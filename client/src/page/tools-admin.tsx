@@ -2,7 +2,6 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Helmet } from "react-helmet";
 import { useTranslation } from "react-i18next";
 import ReactLoading from "react-loading";
-import { Button } from "../components/button";
 import { useAlert } from "../components/dialog";
 import { useSiteConfig } from "../hooks/useSiteConfig";
 import { parseToolsConfig, serializeToolsConfig } from "../utils/tools";
@@ -15,8 +14,8 @@ import {
   type SettingsDraft,
   updateDraftConfig,
 } from "./settings-helpers";
+import { SaveBar } from "./settings-items";
 import { ToolsSettings } from "./settings-tools";
-import { SettingsBadge, SettingsCard, SettingsCardHeader, SettingsCardRow } from "@rin/ui";
 
 export function ToolsAdminPage() {
   const { t } = useTranslation();
@@ -74,7 +73,7 @@ export function ToolsAdminPage() {
   }
 
   return (
-    <div className="flex w-full flex-col">
+    <div className="flex w-full flex-col pb-24">
       <Helmet>
         <title>{`${t("tools.title")} - ${siteConfig.name}`}</title>
       </Helmet>
@@ -84,25 +83,13 @@ export function ToolsAdminPage() {
       <ToolsSettings value={toolsValue} onChange={handleToolsChange} />
 
       {hasUnsavedChanges && (
-        <div className="sticky bottom-4 z-20 mt-6 w-full pb-2">
-          <SettingsCard tone="warning">
-            <SettingsCardRow
-              header={
-                <SettingsCardHeader
-                  title={t("settings.tools.save.title")}
-                  description={t("settings.tools.unsaved_changes")}
-                  badge={<SettingsBadge tone="warning">{t("settings.tools.unsaved_changes")}</SettingsBadge>}
-                />
-              }
-              action={
-                <>
-                  <Button secondary title={t("reset")} onClick={handleReset} disabled={saving} />
-                  <Button title={t("save")} onClick={handleSave} disabled={saving || loading} />
-                </>
-              }
-            />
-          </SettingsCard>
-        </div>
+        <SaveBar
+          message={t("settings.tools.unsaved_changes")}
+          saving={saving}
+          loading={loading}
+          onReset={handleReset}
+          onSave={handleSave}
+        />
       )}
       <AlertUI />
     </div>

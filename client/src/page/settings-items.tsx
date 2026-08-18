@@ -114,6 +114,41 @@ export function ItemInput({
   );
 }
 
+// 固定吸附在视口底部的"未保存更改"浮层，凌驾于所有页面内容之上，
+// 内部宽度与页面内容对齐。有未保存修改时由各设置页渲染。
+export function SaveBar({
+  message,
+  saving,
+  loading,
+  onReset,
+  onSave,
+}: {
+  message: string;
+  saving: boolean;
+  loading: boolean;
+  onReset: () => void;
+  onSave: () => void;
+}) {
+  const { t } = useTranslation();
+
+  return (
+    <div className="fixed inset-x-0 bottom-0 z-50">
+      <div className="border-t border-black/10 bg-w shadow-[0_-4px_24px_rgba(0,0,0,0.15)] dark:border-white/10">
+        <div className="mx-auto flex w-full max-w-screen-xl items-center justify-between gap-4 px-4 py-3 sm:px-6">
+          <p className="flex min-w-0 items-center gap-2 text-sm font-medium t-primary">
+            <span className="h-2 w-2 shrink-0 rounded-full bg-theme" aria-hidden="true" />
+            <span className="truncate">{message}</span>
+          </p>
+          <div className="flex shrink-0 items-center gap-2">
+            <Button secondary title={t("reset")} onClick={onReset} disabled={saving} />
+            <Button title={t("save")} onClick={onSave} disabled={saving || loading} />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function ItemButton({
   title,
   description,

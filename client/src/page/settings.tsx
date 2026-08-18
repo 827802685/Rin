@@ -1,4 +1,4 @@
-import { SearchableSelect, SettingsBadge, SettingsCard, SettingsCardBody, SettingsCardHeader, SettingsCardRow } from "@rin/ui";
+import { SearchableSelect, SettingsCard, SettingsCardBody, SettingsCardHeader, SettingsCardRow } from "@rin/ui";
 import { type ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
 import { Helmet } from "react-helmet";
 import { useTranslation } from "react-i18next";
@@ -10,7 +10,7 @@ import { useAlert } from "../components/dialog.tsx";
 import { useSiteConfig } from "../hooks/useSiteConfig";
 import { applyThemeColor } from "../utils/theme-color";
 import { AISummarySettings } from "./settings-ai";
-import { ItemButton, ItemImageInput, ItemInput, ItemSwitch, ItemTitle, ItemWithUpload } from "./settings-items";
+import { ItemButton, ItemImageInput, ItemInput, ItemSwitch, ItemTitle, ItemWithUpload, SaveBar } from "./settings-items";
 import {
   areSettingsDraftsEqual,
   buildAIConfigDraftValue,
@@ -160,7 +160,7 @@ export function Settings() {
         <title>{`${t("settings.title")} - ${siteConfig.name}`}</title>
       </Helmet>
       <main className="w-full rounded-2xl bg-w" aria-label={t("main_content")}>
-        <div className="flex flex-col items-start space-y-2">
+        <div className="flex flex-col items-start space-y-2 pb-24">
           {(loading || saving) && <ReactLoading width="1em" height="1em" type="spin" color="#FC466B" />}
           <ItemTitle title={t("settings.site.title")} />
           <ItemInput
@@ -431,25 +431,13 @@ export function Settings() {
           />
 
           {hasUnsavedChanges && (
-            <div className="sticky bottom-4 z-20 mt-6 w-full pb-2">
-              <SettingsCard tone="warning">
-              <SettingsCardRow
-                header={
-                  <SettingsCardHeader
-                    title={t("settings.ai_summary.save.title")}
-                    description={t("settings.ai_summary.unsaved_changes")}
-                    badge={<SettingsBadge tone="warning">{t("settings.ai_summary.unsaved_changes")}</SettingsBadge>}
-                  />
-                }
-                action={
-                  <>
-                    <Button secondary title={t("reset")} onClick={handleReset} disabled={saving} />
-                    <Button title={t("save")} onClick={handleSave} disabled={saving || loading} />
-                  </>
-                }
-              />
-              </SettingsCard>
-            </div>
+            <SaveBar
+              message={t("settings.ai_summary.unsaved_changes")}
+              saving={saving}
+              loading={loading}
+              onReset={handleReset}
+              onSave={handleSave}
+            />
           )}
         </div>
       </main>
