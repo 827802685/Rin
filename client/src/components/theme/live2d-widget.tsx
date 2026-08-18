@@ -80,7 +80,102 @@ function getPixi(): PixiNamespace | null {
   return globalPixi && globalPixi.Application && globalPixi.live2d?.Live2DModel ? globalPixi : null;
 }
 
+// registerWebGPU 供部分 Live2D 运行时使用，缺失时安全忽略
+function ensureWebGPURegistration() {
+  const anyGlobal = window as unknown as { live2dcubismcore?: { Live2D_WebGL?: { registerWebGPU?: () => boolean } } };
+  try {
+    anyGlobal.live2dcubismcore?.Live2D_WebGL?.registerWebGPU?.();
+  } catch {
+    // ignore
+  }
+}
+
+// 预取模型及其大资源（moc3 / 贴图）。模型文件很大（动辄数十 MB），
+// 在加载 model3.json 后立即并行预取 moc3/贴图/物理/动作，避免逐项串行等待。
+function prefetchModelAssets(model3Url: string): void {
+  if (typeof document === "undefined") {
+    return;
+  }
+  const base = model3Url.substring(0, model3Url.lastIndexOf("/") + 1);
+
+  const addPreload = (relUrl: string | undefined, important: boolean) => {
+    if (!relUrl) {
+      return;
+    }
+    const href = relUrl.startsWith("http") ? relUrl : `${base}${relUrl}`;
+    const id = `rin-live2d-preload-${idForUrl(href)}`;
+    if (document.getElementById(id)) {
+      return;
+    }
+    const link = document.createElement("link");
+    link.rel = "preload";
+    link.as = important ? "fetch" : "fetch";
+    link.href = href;
+    link.crossOrigin = "anonymous";
+    link.id = id;
+    link.fetchPriority = important ? "high" : "low";
+    document.head.appendChild(link);
+  };
+
+  // 先从 model3.json 解析出引用，以便尽早并行预取大文件
+  fetch(model3Url, { mode: "cors" })
+    .then((res) => (res.ok ? res.json() : Promise.reject(new Error(`model3 fetch ${res.status}`))))
+    .then((settings: {
+      FileReferences?: {
+        Moc?: string;
+        Textures?: string[];
+        Physics?: string;
+        DisplayInfo?: string;
+        Motions?: Record<string, Array<{ File?: string }>>;
+      };
+    }) => {
+      const refs = settings.FileReferences;
+      if (!refs) {
+        return;
+      }
+      // moc3 与贴图最大，给 high 优先级；其余 low
+      addPreload(refs.Moc, true);
+      refs.Textures?.forEach((tex) => addPreload(tex, true));
+      addPreload(refs.Physics, false);
+      addPreload(refs.DisplayInfo, false);
+      const motions = refs.Motions;
+      if (motions) {
+        Object.values(motions).forEach((group) => {
+          group?.forEach((m) => addPreload(m.File, false));
+        });
+      }
+    })
+    .catch(() => {
+      // 预取失败不影响后续正式加载
+    });
+}
+
+function idForUrl(url: string): string {
+  return url.split("/").pop() || url;
+}
+
 const randomKey = (keys: string[]) => keys[Math.floor(Math.random() * keys.length)];
+
+// 拖动位置持久化 key
+const POS_KEY = "rin.live2d.pos";
+// 记忆的拖动偏移 {leftPercent, topPx}：水平按百分比锚定，垂直按像素
+type SavedPos = { left: number; top: number } | null;
+
+function loadSavedPos(): SavedPos {
+  try {
+    const raw = localStorage.getItem(POS_KEY);
+    if (!raw) {
+      return null;
+    }
+    const parsed = JSON.parse(raw) as { left: number; top: number };
+    if (typeof parsed.left === "number" && typeof parsed.top === "number") {
+      return parsed;
+    }
+  } catch {
+    // ignore
+  }
+  return null;
+}
 
 export function Live2DWidget() {
   const config = useContext(ClientConfigContext);
@@ -93,9 +188,11 @@ export function Live2DWidget() {
   const [showFood, setShowFood] = useState(false);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const outerRef = useRef<HTMLDivElement | null>(null);
   const modelRef = useRef<PixiModel | null>(null);
   const bubbleTimerRef = useRef<number | null>(null);
-  const dragStateRef = useRef<{ startX: number; startY: number; origX: number; origY: number } | null>(null);
+  const dragStateRef = useRef<{ startX: number; startY: number; origLeft: number; origTop: number } | null>(null);
+  const [pos, setPos] = useState<{ left: number; top: number } | null>(() => loadSavedPos());
 
   const position = String(config.get("widget.live2d.position") ?? "right");
   const modelUrl = String(config.get("widget.live2d.model") ?? "");
@@ -139,6 +236,9 @@ export function Live2DWidget() {
     let cancelled = false;
     let app: PixiApp | null = null;
 
+    // 尽早开始预取大资源（moc3 / 贴图），与库脚本加载并行
+    prefetchModelAssets(modelUrl);
+
     (async () => {
       try {
         for (const src of LIB_SCRIPTS) {
@@ -147,6 +247,7 @@ export function Live2DWidget() {
         if (cancelled) {
           return;
         }
+        ensureWebGPURegistration();
         const pixi = getPixi();
         if (!pixi) {
           throw new Error("Live2D libraries are not available");
@@ -213,39 +314,73 @@ export function Live2DWidget() {
   // here we always clear bubble + drag on position/model change and unmount cleanly.
 
   function onPointerDown(event: React.PointerEvent<HTMLDivElement>) {
-    const container = containerRef.current;
-    if (!container) {
+    if (event.button !== 0) {
+      return;
+    }
+    const wrapper = outerRef.current;
+    if (!wrapper) {
       return;
     }
     dragStateRef.current = {
       startX: event.clientX,
       startY: event.clientY,
-      origX: container.offsetLeft,
-      origY: container.offsetTop,
+      origLeft: wrapper.offsetLeft,
+      origTop: wrapper.offsetTop,
     };
     setDragging(true);
     document.body.style.cursor = "grabbing";
+    document.body.style.userSelect = "none";
+    document.body.dataset.live2dDragging = "true";
   }
 
-  function onPointerMove(event: React.PointerEvent<HTMLDivElement>) {
-    const state = dragStateRef.current;
-    const container = containerRef.current;
-    if (!state || !container) {
+  // window 级指针监听能保证拖动过程中指针移出 DOM 也不丢失
+  useEffect(() => {
+    if (!dragging) {
       return;
     }
-    container.style.left = `${state.origX + (event.clientX - state.startX)}px`;
-    container.style.top = `${state.origY + (event.clientY - state.startY)}px`;
-    container.style.right = "auto";
-  }
-
-  function onPointerUp() {
-    dragStateRef.current = null;
-    setDragging(false);
-    document.body.style.cursor = "";
-  }
+    const onMove = (event: PointerEvent) => {
+      const state = dragStateRef.current;
+      const wrapper = outerRef.current;
+      if (!state || !wrapper) {
+        return;
+      }
+      const deltaX = event.clientX - state.startX;
+      const deltaY = event.clientY - state.startY;
+      const nextLeft = state.origLeft + deltaX;
+      const nextTop = state.origTop + deltaY;
+      // 限位：不超过视口右下，且顶部不高于 0
+      const clampedLeft = Math.min(Math.max(nextLeft, 0), window.innerWidth - 20);
+      const clampedTop = Math.min(Math.max(nextTop, 0), window.innerHeight - 20);
+      setPos({ left: clampedLeft, top: clampedTop });
+    };
+    const onUp = () => {
+      const wrapper = outerRef.current;
+      if (wrapper) {
+        localStorage.setItem(POS_KEY, JSON.stringify({ left: wrapper.offsetLeft, top: wrapper.offsetTop }));
+      }
+      dragStateRef.current = null;
+      setDragging(false);
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+      delete document.body.dataset.live2dDragging;
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onUp);
+    return () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onUp);
+    };
+  }, [dragging]);
 
   const anchorStyle: React.CSSProperties =
     position === "left" ? { left: "1rem" } : { right: "1rem" };
+
+  // 有记忆/拖动坐标时用 left/top，否则回到默认 bottom 锚点
+  const positionStyle: React.CSSProperties = pos
+    ? { left: `${pos.left}px`, top: `${pos.top}px` }
+    : anchorStyle;
 
   if (hidden) {
     return (
@@ -262,7 +397,7 @@ export function Live2DWidget() {
   }
 
   return (
-    <div className="fixed bottom-2 z-40" style={anchorStyle}>
+    <div ref={outerRef} className="fixed bottom-2 z-40" style={positionStyle}>
       <div className={`flex flex-col items-end gap-1 ${dragging ? "pointer-events-none" : ""}`}>
         {bubble ? (
           <div className="relative max-w-44 rounded-2xl rounded-br-sm bg-w px-3 py-2 text-xs shadow t-secondary dark:bg-neutral-800">
@@ -327,9 +462,6 @@ export function Live2DWidget() {
             className={`relative cursor-grab touch-none select-none ${dragging ? "cursor-grabbing" : ""}`}
             style={{ width: 256 * scaleValue, height: 280 * scaleValue }}
             onPointerDown={onPointerDown}
-            onPointerMove={onPointerMove}
-            onPointerUp={onPointerUp}
-            onPointerCancel={onPointerUp}
             onClick={() => {
               if (!dragStateRef.current) {
                 greetRandomly();
