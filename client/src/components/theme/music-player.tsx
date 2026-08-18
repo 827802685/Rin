@@ -263,66 +263,37 @@ export function MusicPlayer() {
   }
 
   return (
-    <div className="fixed bottom-4 left-4 z-40 w-[min(88vw,22rem)]">
-      <div className="relative rounded-2xl border border-black/10 bg-w shadow-xl dark:border-white/10">
-        <div className="flex items-center gap-3 p-3">
+    <div className="fixed bottom-4 left-4 z-40 w-[min(90vw,20rem)]">
+      <div className="overflow-hidden rounded-2xl border border-black/10 bg-w shadow-xl dark:border-white/10">
+        <div className="p-4 pb-3">
           <audio ref={audioRef} />
-          {track.cover ? (
-            <img src={track.cover} alt="" className="h-14 w-14 shrink-0 rounded-xl object-cover" />
-          ) : (
-            <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-theme/10 text-theme">
-              <i className="ri-music-2-line text-2xl" />
+          <div className="flex items-center gap-3">
+            {track.cover ? (
+              <img src={track.cover} alt="" className="h-12 w-12 shrink-0 rounded-xl object-cover" />
+            ) : (
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-theme/10 text-theme">
+                <i className="ri-music-2-line text-xl" />
+              </div>
+            )}
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-medium t-primary">{track.name}</p>
+              <p className="truncate text-xs text-neutral-500 dark:text-neutral-400">
+                {track.artist || t("theme.player.unknown_artist")}
+              </p>
             </div>
-          )}
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-medium t-primary">{track.name}</p>
-            <p className="truncate text-xs text-neutral-500 dark:text-neutral-400">
-              {track.artist || t("theme.player.unknown_artist")}
-            </p>
-          </div>
-          <div className="flex shrink-0 items-center gap-0.5">
-            {totalCount > 1 ? (
-              <>
-                <button
-                  type="button"
-                  onClick={() => jumpTo(index - 1)}
-                  className="rounded-full p-2 t-primary transition hover:bg-neutral-100 dark:hover:bg-white/10"
-                  aria-label={t("theme.player.prev")}
-                >
-                  <i className="ri-skip-back-line" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => jumpTo(index + 1)}
-                  className="rounded-full p-2 t-primary transition hover:bg-neutral-100 dark:hover:bg-white/10"
-                  aria-label={t("theme.player.next")}
-                >
-                  <i className="ri-skip-forward-line" />
-                </button>
-              </>
-            ) : null}
             <button
               type="button"
-              onClick={togglePlay}
-              className="flex h-10 w-10 items-center justify-center rounded-full bg-theme text-white transition hover:bg-theme-hover"
-              aria-label={playing ? t("theme.player.pause") : t("theme.player.play")}
-            >
-              <i className={playing ? "ri-pause-fill" : "ri-play-fill"} />
-            </button>
-            <button
-              type="button"
-              onClick={() => setCollapsed((value) => !value)}
-              className="rounded-full p-2 t-primary transition hover:bg-neutral-100 dark:hover:bg-white/10"
+              onClick={() => setCollapsed(true)}
+              className="shrink-0 rounded-full p-2 t-primary transition hover:bg-neutral-100 dark:hover:bg-white/10"
               aria-label={t("theme.player.collapse")}
             >
               <i className="ri-arrow-down-s-line" />
             </button>
           </div>
-        </div>
-        {/* 精简播放进度条 */}
-        <div className="flex items-center gap-2 border-t border-black/5 px-3 py-2 dark:border-white/5">
-          <span className="shrink-0 text-[10px] tabular-nums text-neutral-400 dark:text-neutral-500">{formatTime(currentTime)}</span>
-          <div className="h-1 flex-1">
+
+          {/* 大进度条（可拖动） */}
+          <div className="mt-3 flex items-center gap-2">
+            <span className="shrink-0 text-xs tabular-nums text-neutral-400 dark:text-neutral-500">{formatTime(currentTime)}</span>
             <input
               type="range"
               min={0}
@@ -337,12 +308,46 @@ export function MusicPlayer() {
                 setCurrentTime(target);
                 setProgress((target / (audio.duration || 1)) * 100);
               }}
-              className="w-full cursor-pointer appearance-none bg-transparent"
-              style={{ background: `linear-gradient(to right, var(--theme-rgb, 252 70 107) ${progress}%, rgb(229 229 229) ${progress}%)` }}
               aria-label={t("theme.player.seek")}
+              className="h-2 flex-1 cursor-pointer appearance-none rounded-full"
+              style={{
+                background: `linear-gradient(to right, var(--theme, #5ab0d8) ${progress}%, rgb(229 229 229) ${progress}%)`,
+              }}
             />
+            <span className="shrink-0 text-xs tabular-nums text-neutral-400 dark:text-neutral-500">{formatTime(duration)}</span>
           </div>
-          <span className="shrink-0 text-[10px] tabular-nums text-neutral-400 dark:text-neutral-500">{formatTime(duration)}</span>
+        </div>
+
+        {/* 播放控制：上一曲 / 播放 / 下一曲 居中 */}
+        <div className="flex items-center justify-center gap-4 border-t border-black/5 px-4 py-3 dark:border-white/5">
+          {totalCount > 1 ? (
+            <button
+              type="button"
+              onClick={() => jumpTo(index - 1)}
+              className="rounded-full p-2 text-xl t-primary transition hover:scale-105 hover:bg-neutral-100 dark:hover:bg-white/10"
+              aria-label={t("theme.player.prev")}
+            >
+              <i className="ri-skip-back-line" />
+            </button>
+          ) : null}
+          <button
+            type="button"
+            onClick={togglePlay}
+            className="flex h-12 w-12 items-center justify-center rounded-full bg-theme text-xl text-white shadow-md transition hover:scale-105 hover:bg-theme-hover"
+            aria-label={playing ? t("theme.player.pause") : t("theme.player.play")}
+          >
+            <i className={playing ? "ri-pause-fill" : "ri-play-fill"} />
+          </button>
+          {totalCount > 1 ? (
+            <button
+              type="button"
+              onClick={() => jumpTo(index + 1)}
+              className="rounded-full p-2 text-xl t-primary transition hover:scale-105 hover:bg-neutral-100 dark:hover:bg-white/10"
+              aria-label={t("theme.player.next")}
+            >
+              <i className="ri-skip-forward-line" />
+            </button>
+          ) : null}
         </div>
       </div>
     </div>

@@ -59,6 +59,7 @@ export function ItemInput({
   placeholder?: string;
   onChange: (value: string) => void;
 }) {
+  const { t } = useTranslation();
   const [isOpen, setIsOpen] = useState(false);
 
   return (
@@ -98,6 +99,14 @@ export function ItemInput({
               }}
               className="min-h-36 w-full rounded-xl border border-black/10 bg-w px-4 py-3 text-sm t-primary outline-none transition-colors placeholder:text-neutral-400 focus:border-black/20 focus:ring-2 focus:ring-theme/10 dark:border-white/10 dark:placeholder:text-neutral-500 dark:focus:border-white/20"
             />
+            <button
+              type="button"
+              onClick={() => setIsOpen(false)}
+              className="mt-3 inline-flex items-center gap-1 rounded-full bg-theme px-4 py-1.5 text-sm font-medium text-white transition hover:bg-theme-hover"
+            >
+              <i className="ri-check-line" />
+              {t("confirm")}
+            </button>
           </SettingsCardBody>
         ) : null}
       </SettingsCard>
