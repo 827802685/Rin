@@ -186,15 +186,15 @@ function installProgressTracker(onProgress: (p: ProgressState) => void): () => v
       if (!resp || !resp.body) return resp;
       const reader = resp.body.getReader();
       const chunks: Uint8Array[] = [];
-      let loaded = 0;
       for (;;) {
         const r = await reader.read();
         if (r.done) break;
         chunks.push(r.value);
-        loaded += r.value.byteLength;
+        // 关键：每收到一块数据就累加并上报，进度条才能实时走动。
+        // 之前是等整个文件读完才 notify 一次，导致进度条长时间卡在 0%。
+        state.loaded += r.value.byteLength;
+        notify();
       }
-      state.loaded += loaded;
-      notify();
       // 重建 Response：去掉压缩相关头，避免与已解码的 Blob 体积不一致
       const headers = new Headers(resp.headers);
       headers.delete("content-encoding");
@@ -649,6 +649,12 @@ export function Live2DWidget() {
                       ? `${t("theme.live2d.loading.downloading")} ${pct}%`
                       : t("theme.live2d.loading.connecting")}
                   </span>
+                  {progress ? (
+                    <span className="t-muted text-[10px]">
+                      {(progress.loaded / 1048576).toFixed(1)} /{" "}
+                      {(progress.total / 1048576).toFixed(1)} MB
+                    </span>
+                  ) : null}
                 </div>
               ) : null}
             </div>
