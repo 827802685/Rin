@@ -176,6 +176,29 @@
       "upload_image": "上传图片"
     }
   },
+  "rich_editor": {
+    "mode": {
+      "visual": "可视化编辑",
+      "markdown": "Markdown 源码"
+    },
+    "toolbar": {
+      "heading1": "一级标题",
+      "heading2": "二级标题",
+      "heading3": "三级标题",
+      "bold": "加粗",
+      "italic": "斜体",
+      "strike": "删除线",
+      "code": "行内代码",
+      "quote": "引用",
+      "ul": "无序列表",
+      "ol": "有序列表",
+      "task": "任务列表",
+      "link": "链接",
+      "link_url": "链接地址",
+      "hr": "分割线",
+      "upload_image": "上传图片"
+    }
+  },
   "error": {
     "api_url": "Pages 环境变量中 API_URL 应为 Worker 地址，请检查 Pages 环境变量中 API_URL 是否正确",
     "api_url_slash": "Pages 环境变量中 API_URL 应为 Worker 地址，请检查 Pages 环境变量中 API_URL 是否正确，且 API_URL 末尾不能有 /",

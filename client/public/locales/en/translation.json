@@ -176,6 +176,29 @@
       "upload_image": "Upload image"
     }
   },
+  "rich_editor": {
+    "mode": {
+      "visual": "Visual editor",
+      "markdown": "Markdown source"
+    },
+    "toolbar": {
+      "heading1": "Heading 1",
+      "heading2": "Heading 2",
+      "heading3": "Heading 3",
+      "bold": "Bold",
+      "italic": "Italic",
+      "strike": "Strikethrough",
+      "code": "Inline code",
+      "quote": "Quote",
+      "ul": "Bullet list",
+      "ol": "Numbered list",
+      "task": "Task list",
+      "link": "Link",
+      "link_url": "Link URL",
+      "hr": "Horizontal rule",
+      "upload_image": "Upload image"
+    }
+  },
   "error": {
     "api_url": "API_URL in Pages environment variables should be the Worker address. Please check if API_URL in Pages environment variables is correct.",
     "api_url_slash": "API_URL in Pages environment variables should be the Worker address. Please check if API_URL in Pages environment variables is correct and ensure API_URL does not end with a slash (/).",

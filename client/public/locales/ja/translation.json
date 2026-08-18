@@ -176,6 +176,29 @@
       "upload_image": "画像をアップロード"
     }
   },
+  "rich_editor": {
+    "mode": {
+      "visual": "ビジュアルエディタ",
+      "markdown": "Markdown ソース"
+    },
+    "toolbar": {
+      "heading1": "見出し1",
+      "heading2": "見出し2",
+      "heading3": "見出し3",
+      "bold": "太字",
+      "italic": "斜体",
+      "strike": "取り消し線",
+      "code": "インラインコード",
+      "quote": "引用",
+      "ul": "箇条書きリスト",
+      "ol": "番号付きリスト",
+      "task": "タスクリスト",
+      "link": "リンク",
+      "link_url": "リンクURL",
+      "hr": "区切り線",
+      "upload_image": "画像をアップロード"
+    }
+  },
   "error": {
     "api_url": "Pages 環境変数のAPI_URLはWorkerアドレスである必要があります。Pages環境変数のAPI_URLが正しいか確認してください。",
     "api_url_slash": "Pages 環境変数のAPI_URLはWorkerアドレスである必要があります。Pages環境変数のAPI_URLが正しいか、またAPI_URLの末尾にスラッシュ（/）がないか確認してください。",

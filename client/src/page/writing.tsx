@@ -12,7 +12,7 @@ import {Cache} from '../utils/cache';
 import {useSiteConfig} from "../hooks/useSiteConfig";
 import {siteName} from "../utils/constants";
 import mermaid from 'mermaid';
-import { MarkdownEditor } from '../components/markdown_editor';
+import { RichTextEditor } from '../components/richtext-editor';
 
 async function publish({
   title,
@@ -337,7 +337,7 @@ export function WritingPage({ id }: { id?: number }) {
         {MetaInput({ className: "p-4 sm:p-5 md:p-6" })}
 
         <FlatPanel className="overflow-hidden p-0">
-          <MarkdownEditor content={content} setContent={setContent} height='680px' />
+          <RichTextEditor content={content} setContent={setContent} height='680px' />
         </FlatPanel>
       </div>
       <AlertUI />
