@@ -35,7 +35,7 @@ export function StorageService(): Hono {
         const hashkey = `${hash}.${suffix}`;
         
         try {
-            const result = await profileAsync(c, 'storage_put', () => putStorageObject(env, hashkey, file, file.type, new URL(c.req.url).origin));
+            const result = await profileAsync(c, 'storage_put', () => putStorageObject(env, hashkey, new Uint8Array(fileBuffer), file.type, new URL(c.req.url).origin));
             return c.json({ url: result.url });
         } catch (e: any) {
             console.error(e.message);
