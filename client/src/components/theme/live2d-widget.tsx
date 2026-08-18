@@ -1,5 +1,8 @@
 import { useContext, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useLocation } from "wouter";
+import type { AIChatMessage } from "@rin/api";
+import { client } from "../../app/runtime";
 import { ClientConfigContext } from "../../state/config";
 
 /**
@@ -64,18 +67,17 @@ const FOOD_REPLIES = [
   "theme.live2d.feed.yum3",
 ];
 
-const POKE_REPLIES = [
-  "theme.live2d.talk.poke1",
-  "theme.live2d.talk.poke2",
-  "theme.live2d.talk.poke3",
-];
-
 const FOODS = [
   { key: "cake", icon: "🍰" },
   { key: "donut", icon: "🍩" },
   { key: "fish", icon: "🍣" },
   { key: "dessert", icon: "🍮" },
 ];
+
+// 芙宁娜聊天人设：注入给设置里绑定的 AI，让它以芙宁娜的口吻回复
+const FURINA_SYSTEM_PROMPT =
+  "你是芙宁娜，这个博客的 Live2D 看板娘。你性格活泼可爱、略带傲娇，说话简短俏皮，" +
+  "喜欢用语气词（～、哦、嘛、啦）。请用中文回复，每次回复不超过 80 字，不要使用 Markdown 格式。";
 
 // 复刻 Demo 的工具集。工具列本身会被覆盖样式隐藏（#waifu-tool{display:none}），
 // 交互交给 React 外壳；去掉 "quit"（与 React 的 Hide 逻辑冲突）。
@@ -257,6 +259,7 @@ function loadSavedPos(): SavedPos {
 export function Live2DWidget() {
   const config = useContext(ClientConfigContext);
   const { t } = useTranslation();
+  const [, setLocation] = useLocation();
   const [hidden, setHidden] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [rendered, setRendered] = useState(false);
@@ -264,9 +267,15 @@ export function Live2DWidget() {
   const [dragging, setDragging] = useState(false);
   const [feeding, setFeeding] = useState(false);
   const [showFood, setShowFood] = useState(false);
+  const [chatOpen, setChatOpen] = useState(false);
+  const [chatMessages, setChatMessages] = useState<AIChatMessage[]>([]);
+  const [chatInput, setChatInput] = useState("");
+  const [chatLoading, setChatLoading] = useState(false);
+  const [chatError, setChatError] = useState<string | null>(null);
   const modelAreaRef = useRef<HTMLDivElement | null>(null);
   const outerRef = useRef<HTMLDivElement | null>(null);
   const tipsTimerRef = useRef<number | null>(null);
+  const chatScrollRef = useRef<HTMLDivElement | null>(null);
   const dragStateRef = useRef<{ startX: number; startY: number; origLeft: number; origTop: number } | null>(null);
   const renderedRef = useRef(false);
   const lastProgressAtRef = useRef(Date.now());
@@ -349,10 +358,43 @@ export function Live2DWidget() {
     }
   }
 
-  function pokeModel() {
-    triggerModelTap();
-    showTips(t(randomKey(POKE_REPLIES)), 3200);
+  /** 返回首页：导航到顶域根路径（同标签页，不新开窗口）。后续新增界面时仍回到根路径。 */
+  function goHome() {
+    setLocation("/");
   }
+
+  /** 发送聊天消息：走设置里绑定的 AI（ai_summary 配置），注入芙宁娜人设 */
+  async function handleChatSend() {
+    const content = chatInput.trim();
+    if (!content || chatLoading) return;
+
+    const nextMessages: AIChatMessage[] = [
+      { role: "system", content: FURINA_SYSTEM_PROMPT },
+      ...chatMessages,
+      { role: "user", content },
+    ];
+    // 服务端有 30 条上限，只保留最近 20 条历史 + system + 新消息
+    const trimmed = nextMessages.slice(-22);
+    setChatMessages(trimmed);
+    setChatInput("");
+    setChatLoading(true);
+    setChatError(null);
+
+    const { data, error } = await client.chat.send(trimmed);
+    if (error) {
+      setChatError(error.value || t("theme.live2d.chat.error"));
+    } else if (data?.content) {
+      setChatMessages((prev) => [...prev, { role: "assistant", content: data.content }]);
+    } else {
+      setChatError(t("theme.live2d.chat.error"));
+    }
+    setChatLoading(false);
+  }
+
+  // 聊天消息更新时自动滚到底部
+  useEffect(() => {
+    chatScrollRef.current?.scrollTo({ top: chatScrollRef.current.scrollHeight, behavior: "smooth" });
+  }, [chatMessages, chatLoading]);
 
   /**
    * 插件被加载后同步插入 #waifu（其内含 #waifu-canvas > canvas#live2d、#waifu-tips、#waifu-tool）。
@@ -619,7 +661,63 @@ export function Live2DWidget() {
         className="fixed bottom-2 z-40"
         style={{ ...positionStyle, ...(hidden ? { display: "none" } : {}) }}
       >
-        <div className={`flex flex-col items-end gap-1 ${dragging ? "pointer-events-none" : ""}`}>
+        <div className={`flex items-end gap-2 ${dragging ? "pointer-events-none" : ""}`}>
+          {/* 竖排工具栏：首页 / 聊天 / 投喂 / 隐藏（从上到下） */}
+          <div className="relative flex flex-col items-center gap-1.5">
+            {showFood && !error ? (
+              <div className="absolute right-full top-1/2 mr-2 flex -translate-y-1/2 flex-col gap-1 rounded-2xl border border-black/10 bg-w p-1.5 shadow dark:border-white/10">
+                {FOODS.map((food) => (
+                  <button
+                    key={food.key}
+                    type="button"
+                    onClick={() => feedModel(food)}
+                    className="flex h-8 w-8 items-center justify-center rounded-full text-base transition hover:scale-110 hover:bg-neutral-100 dark:hover:bg-white/10"
+                    aria-label={t("theme.live2d.feed.food", { food: t(`theme.live2d.feed.name.${food.key}`) })}
+                    title={t(`theme.live2d.feed.name.${food.key}`)}
+                  >
+                    {food.icon}
+                  </button>
+                ))}
+              </div>
+            ) : null}
+            <button
+              type="button"
+              onClick={goHome}
+              className="rounded-full bg-w p-2 text-sm shadow t-muted transition hover:text-theme"
+              aria-label={t("theme.live2d.home")}
+              title={t("theme.live2d.home")}
+            >
+              <i className="ri-home-4-line" />
+            </button>
+            <button
+              type="button"
+              onClick={() => setChatOpen((value) => !value)}
+              className={`rounded-full bg-w p-2 text-sm shadow transition ${chatOpen ? "text-theme" : "t-muted hover:text-theme"}`}
+              aria-label={t("theme.live2d.chat.button")}
+              title={t("theme.live2d.chat.button")}
+            >
+              <i className="ri-chat-3-line" />
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowFood((value) => !value)}
+              className={`rounded-full bg-w p-2 text-sm shadow transition ${showFood ? "text-theme" : "t-muted hover:text-theme"}`}
+              aria-label={t("theme.live2d.feed.button")}
+              title={t("theme.live2d.feed.button")}
+            >
+              <i className="ri-spoon-line" />
+            </button>
+            <button
+              type="button"
+              onClick={() => setHidden(true)}
+              className="rounded-full bg-w p-2 text-sm shadow t-muted transition hover:text-theme"
+              aria-label={t("theme.live2d.hide")}
+              title={t("theme.live2d.hide")}
+            >
+              <i className="ri-close-line" />
+            </button>
+          </div>
+
           {error ? (
             <p className="max-w-44 text-xs text-red-500">{error}</p>
           ) : (
@@ -657,53 +755,70 @@ export function Live2DWidget() {
                   ) : null}
                 </div>
               ) : null}
+              {/* 聊天面板：浮在模型上方 */}
+              {chatOpen ? (
+                <div className="absolute bottom-full right-0 mb-2 flex w-72 flex-col overflow-hidden rounded-2xl border border-black/10 bg-w shadow-xl dark:border-white/10">
+                  <div className="flex items-center justify-between border-b border-black/10 px-3 py-2 dark:border-white/10">
+                    <span className="text-sm font-semibold">{t("theme.live2d.chat.title")}</span>
+                    <button
+                      type="button"
+                      onClick={() => setChatOpen(false)}
+                      className="t-muted transition hover:text-theme"
+                      aria-label={t("theme.live2d.hide")}
+                    >
+                      <i className="ri-close-line" />
+                    </button>
+                  </div>
+                  <div ref={chatScrollRef} className="flex h-56 flex-col gap-2 overflow-y-auto p-3">
+                    {chatMessages.length === 0 ? (
+                      <p className="t-muted text-xs">{t("theme.live2d.chat.hint")}</p>
+                    ) : (
+                      chatMessages.map((m, i) => (
+                        <div
+                          key={i}
+                          className={`max-w-[85%] whitespace-pre-wrap break-words rounded-xl px-2.5 py-1.5 text-xs ${
+                            m.role === "user"
+                              ? "self-end bg-theme text-white"
+                              : "self-start bg-neutral-100 dark:bg-neutral-700"
+                          }`}
+                        >
+                          {m.content}
+                        </div>
+                      ))
+                    )}
+                    {chatLoading ? (
+                      <div className="t-muted self-start text-xs">…</div>
+                    ) : null}
+                  </div>
+                  {chatError ? (
+                    <p className="px-3 pb-1 text-xs text-red-500">{chatError}</p>
+                  ) : null}
+                  <div className="flex items-center gap-2 border-t border-black/10 p-2 dark:border-white/10">
+                    <input
+                      value={chatInput}
+                      onChange={(e) => setChatInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          handleChatSend();
+                        }
+                      }}
+                      placeholder={t("theme.live2d.chat.placeholder")}
+                      className="min-w-0 flex-1 rounded-full border border-black/10 bg-transparent px-3 py-1.5 text-xs outline-none transition focus:border-theme dark:border-white/10"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleChatSend}
+                      disabled={chatLoading}
+                      className="shrink-0 rounded-full bg-theme px-3 py-1.5 text-xs text-white transition hover:bg-theme-hover disabled:opacity-50"
+                    >
+                      {t("theme.live2d.chat.send")}
+                    </button>
+                  </div>
+                </div>
+              ) : null}
             </div>
           )}
-          <div className="flex items-center gap-1">
-            <button
-              type="button"
-              onClick={() => setShowFood((value) => !value)}
-              className={`rounded-full bg-w p-1.5 text-xs shadow transition ${showFood ? "text-theme" : "t-muted hover:text-theme"}`}
-              aria-label={t("theme.live2d.feed.button")}
-              title={t("theme.live2d.feed.button")}
-            >
-              <i className="ri-spoon-line" />
-            </button>
-            <button
-              type="button"
-              onClick={pokeModel}
-              className="rounded-full bg-w p-1.5 text-xs shadow t-muted transition hover:text-theme"
-              aria-label={t("theme.live2d.poke")}
-              title={t("theme.live2d.poke")}
-            >
-              <i className="ri-hand-heart-line" />
-            </button>
-            <button
-              type="button"
-              onClick={() => setHidden(true)}
-              className="rounded-full bg-w p-1.5 text-xs shadow t-muted transition hover:text-theme"
-              aria-label={t("theme.live2d.hide")}
-              title={t("theme.live2d.hide")}
-            >
-              <i className="ri-close-line" />
-            </button>
-          </div>
-          {showFood && !error ? (
-            <div className="flex items-center gap-1 rounded-full border border-black/10 bg-w px-2 py-1 shadow dark:border-white/10">
-              {FOODS.map((food) => (
-                <button
-                  key={food.key}
-                  type="button"
-                  onClick={() => feedModel(food)}
-                  className="flex h-8 w-8 items-center justify-center rounded-full text-base transition hover:scale-110 hover:bg-neutral-100 dark:hover:bg-white/10"
-                  aria-label={t("theme.live2d.feed.food", { food: t(`theme.live2d.feed.name.${food.key}`) })}
-                  title={t(`theme.live2d.feed.name.${food.key}`)}
-                >
-                  {food.icon}
-                </button>
-              ))}
-            </div>
-          ) : null}
+
           {feeding ? (
             <div className="pointer-events-none text-3xl transition-all duration-500">
               <i className="ri-heart-3-fill text-theme" />

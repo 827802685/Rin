@@ -862,6 +862,15 @@
       "show": "Show mascot",
       "hide": "Hide mascot",
       "poke": "Pat",
+      "home": "Back to home",
+      "chat": {
+        "button": "Chat",
+        "title": "Chat with Furina",
+        "hint": "I'm Furina~ Anything you want to talk about?",
+        "placeholder": "Say something to Furina...",
+        "send": "Send",
+        "error": "Chat failed, please try again later"
+      },
       "talk": {
         "idle1": "Hi there, I am Furina!",
         "idle2": "Let's work hard together today!",
