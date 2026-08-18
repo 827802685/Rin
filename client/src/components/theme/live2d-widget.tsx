@@ -25,7 +25,7 @@ type PixiNamespace = {
     };
   };
   Texture: {
-    fromCanvas(canvas: HTMLCanvasElement): unknown;
+    from(source: HTMLCanvasElement | string): unknown;
   };
   utils: {
     TextureCache: Record<string, unknown>;
@@ -122,7 +122,7 @@ function loadImage(url: string): Promise<HTMLImageElement> {
   });
 }
 
-// 将超大贴图（如 8192 分辨率）缩小到 GPU 支持的最大尺寸，避免纹理过大导致渲染失败。
+// 将超大贴图（如 8192 分辨率）缩小到安全尺寸，避免纹理过大导致渲染失败。
 // 缩小后的纹理缓存到 PIXI.TextureCache，Live2D 库加载时会命中缓存，不再重复下载。
 async function preloadScaledTextures(
   model3Url: string,
@@ -145,6 +145,9 @@ async function preloadScaledTextures(
   if (textures.length === 0) {
     return;
   }
+  // 安全上限：即使 GPU 支持 8192，超大纹理也会耗尽显存导致渲染失败。
+  // 取 GPU 上限与 2048 的较小值（2048 是此前能正常渲染的尺寸）。
+  const safeLimit = Math.min(maxTextureSize, 2048);
   await Promise.all(
     textures.map(async (texUrl) => {
       const fullUrl = texUrl.startsWith("http") ? texUrl : `${base}${texUrl}`;
@@ -154,10 +157,10 @@ async function preloadScaledTextures(
       try {
         const img = await loadImage(fullUrl);
         const maxDim = Math.max(img.width, img.height);
-        if (maxDim <= maxTextureSize) {
+        if (maxDim <= safeLimit) {
           return; // 纹理没超限，让 Live2D 库自己加载
         }
-        const scale = maxTextureSize / maxDim;
+        const scale = safeLimit / maxDim;
         const canvas = document.createElement("canvas");
         canvas.width = Math.max(1, Math.round(img.width * scale));
         canvas.height = Math.max(1, Math.round(img.height * scale));
@@ -166,10 +169,12 @@ async function preloadScaledTextures(
           return;
         }
         ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-        const texture = pixi.Texture.fromCanvas(canvas);
+        // PIXI v6 没有 Texture.fromCanvas，用 Texture.from(canvas) 创建纹理
+        const texture = pixi.Texture.from(canvas);
         pixi.utils.TextureCache[fullUrl] = texture;
-      } catch {
-        // 缩小失败不影响后续加载
+      } catch (err) {
+        // 缩小失败不影响后续加载，但记录日志便于排查
+        console.warn("[live2d] texture downscale failed:", err);
       }
     }),
   );
