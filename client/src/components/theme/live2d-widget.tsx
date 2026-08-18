@@ -6,21 +6,21 @@ import { ClientConfigContext } from "../../state/config";
  * Live2D 看板娘组件 —— live2d-widget 插件接入版（复刻 Demo autoload.js）
  *
  * 渲染引擎：stevenjoezhang/live2d-widget（827802685 的 fork，暴露 window.initWidget），
- * 与 Demo（https://827802685.github.io/Live2D/）完全同源：
- *   1. 动态加载 waifu.css + waifu-tips.js（判重）；
- *   2. 安装 fetch 下载进度追踪（只统计 /model/ 请求），驱动加载进度条；
- *   3. 调用 window.initWidget({ waifuPath, cdnPath, cubism2Path, cubism5Path,
- *      tools, modelId:0, drag:false })；
- *   4. 插件拉取 cdnPath 下 model_list.json + model/furina/index.json，
- *      动态 import chunk/index2.js（Cubism5 渲染器）下载 moc3/贴图并渲染，
- *      派发 live2d:loaded / live2d:rendered；
- *   5. 渲染门控：live2d:rendered 前保持 loading 态，渲染完成后再显示模型。
+ * 与 Demo（https://827802685.github.io/Live2D/）完全同源。
+ *
+ * 交互（联动性）说明：
+ *   - 鼠标移动：渲染器让模型眼睛/头部跟随光标（onDrag）；
+ *   - 悬停身体：渲染器派发 live2d:hoverbody → 插件在 #waifu-tips 显示气泡；
+ *   - 点击模型：渲染器播放 TapBody 动作/表情并派发 live2d:tapbody → 插件显示气泡；
+ *   - 空闲/复制/切页：插件按 waifu-tips.json 定时显示气泡；
+ *   - 投喂/摸一摸按钮：通过合成 pointerdown 触发模型真实动作 + showTips 显示自定义气泡。
  *
  * 与 Demo 的差异（为适配博客）：
  *   - 模型源：优先 github.io 直连（实测最快、同源 CORS），失败自动回退加速代理；
- *   - 隐藏插件自带的 #waifu-tips / #waifu-tool / #waifu-toggle，气泡与按钮交给 React 外壳；
+ *   - 隐藏插件自带的 #waifu-tool（工具列）与 #waifu-toggle（开关），交互交给 React 按钮；
+ *   - 气泡复用插件的 #waifu-tips，仅重写样式贴合博客主题；
  *   - 不加载 config-panel.js（参数面板），保持博客干净；
- *   - 保留 React 外壳：文件夹拖拽、气泡 speak、FOODS 喂食、Hide 按钮、错误提示 setError。
+ *   - 保留 React 外壳：文件夹拖拽、投喂/摸一摸/隐藏按钮、加载进度、错误提示。
  */
 
 // 插件资源根目录（相对 waifu-tips.js 所在处）
@@ -58,17 +58,16 @@ const CSS_MARK = "rin-live2d-widget--css";
 const SCRIPT_MARK = "rin-live2d-widget--script";
 const OVERRIDE_STYLE_ID = "rin-live2d-widget--override";
 
-const GREETINGS = [
-  "theme.live2d.talk.idle1",
-  "theme.live2d.talk.idle2",
-  "theme.live2d.talk.poke1",
-  "theme.live2d.talk.poke2",
-];
-
 const FOOD_REPLIES = [
   "theme.live2d.feed.yum1",
   "theme.live2d.feed.yum2",
   "theme.live2d.feed.yum3",
+];
+
+const POKE_REPLIES = [
+  "theme.live2d.talk.poke1",
+  "theme.live2d.talk.poke2",
+  "theme.live2d.talk.poke3",
 ];
 
 const FOODS = [
@@ -78,10 +77,8 @@ const FOODS = [
   { key: "dessert", icon: "🍮" },
 ];
 
-// 复刻 Demo 的工具集。刻意去掉 "quit"：
-// 插件自带 quit 会独立把 #waifu 永久隐藏并写入 waifu-disabled/waifu-display，
-// 与 React 的 Hide 逻辑冲突且无法从外面恢复，因此交还给 React 的 Hide 按钮统一管理。
-// 工具列本身会被覆盖样式隐藏（#waifu-tool{display:none}），交互交给 React 外壳。
+// 复刻 Demo 的工具集。工具列本身会被覆盖样式隐藏（#waifu-tool{display:none}），
+// 交互交给 React 外壳；去掉 "quit"（与 React 的 Hide 逻辑冲突）。
 const TOOLS = ["hitokoto", "photo", "info"];
 
 // 判重式加载 <link rel="stylesheet">
@@ -265,12 +262,11 @@ export function Live2DWidget() {
   const [rendered, setRendered] = useState(false);
   const [progress, setProgress] = useState<ProgressState | null>(null);
   const [dragging, setDragging] = useState(false);
-  const [bubble, setBubble] = useState<string | null>(null);
   const [feeding, setFeeding] = useState(false);
   const [showFood, setShowFood] = useState(false);
   const modelAreaRef = useRef<HTMLDivElement | null>(null);
   const outerRef = useRef<HTMLDivElement | null>(null);
-  const bubbleTimerRef = useRef<number | null>(null);
+  const tipsTimerRef = useRef<number | null>(null);
   const dragStateRef = useRef<{ startX: number; startY: number; origLeft: number; origTop: number } | null>(null);
   const renderedRef = useRef(false);
   const lastProgressAtRef = useRef(Date.now());
@@ -290,36 +286,72 @@ export function Live2DWidget() {
   const boxW = Math.round(300 * scaleValue);
   const boxH = Math.round(300 * scaleValue);
 
-  function say(message: string, duration = 4000) {
-    setBubble(message);
-    if (bubbleTimerRef.current) {
-      window.clearTimeout(bubbleTimerRef.current);
+  const randomKey = (keys: string[]) => keys[Math.floor(Math.random() * keys.length)];
+
+  /**
+   * 在插件的 #waifu-tips 气泡里显示一条消息（复刻插件内部 i() 的行为）。
+   * 与插件自身的消息共用同一个元素，天然互斥：后显示的覆盖先显示的。
+   */
+  function showTips(text: string, duration = 4000) {
+    const el = document.getElementById("waifu-tips");
+    if (!el) {
+      return;
     }
-    bubbleTimerRef.current = window.setTimeout(() => setBubble(null), duration);
+    el.innerHTML = text;
+    el.classList.add("waifu-tips-active");
+    if (tipsTimerRef.current) {
+      window.clearTimeout(tipsTimerRef.current);
+    }
+    tipsTimerRef.current = window.setTimeout(() => {
+      el.classList.remove("waifu-tips-active");
+      tipsTimerRef.current = null;
+    }, duration);
   }
 
-  const randomKey = (keys: string[]) => keys[Math.floor(Math.random() * keys.length)];
-  const greetRandomly = (pool: string[] = GREETINGS) => say(t(randomKey(pool)));
+  /**
+   * 通过合成 pointerdown 触发渲染器的 onTap，让模型真实播放 TapBody 动作/表情。
+   * 渲染器在 document 上监听 pointerdown（冒泡），命中身体会派发 live2d:tapbody，
+   * 插件随之显示 tapBody 气泡；调用方随后用 showTips 覆盖成自定义文案。
+   */
+  function triggerModelTap() {
+    const canvas = document.getElementById("live2d");
+    if (!canvas) {
+      return;
+    }
+    const rect = canvas.getBoundingClientRect();
+    // 取画布中下部（身体区域），命中身体播放 TapBody；命中头部则播放表情
+    const x = rect.left + rect.width * 0.5;
+    const y = rect.top + rect.height * 0.62;
+    canvas.dispatchEvent(
+      new PointerEvent("pointerdown", {
+        bubbles: true,
+        cancelable: true,
+        clientX: x,
+        clientY: y,
+        button: 0,
+        pointerId: 1,
+        pointerType: "mouse",
+      }),
+    );
+  }
 
   function feedModel(item?: { key: string; icon: string }) {
-    // 插件模式无法从外部直接调用 Cubism 动作接口；但模型自身被点击时
-    // （chunk/index2.js 的 onTap）会派发 window "live2d:tapbody"。
-    // 这里往透传该事件：若插件保留了 tapBody 提示，会一起响应。
-    try {
-      window.dispatchEvent(new Event("live2d:tapbody"));
-    } catch {
-      // ignore
-    }
-    say(t(randomKey(FOOD_REPLIES)), 3600);
+    // 先触发模型真实动作（合成点击），再显示自定义投喂文案（覆盖插件的 tapBody 气泡）
+    triggerModelTap();
+    showTips(t(randomKey(FOOD_REPLIES)), 3600);
     setShowFood(false);
     setFeeding(true);
     window.setTimeout(() => setFeeding(false), 500);
     if (item) {
-      // brief floating feedback with the selected food icon
       window.setTimeout(() => {
-        say(t(item.key === "cake" ? "theme.live2d.feed.cake" : "theme.live2d.feed.generic"), 2000);
+        showTips(t(item.key === "cake" ? "theme.live2d.feed.cake" : "theme.live2d.feed.generic"), 2000);
       }, 800);
     }
+  }
+
+  function pokeModel() {
+    triggerModelTap();
+    showTips(t(randomKey(POKE_REPLIES)), 3200);
   }
 
   /**
@@ -353,11 +385,12 @@ export function Live2DWidget() {
       // ignore
     }
 
-    // ---- 注入我们自己的覆盖样式：把插件 #waifu 定位进 React 容器，减少与博主题冲突 ----
+    // ---- 注入我们自己的覆盖样式：把插件 #waifu 定位进 React 容器，气泡贴合博客主题 ----
     const overrideStyle = document.createElement("style");
     overrideStyle.id = OVERRIDE_STYLE_ID;
     overrideStyle.textContent = [
       `#${OVERRIDE_STYLE_ID}{}`,
+      // 模型容器：占满 React 容器，取消插件默认的 fixed 定位与过渡
       `#waifu{position:absolute !important;top:0;left:0;bottom:auto !important;`,
       `transform:none !important;transition:none !important;z-index:0 !important;`,
       `width:100%;height:100%;margin:0}`,
@@ -365,8 +398,20 @@ export function Live2DWidget() {
       `#waifu:hover{transform:none !important}`,
       `#waifu-canvas{width:100% !important;height:100% !important;margin:0}`,
       `#live2d{width:100% !important;height:100% !important;position:relative;display:block}`,
-      // #waifu-tips 由 React 的 speak 气泡承担；#waifu-tool 由 React 的按钮承担；#waifu-toggle 交给 React 的 Hide
-      `#waifu-tips,#waifu-tool,#waifu-toggle{display:none !important}`,
+      // 气泡：浮在模型上方，贴合博客主题（白底/暗色 #333，主题色点缀）
+      `#waifu-tips{position:absolute !important;bottom:100% !important;left:50% !important;`,
+      `transform:translateX(-50%) !important;margin:0 0 8px !important;`,
+      `width:max-content !important;max-width:220px;min-height:0 !important;`,
+      `background:#fff;border:1px solid rgba(0,0,0,.1);border-radius:12px;`,
+      `box-shadow:0 4px 16px rgba(0,0,0,.12);font-size:12px;line-height:1.5;`,
+      `padding:6px 10px;opacity:0;transition:opacity .2s;z-index:20;`,
+      `pointer-events:none;text-align:center;animation:none !important;`,
+      `overflow:visible !important;text-overflow:clip !important;word-break:normal !important;}`,
+      `[data-color-mode="dark"] #waifu-tips{background:#333;border-color:rgba(255,255,255,.12);color:#e5e5e5;}`,
+      `#waifu-tips.waifu-tips-active{opacity:1;}`,
+      `#waifu-tips span{color:rgb(var(--theme-rgb));}`,
+      // 工具列与开关交给 React 按钮
+      `#waifu-tool,#waifu-toggle{display:none !important}`,
     ].join("\n");
     document.head.appendChild(overrideStyle);
 
@@ -404,8 +449,7 @@ export function Live2DWidget() {
     (async () => {
       try {
         // 不做 WebGL 前置检查：与 Demo 的 live2d-widget 插件行为一致。
-        // 插件在运行时直接创建 WebGL 上下文，若浏览器不支持会自行在控制台报错并降级，
-        // 而不是像旧的自研组件那样在渲染前就抛错（旧逻辑导致部分设备上提前失败）。
+        // 插件在运行时直接创建 WebGL 上下文，若浏览器不支持会自行在控制台报错并降级。
 
         // 1) 探测可用的模型源（github.io 优先，失败回退代理）
         const cdnRoot = await pickCdnRoot();
@@ -453,8 +497,8 @@ export function Live2DWidget() {
       window.removeEventListener("live2d:rendered", onRendered);
       window.clearInterval(stallTimer);
       restoreFetch();
-      if (bubbleTimerRef.current) {
-        window.clearTimeout(bubbleTimerRef.current);
+      if (tipsTimerRef.current) {
+        window.clearTimeout(tipsTimerRef.current);
       }
 
       // ---- 卸载时清理插件注入的 DOM / 脚本，尽量不破坏页面其它区域 ----
@@ -483,7 +527,8 @@ export function Live2DWidget() {
   }, []);
 
   function onPointerDown(event: React.PointerEvent<HTMLDivElement>) {
-    if (event.button !== 0) {
+    // 忽略合成事件（triggerModelTap 派发的 pointerdown），避免误触发拖拽
+    if (!event.isTrusted || event.button !== 0) {
       return;
     }
     const wrapper = outerRef.current;
@@ -575,11 +620,39 @@ export function Live2DWidget() {
         style={{ ...positionStyle, ...(hidden ? { display: "none" } : {}) }}
       >
         <div className={`flex flex-col items-end gap-1 ${dragging ? "pointer-events-none" : ""}`}>
-          {bubble ? (
-            <div className="relative max-w-44 rounded-2xl rounded-br-sm bg-w px-3 py-2 text-xs shadow t-secondary dark:bg-neutral-800">
-              {bubble}
+          {error ? (
+            <p className="max-w-44 text-xs text-red-500">{error}</p>
+          ) : (
+            <div
+              className="relative"
+              style={{ width: boxW, height: boxH }}
+            >
+              {/* 模型容器：插件生成的 #waifu 会被移入这里。
+                  注意：此容器不能有 React 子节点，否则手动 appendChild 的 #waifu 会在 re-render 时被 React 清掉。
+                  不能加 overflow-hidden，否则浮在模型上方的 #waifu-tips 气泡会被裁掉。 */}
+              <div
+                ref={modelAreaRef}
+                className="absolute inset-0 cursor-grab touch-none select-none"
+                onPointerDown={onPointerDown}
+              />
+              {/* 加载进度覆盖层：渲染完成前显示（作为兄弟节点，不干扰 #waifu） */}
+              {!rendered ? (
+                <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 rounded-xl bg-w/90 text-xs shadow-inner dark:bg-neutral-900/90">
+                  <div className="h-1.5 w-28 overflow-hidden rounded-full bg-neutral-200 dark:bg-neutral-700">
+                    <div
+                      className="h-full rounded-full bg-theme transition-[width] duration-300"
+                      style={{ width: `${pct}%` }}
+                    />
+                  </div>
+                  <span className="t-muted">
+                    {progress
+                      ? `${t("theme.live2d.loading.downloading")} ${pct}%`
+                      : t("theme.live2d.loading.connecting")}
+                  </span>
+                </div>
+              ) : null}
             </div>
-          ) : null}
+          )}
           <div className="flex items-center gap-1">
             <button
               type="button"
@@ -592,7 +665,7 @@ export function Live2DWidget() {
             </button>
             <button
               type="button"
-              onClick={() => greetRandomly(["theme.live2d.talk.poke1", "theme.live2d.talk.poke2", "theme.live2d.talk.poke3"])}
+              onClick={pokeModel}
               className="rounded-full bg-w p-1.5 text-xs shadow t-muted transition hover:text-theme"
               aria-label={t("theme.live2d.poke")}
               title={t("theme.live2d.poke")}
@@ -626,47 +699,10 @@ export function Live2DWidget() {
             </div>
           ) : null}
           {feeding ? (
-            <div className="pointer-events-none fixed bottom-3 z-50 text-3xl transition-all duration-500">
+            <div className="pointer-events-none text-3xl transition-all duration-500">
               <i className="ri-heart-3-fill text-theme" />
             </div>
           ) : null}
-          {error ? (
-            <p className="max-w-44 text-xs text-red-500">{error}</p>
-          ) : (
-            <div
-              className="relative"
-              style={{ width: boxW, height: boxH }}
-            >
-              {/* 模型容器：插件生成的 #waifu 会被移入这里。
-                  注意：此容器不能有 React 子节点，否则手动 appendChild 的 #waifu 会在 re-render 时被 React 清掉。 */}
-              <div
-                ref={modelAreaRef}
-                className={`absolute inset-0 cursor-grab touch-none select-none overflow-hidden ${dragging ? "cursor-grabbing" : ""}`}
-                onPointerDown={onPointerDown}
-                onClick={() => {
-                  if (!dragStateRef.current) {
-                    greetRandomly();
-                  }
-                }}
-              />
-              {/* 加载进度覆盖层：渲染完成前显示（作为兄弟节点，不干扰 #waifu） */}
-              {!rendered ? (
-                <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 rounded-xl bg-w/90 text-xs shadow-inner dark:bg-neutral-900/90">
-                  <div className="h-1.5 w-28 overflow-hidden rounded-full bg-neutral-200 dark:bg-neutral-700">
-                    <div
-                      className="h-full rounded-full bg-theme transition-[width] duration-300"
-                      style={{ width: `${pct}%` }}
-                    />
-                  </div>
-                  <span className="t-muted">
-                    {progress
-                      ? `${t("theme.live2d.loading.downloading")} ${pct}%`
-                      : t("theme.live2d.loading.connecting")}
-                  </span>
-                </div>
-              ) : null}
-            </div>
-          )}
         </div>
       </div>
     </>
