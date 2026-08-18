@@ -883,6 +883,10 @@
         "yum3": "So happy, one more bite please~",
         "cake": "The cake is really tasty!",
         "generic": "So delicious!"
+      },
+      "error": {
+        "webgl": "WebGL is not supported in this browser, so the Live2D model cannot be rendered",
+        "load_failed": "Failed to load the Live2D model. Check the model URL or try again later"
       }
     },
     "cursor": {

@@ -7,6 +7,7 @@ type PixiApp = {
   start(): void;
   stop?(): void;
   destroy(removeView?: boolean, stageOptions?: boolean): void;
+  renderer?: { gl?: WebGLRenderingContext };
 };
 
 type PixiModel = {
@@ -22,6 +23,12 @@ type PixiNamespace = {
     Live2DModel: {
       from(url: string, options?: Record<string, unknown>): Promise<PixiModel>;
     };
+  };
+  Texture: {
+    fromCanvas(canvas: HTMLCanvasElement): unknown;
+  };
+  utils: {
+    TextureCache: Record<string, unknown>;
   };
 };
 
@@ -88,6 +95,84 @@ function ensureWebGPURegistration() {
   } catch {
     // ignore
   }
+}
+
+// 检测当前浏览器是否支持 WebGL（Live2D 渲染依赖 WebGL）。
+// 用独立的测试 canvas，避免影响主渲染 canvas。
+function isWebGLSupported(): boolean {
+  try {
+    const testCanvas = document.createElement("canvas");
+    return !!(
+      testCanvas.getContext("webgl") ||
+      testCanvas.getContext("experimental-webgl") ||
+      testCanvas.getContext("webgl2")
+    );
+  } catch {
+    return false;
+  }
+}
+
+function loadImage(url: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error(`Failed to load image ${url}`));
+    img.src = url;
+  });
+}
+
+// 将超大贴图（如 8192 分辨率）缩小到 GPU 支持的最大尺寸，避免纹理过大导致渲染失败。
+// 缩小后的纹理缓存到 PIXI.TextureCache，Live2D 库加载时会命中缓存，不再重复下载。
+async function preloadScaledTextures(
+  model3Url: string,
+  pixi: PixiNamespace,
+  maxTextureSize: number,
+): Promise<void> {
+  const base = model3Url.substring(0, model3Url.lastIndexOf("/") + 1);
+  type ModelSettings = { FileReferences?: { Textures?: string[] } };
+  let settings: ModelSettings | null = null;
+  try {
+    const res = await fetch(model3Url, { mode: "cors" });
+    if (!res.ok) {
+      return;
+    }
+    settings = (await res.json()) as ModelSettings;
+  } catch {
+    return;
+  }
+  const textures = settings?.FileReferences?.Textures ?? [];
+  if (textures.length === 0) {
+    return;
+  }
+  await Promise.all(
+    textures.map(async (texUrl) => {
+      const fullUrl = texUrl.startsWith("http") ? texUrl : `${base}${texUrl}`;
+      if (pixi.utils?.TextureCache?.[fullUrl]) {
+        return;
+      }
+      try {
+        const img = await loadImage(fullUrl);
+        const maxDim = Math.max(img.width, img.height);
+        if (maxDim <= maxTextureSize) {
+          return; // 纹理没超限，让 Live2D 库自己加载
+        }
+        const scale = maxTextureSize / maxDim;
+        const canvas = document.createElement("canvas");
+        canvas.width = Math.max(1, Math.round(img.width * scale));
+        canvas.height = Math.max(1, Math.round(img.height * scale));
+        const ctx = canvas.getContext("2d");
+        if (!ctx) {
+          return;
+        }
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        const texture = pixi.Texture.fromCanvas(canvas);
+        pixi.utils.TextureCache[fullUrl] = texture;
+      } catch {
+        // 缩小失败不影响后续加载
+      }
+    }),
+  );
 }
 
 // 预取模型及其大资源（moc3 / 贴图）。模型文件很大（动辄数十 MB），
@@ -236,8 +321,11 @@ export function Live2DWidget() {
     let cancelled = false;
     let app: PixiApp | null = null;
 
-    // 尽早开始预取大资源（moc3 / 贴图），与库脚本加载并行
-    prefetchModelAssets(modelUrl);
+    // 尽早开始预取大资源（moc3 / 贴图），与库脚本加载并行。
+    // 仅在 WebGL 可用时预取，避免不支持 WebGL 的环境白白下载大文件。
+    if (isWebGLSupported()) {
+      prefetchModelAssets(modelUrl);
+    }
 
     (async () => {
       try {
@@ -251,6 +339,10 @@ export function Live2DWidget() {
         const pixi = getPixi();
         if (!pixi) {
           throw new Error("Live2D libraries are not available");
+        }
+        // WebGL 不可用时给出友好提示，避免 PIXI 抛出难懂的错误
+        if (!isWebGLSupported()) {
+          throw new Error(t("theme.live2d.error.webgl"));
         }
         const canvas = canvasRef.current;
         const container = containerRef.current;
@@ -268,7 +360,22 @@ export function Live2DWidget() {
         });
         app = appInstance;
 
-        const model = await pixi.live2d.Live2DModel.from(modelUrl, { autoInteract: true });
+        // 获取 GPU 最大纹理尺寸，把超大贴图（如 8192）缩小到可渲染范围，
+        // 避免纹理过大导致 Live2D 模型渲染失败。
+        const gl = appInstance.renderer?.gl;
+        const maxTexSize = gl ? gl.getParameter(gl.MAX_TEXTURE_SIZE) : 4096;
+        await preloadScaledTextures(modelUrl, pixi, maxTexSize);
+
+        // 模型加载失败时重试一次（网络抖动/资源未就绪）
+        let model: PixiModel;
+        try {
+          model = await pixi.live2d.Live2DModel.from(modelUrl, { autoInteract: true });
+        } catch (loadErr) {
+          if (cancelled) {
+            return;
+          }
+          model = await pixi.live2d.Live2DModel.from(modelUrl, { autoInteract: true });
+        }
         if (cancelled) {
           return;
         }

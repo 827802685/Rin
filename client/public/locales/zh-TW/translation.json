@@ -883,6 +883,10 @@
         "yum3": "好幸福呀，再餵一口嘛～",
         "cake": "蛋糕真好吃！",
         "generic": "真好吃！"
+      },
+      "error": {
+        "webgl": "目前瀏覽器不支援 WebGL，無法渲染 Live2D 模型",
+        "load_failed": "Live2D 模型載入失敗，請檢查模型位址或稍後重試"
       }
     },
     "cursor": {
