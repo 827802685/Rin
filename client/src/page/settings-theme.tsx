@@ -427,7 +427,12 @@ export function SettingsTheme() {
                 value={live2dScale}
                 placeholder="1"
                 onChange={(value) => {
-                  setConfigValue("widget.live2d.scale", value);
+                  const num = Number(value);
+                  if (!Number.isFinite(num)) {
+                    return;
+                  }
+                  // 限制在安全范围，防止模型渲染过大挡住页面
+                  setConfigValue("widget.live2d.scale", String(Math.min(Math.max(num, 0.1), 2)));
                 }}
               />
             </>

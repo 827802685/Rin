@@ -99,7 +99,9 @@ export function Live2DWidget() {
 
   const position = String(config.get("widget.live2d.position") ?? "right");
   const modelUrl = String(config.get("widget.live2d.model") ?? "");
-  const scaleValue = Number(config.get("widget.live2d.scale") ?? 1);
+  const rawScale = Number(config.get("widget.live2d.scale") ?? 1);
+  // 防止配置被误调成超大值导致模型挡住整个页面：限制在安全范围内
+  const scaleValue = Number.isFinite(rawScale) ? Math.min(Math.max(rawScale, 0.1), 2) : 1;
 
   function say(message: string, duration = 4000) {
     setBubble(message);
