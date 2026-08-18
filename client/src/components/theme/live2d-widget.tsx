@@ -303,7 +303,9 @@ export function Live2DWidget() {
   function feedModel(item?: { key: string; icon: string }) {
     const model = modelRef.current;
     // trigger a motion if available, then speak a happy reply
-    const motionPromise = model?.motion ? model.motion("Tap", 0, 3) : undefined;
+    // Live2D 仓库的芙宁娜模型使用 "TapBody" 动画分组（tap.motion3.json），没有 "Tap" 分组。
+    // 用实际存在的分组，确保喂食时播放动画。
+    const motionPromise = model?.motion ? model.motion("TapBody", 0, 3) : undefined;
     if (motionPromise && typeof (motionPromise as Promise<unknown>).then === "function") {
       void motionPromise.catch(() => undefined);
     }

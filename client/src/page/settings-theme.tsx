@@ -414,7 +414,7 @@ export function SettingsTheme() {
                 description={t("theme.live2d.model.desc")}
                 configKeyTitle={t("theme.live2d.model.label")}
                 value={String(clientConfig.get("widget.live2d.model") ?? "")}
-                placeholder="/models/furina/furina.model3.json"
+                placeholder="https://raw-githubusercontent-com-gh.zjkl0330.dpdns.org/827802685/Live2D/refs/heads/master/model/furina/furina.model3.json"
                 onChange={(value) => {
                   setConfigValue("widget.live2d.model", value);
                 }}

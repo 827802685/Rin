@@ -851,7 +851,7 @@
       },
       "model": {
         "title": "Model file",
-        "desc": "Path to the .model3.json model file",
+        "desc": "Remote URL of the .model3.json model file. The Furina model is about 99MB (95MB moc3 + 8MB 4K texture) and exceeds the site's static-asset limit, so it must be referenced remotely (GitHub mirror proxy or Pages), not bundled into the frontend assets. The Chinese-named model under the repo models/ folder is not deployed; using /models/... will 404 and the mascot will not show.",
         "label": "Model path"
       },
       "scale": {

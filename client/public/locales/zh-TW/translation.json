@@ -851,7 +851,7 @@
       },
       "model": {
         "title": "模型檔案",
-        "desc": ".model3.json 模型檔案的路徑",
+        "desc": ".model3.json 模型的遠端位址。芙寧娜模型約 99MB（moc3 95MB + 4K 貼圖 8MB），單檔超過網站的靜態資源上限，無法放入前端 assets，須用遠端引用（GitHub 加速代理或 Pages）。倉庫 models/ 下的中文命名模型未被部署，填 /models/... 會 404 導致不顯示。",
         "label": "模型路徑"
       },
       "scale": {
