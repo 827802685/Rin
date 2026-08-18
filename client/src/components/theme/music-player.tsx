@@ -261,6 +261,34 @@ export function MusicPlayer() {
     return null;
   }
 
+  // 收起状态：只保留一个专辑图磁贴，点击展开
+  if (collapsed) {
+    return (
+      <div className="fixed bottom-4 left-4 z-40">
+        <audio ref={audioRef} />
+        <button
+          type="button"
+          onClick={() => setCollapsed(false)}
+          className="group relative block h-14 w-14 overflow-hidden rounded-2xl border border-black/10 bg-w shadow-xl transition hover:scale-105 dark:border-white/10"
+          aria-expanded={false}
+          aria-label={t("theme.player.expand")}
+          title={track.name}
+        >
+          {track.cover ? (
+            <img src={track.cover} alt="" className="h-full w-full object-cover" />
+          ) : (
+            <span className="flex h-full w-full items-center justify-center bg-theme/10 text-theme">
+              <i className="ri-music-2-line text-xl" />
+            </span>
+          )}
+          <span className="absolute inset-0 flex items-center justify-center bg-black/30 text-white opacity-0 transition group-hover:opacity-100">
+            <i className="ri-expand-up-line text-lg" />
+          </span>
+        </button>
+      </div>
+    );
+  }
+
   return (
     <div className="fixed bottom-4 left-4 z-40 w-[min(92vw,28rem)]">
       <div className="relative rounded-2xl border border-black/10 bg-w shadow-xl dark:border-white/10">
