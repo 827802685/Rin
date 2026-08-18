@@ -41,8 +41,43 @@ export function collectWorkerSecrets(source: Record<string, string | undefined> 
   return secrets;
 }
 
+// 通过 Cloudflare API 读取 worker 上已存在的 secret 名称（不读值）
+async function fetchExistingSecretNames(workerName: string): Promise<string[]> {
+  const token = env("CLOUDFLARE_API_TOKEN");
+  const accountId = env("CLOUDFLARE_ACCOUNT_ID");
+  if (!token || !accountId) {
+    return [];
+  }
+  const url = `https://api.cloudflare.com/client/v4/accounts/${accountId}/workers/scripts/${workerName}/secrets`;
+  try {
+    const res = await fetch(url, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) {
+      return [];
+    }
+    const data = (await res.json()) as { result?: Array<{ name: string }> };
+    return data.result?.map((item) => item.name) ?? [];
+  } catch {
+    return [];
+  }
+}
+
+// 只在首次部署时写入 admin 凭据。若 worker 上已存在 ADMIN_USERNAME/ADMIN_PASSWORD，
+// 说明用户之后自己改过，部署不再覆盖，避免 CI 每次都把密码重置。
+const ADMIN_ONLY_ONCE_KEYS = ["ADMIN_USERNAME", "ADMIN_PASSWORD"] as const;
+
 async function syncWorkerSecrets(workerName: string) {
   const secrets = collectWorkerSecrets();
+  const existing = await fetchExistingSecretNames(workerName);
+
+  for (const key of ADMIN_ONLY_ONCE_KEYS) {
+    if (existing.includes(key)) {
+      delete secrets[key];
+      console.log(`ℹ️ "${key}" already exists on worker; skipping to avoid overwriting admin credentials`);
+    }
+  }
+
   const secretKeys = Object.keys(secrets);
 
   if (secretKeys.length === 0) {
