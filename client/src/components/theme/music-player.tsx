@@ -262,7 +262,7 @@ export function MusicPlayer() {
   }
 
   return (
-    <div className="fixed bottom-4 left-1/2 z-40 w-[min(92vw,28rem)] -translate-x-1/2">
+    <div className="fixed bottom-4 left-4 z-40 w-[min(92vw,28rem)]">
       <div className="relative rounded-2xl border border-black/10 bg-w shadow-xl dark:border-white/10">
         <div className="flex items-center gap-3 px-4 py-3">
           <audio ref={audioRef} />
