@@ -862,20 +862,21 @@ export function Live2DWidget() {
       `#live2d{width:100% !important;height:100% !important;position:relative;display:block;`,
       `opacity:0;transition:opacity .4s ease;}`,
       `#live2d.rin-live2d-ready{opacity:1;}`,
-      // 气泡：浮在模型上方，蓝色主题（白字）
+      // 气泡：浮在模型上方，淡蓝色半透明背景（保持透明效果，仅改颜色为淡蓝）
       `#waifu-tips{position:absolute !important;bottom:100% !important;left:50% !important;`,
       `transform:translateX(-50%) !important;margin:0 0 8px !important;`,
       `width:max-content !important;max-width:220px;min-height:0 !important;`,
-      `background:linear-gradient(135deg,#5ab0e8,#3a7bd5);border:1px solid rgba(255,255,255,.28);`,
-      `border-radius:12px;box-shadow:0 4px 16px rgba(58,123,213,.35);`,
-      `color:#fff;font-size:12px;line-height:1.5;padding:6px 10px;opacity:0;`,
+      `background:rgba(186,225,248,.92);border:1px solid rgba(90,176,232,.45);`,
+      `border-radius:12px;box-shadow:0 4px 16px rgba(90,176,232,.28);`,
+      `color:#2a4a6b;font-size:12px;line-height:1.5;padding:6px 10px;opacity:0;`,
       `transition:opacity .2s;z-index:20;pointer-events:none;text-align:center;`,
       `animation:none !important;overflow:visible !important;text-overflow:clip !important;`,
       `word-break:normal !important;}`,
-      `[data-color-mode="dark"] #waifu-tips{background:linear-gradient(135deg,#3a6ea8,#2d5a8c);`,
-      `border-color:rgba(255,255,255,.2);color:#fff;}`,
+      `[data-color-mode="dark"] #waifu-tips{background:rgba(46,84,120,.9);`,
+      `border-color:rgba(120,180,230,.35);color:#dceaf7;}`,
       `#waifu-tips.waifu-tips-active{opacity:1;}`,
-      `#waifu-tips span{color:#fff;}`,
+      `#waifu-tips span{color:#2a4a6b;}`,
+      `[data-color-mode="dark"] #waifu-tips span{color:#dceaf7;}`,
       // 工具列与开关交给 React 按钮
       `#waifu-tool,#waifu-toggle{display:none !important}`,
     ].join("\n");
