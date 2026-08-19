@@ -362,6 +362,7 @@ type Live2dModelLike = {
     setParameterValueById?: (id: string, value: number) => void;
   };
   _expressionManager?: { stopAllMotions?: () => void };
+  _motionManager?: { stopAllMotions?: () => void };
   _state?: number;
   update?: unknown;
 };
@@ -682,6 +683,10 @@ export function Live2DWidget() {
    * 触发模型点击动作。原实现依赖渲染器的 onTap → hitTest（需要模型配置 HitAreas），
    * 但该模型配置缺少 HitAreas，导致命中检测永远失败、动作从未真正触发。
    * 这里改为直接调用模型 API：播放 TapBody 动作（变芒/变荒）+ 随机表情。
+   *
+   * 注意：CDN 的 tap.motion3.json 内部 Loop:true，动作会无限循环播放，
+   * 导致模型一直保持变身状态不恢复（渲染器因动作未结束也不会回到 Idle）。
+   * 因此在动作时长（1.6s）后强制停止动作与表情，让渲染器自动回到待机。
    */
   function triggerModelTap() {
     const model = getLive2dModel();
@@ -689,6 +694,14 @@ export function Live2DWidget() {
     try {
       model.startRandomMotion?.("TapBody", 2);
       model.setRandomExpression?.();
+      window.setTimeout(() => {
+        try {
+          model._motionManager?.stopAllMotions?.();
+          model._expressionManager?.stopAllMotions?.();
+        } catch {
+          // ignore
+        }
+      }, 1700);
     } catch {
       // ignore
     }
