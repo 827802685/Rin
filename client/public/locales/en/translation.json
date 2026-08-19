@@ -859,10 +859,26 @@
         "desc": "Display scale of the Live2D model",
         "label": "Scale"
       },
+      "layout": {
+        "title": "Model layout tweaks",
+        "desc": "JSON injected into the model's Layout to fine-tune its position/scale on the canvas, e.g. to fix neck misalignment. Example: {\"Center Y\": 0.05}",
+        "label": "Layout JSON"
+      },
       "show": "Show mascot",
       "hide": "Hide mascot",
       "poke": "Pat",
       "home": "Back to home",
+      "actions": {
+        "button": "Actions",
+        "wave": "Wave",
+        "shake": "Shake head",
+        "dance": "Dance",
+        "tip": {
+          "wave": "Hi~ Hello there!",
+          "shake": "No no no, that won't do~",
+          "dance": "Come dance along with me~"
+        }
+      },
       "chat": {
         "button": "Chat",
         "title": "Chat with Furina",

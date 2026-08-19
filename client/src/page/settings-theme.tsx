@@ -434,6 +434,16 @@ export function SettingsTheme() {
                   setConfigValue("widget.live2d.scale", String(Math.min(Math.max(num, 0.1), 2)));
                 }}
               />
+              <ItemInput
+                title={t("theme.live2d.layout.title")}
+                description={t("theme.live2d.layout.desc")}
+                configKeyTitle={t("theme.live2d.layout.label")}
+                value={String(clientConfig.get("widget.live2d.layout") ?? "")}
+                placeholder='{"Center Y": 0.05}'
+                onChange={(value) => {
+                  setConfigValue("widget.live2d.layout", value);
+                }}
+              />
             </>
           ) : null}
 

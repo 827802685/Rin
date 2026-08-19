@@ -859,10 +859,26 @@
         "desc": "Live2D 模型的顯示縮放比例",
         "label": "縮放"
       },
+      "layout": {
+        "title": "模型位置微調",
+        "desc": "注入模型 Layout 的 JSON，用於微調模型在畫布中的位置/縮放，可解決頸部錯位等問題。範例：{\"Center Y\": 0.05}",
+        "label": "Layout JSON"
+      },
       "show": "顯示看板娘",
       "hide": "隱藏看板娘",
       "poke": "摸一摸",
       "home": "返回首頁",
+      "actions": {
+        "button": "動作",
+        "wave": "揮手",
+        "shake": "搖頭",
+        "dance": "跳舞",
+        "tip": {
+          "wave": "嗨～你好呀！",
+          "shake": "不不不，這樣可不行～",
+          "dance": "跟著我一起舞起來吧～"
+        }
+      },
       "chat": {
         "button": "聊天",
         "title": "和芙寧娜聊天",
