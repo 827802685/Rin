@@ -33,6 +33,8 @@ const WIDGET_SCRIPT = `${DIST}waifu-tips.js`;
 const WIDGET_JSON = `${DIST}waifu-tips.json`;
 const CUBISM2_PATH = `${DIST}live2d.min.js`;
 const CUBISM5_PATH = `${DIST}live2dcubismcore.min.js`;
+// 渲染器 chunk（AppDelegate 所在模块），用于捕获模型实例以驱动衣服/头发物理
+const CHUNK_URL = `${DIST}chunk/index2.js`;
 
 // 模型根地址候选：优先 github.io 直连（实测最快、同源 CORS），失败回退加速代理（Demo 默认）
 const CDN_CANDIDATES = [
@@ -60,12 +62,6 @@ type WidgetLoader = (config: InitWidgetConfig) => void;
 const CSS_MARK = "rin-live2d-widget--css";
 const SCRIPT_MARK = "rin-live2d-widget--script";
 const OVERRIDE_STYLE_ID = "rin-live2d-widget--override";
-
-const FOOD_REPLIES = [
-  "theme.live2d.feed.yum1",
-  "theme.live2d.feed.yum2",
-  "theme.live2d.feed.yum3",
-];
 
 const FOODS = [
   { key: "cake", icon: "🍰" },
@@ -153,6 +149,47 @@ function restoreGlobalImage() {
     (window as unknown as { Image: typeof Image }).Image = originalImage;
     originalImage = null;
   }
+}
+
+/**
+ * 预加载渲染器 chunk 并打补丁：把 AppDelegate 实例暴露到 window，
+ * 以便直接调用 model.setDragging 驱动物理（衣服/头发飘动）。
+ *
+ * 插件内部 import("./chunk/index2.js") 与这里 import 的是同一 URL，
+ * 浏览器模块缓存按 URL 共享，因此打补丁能作用到插件创建的实例上。
+ * 必须在 initWidget 之前调用，否则实例已创建、补丁不生效。
+ */
+async function patchLive2dApp(): Promise<boolean> {
+  try {
+    const mod = (await import(/* @vite-ignore */ CHUNK_URL)) as {
+      AppDelegate?: { prototype: { run?: (...args: unknown[]) => unknown } };
+    };
+    const AppDelegate = mod.AppDelegate;
+    if (!AppDelegate) {
+      return false;
+    }
+    const origRun = AppDelegate.prototype.run;
+    AppDelegate.prototype.run = function (this: unknown, ...args: unknown[]) {
+      (window as unknown as { __rinLive2dApp?: unknown }).__rinLive2dApp = this;
+      return (origRun as (...a: unknown[]) => unknown).apply(this, args);
+    };
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// 从捕获的 AppDelegate 实例中取出 Live2D 模型（CubismUserModel），用于喂拖拽/物理
+type Live2dModelLike = { setDragging?: (x: number, y: number) => void };
+function getLive2dModel(): Live2dModelLike | undefined {
+  const app = (window as unknown as { __rinLive2dApp?: unknown }).__rinLive2dApp;
+  const sub = (app as { _subdelegates?: { at?: (i: number) => unknown } } | undefined)?._subdelegates?.at?.(
+    0,
+  );
+  const manager = (sub as { getLive2DManager?: () => unknown } | undefined)?.getLive2DManager?.();
+  return (manager as { _models?: { at?: (i: number) => Live2dModelLike } } | undefined)?._models?.at?.(
+    0,
+  );
 }
 
 type ProgressState = { loaded: number; total: number };
@@ -279,6 +316,13 @@ export function Live2DWidget() {
   const dragStateRef = useRef<{ startX: number; startY: number; origLeft: number; origTop: number } | null>(null);
   const renderedRef = useRef(false);
   const lastProgressAtRef = useRef(Date.now());
+  // 拖动状态镜像（ref 版，供动画帧读取）
+  const draggingRef = useRef(false);
+  // 拖动时驱动衣服飘动的 rAF 句柄与相位
+  const dragFlutterRafRef = useRef<number | null>(null);
+  const dragFlutterPhaseRef = useRef(0);
+  // 拖动期间被接管的模型 setDragging 原函数（用于恢复与重置）
+  const dragOrigSetDraggingRef = useRef<((x: number, y: number) => void) | null>(null);
   const [pos, setPos] = useState<{ left: number; top: number } | null>(() => loadSavedPos());
 
   const position = String(config.get("widget.live2d.position") ?? "right");
@@ -294,8 +338,6 @@ export function Live2DWidget() {
   // 模型容器尺寸：与插件 #waifu-canvas 的 300x300 一致，随配置缩放
   const boxW = Math.round(300 * scaleValue);
   const boxH = Math.round(300 * scaleValue);
-
-  const randomKey = (keys: string[]) => keys[Math.floor(Math.random() * keys.length)];
 
   /**
    * 在插件的 #waifu-tips 气泡里显示一条消息（复刻插件内部 i() 的行为）。
@@ -344,18 +386,14 @@ export function Live2DWidget() {
     );
   }
 
-  function feedModel(item?: { key: string; icon: string }) {
-    // 先触发模型真实动作（合成点击），再显示自定义投喂文案（覆盖插件的 tapBody 气泡）
+  function feedModel(item: { key: string; icon: string }) {
+    // 触发模型真实动作（合成点击），再显示对应食物的专属文案（覆盖插件的 tapBody 气泡）。
+    // 每种食物都有自己的回复，不再统一附一句"真好吃"。
     triggerModelTap();
-    showTips(t(randomKey(FOOD_REPLIES)), 3600);
+    showTips(t(`theme.live2d.feed.${item.key}`), 3600);
     setShowFood(false);
     setFeeding(true);
     window.setTimeout(() => setFeeding(false), 500);
-    if (item) {
-      window.setTimeout(() => {
-        showTips(t(item.key === "cake" ? "theme.live2d.feed.cake" : "theme.live2d.feed.generic"), 2000);
-      }, 800);
-    }
   }
 
   /** 返回首页：导航到顶域根路径（同标签页，不新开窗口）。后续新增界面时仍回到根路径。 */
@@ -368,19 +406,21 @@ export function Live2DWidget() {
     const content = chatInput.trim();
     if (!content || chatLoading) return;
 
-    const nextMessages: AIChatMessage[] = [
-      { role: "system", content: FURINA_SYSTEM_PROMPT },
-      ...chatMessages,
-      { role: "user", content },
-    ];
-    // 服务端有 30 条上限，只保留最近 20 条历史 + system + 新消息
-    const trimmed = nextMessages.slice(-22);
-    setChatMessages(trimmed);
+    // 聊天记录只存 user/assistant 消息，system 提示词不进 chatMessages，
+    // 否则会在聊天面板里把提示词显示成第一条气泡
+    const userMsg: AIChatMessage = { role: "user", content };
+    const nextDisplay: AIChatMessage[] = [...chatMessages, userMsg].slice(-20);
+    setChatMessages(nextDisplay);
     setChatInput("");
     setChatLoading(true);
     setChatError(null);
 
-    const { data, error } = await client.chat.send(trimmed);
+    // 服务端有 30 条上限：system + 最近 20 条历史 + 新消息
+    const payload: AIChatMessage[] = [
+      { role: "system", content: FURINA_SYSTEM_PROMPT },
+      ...nextDisplay,
+    ];
+    const { data, error } = await client.chat.send(payload);
     if (error) {
       setChatError(error.value || t("theme.live2d.chat.error"));
     } else if (data?.content) {
@@ -395,6 +435,21 @@ export function Live2DWidget() {
   useEffect(() => {
     chatScrollRef.current?.scrollTo({ top: chatScrollRef.current.scrollHeight, behavior: "smooth" });
   }, [chatMessages, chatLoading]);
+
+  // 点击模型/聊天面板之外的地方时收起聊天窗口
+  useEffect(() => {
+    if (!chatOpen) {
+      return;
+    }
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target as Node | null;
+      if (outerRef.current && target && !outerRef.current.contains(target)) {
+        setChatOpen(false);
+      }
+    };
+    document.addEventListener("pointerdown", onPointerDown);
+    return () => document.removeEventListener("pointerdown", onPointerDown);
+  }, [chatOpen]);
 
   /**
    * 插件被加载后同步插入 #waifu（其内含 #waifu-canvas > canvas#live2d、#waifu-tips、#waifu-tool）。
@@ -465,6 +520,10 @@ export function Live2DWidget() {
       lastProgressAtRef.current = Date.now();
       if (!disposed) setProgress(p);
     });
+
+    // ---- 预加载渲染器 chunk 并打补丁，捕获模型实例（必须在 initWidget 之前）----
+    // 失败不阻塞渲染：加载不到也只是少了"拖动飘动"这一锦上添花的物理效果。
+    void patchLive2dApp();
 
     // ---- 渲染门控：live2d:rendered 后放行模型 ----
     const onRendered = () => {
@@ -539,6 +598,7 @@ export function Live2DWidget() {
       window.removeEventListener("live2d:rendered", onRendered);
       window.clearInterval(stallTimer);
       restoreFetch();
+      stopDragFlutter();
       if (tipsTimerRef.current) {
         window.clearTimeout(tipsTimerRef.current);
       }
@@ -568,6 +628,69 @@ export function Live2DWidget() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  /**
+   * 拖动时驱动衣服/头发飘动的物理循环：接管模型的 setDragging，注入左右摆动值，
+   * 让布料在拖动过程中跟着鼠标惯性飘动；松手后恢复原函数并复位。
+   */
+  function startDragFlutter() {
+    const model = getLive2dModel();
+    if (!model) {
+      return;
+    }
+    const setDragging = model.setDragging;
+    if (typeof setDragging !== "function") {
+      return;
+    }
+    dragOrigSetDraggingRef.current = setDragging;
+    model.setDragging = (x: number, y: number) => {
+      dragFlutterPhaseRef.current += 0.35;
+      const sway = Math.sin(dragFlutterPhaseRef.current) * 0.22;
+      setDragging(x * 0.7 + sway, y * 0.7 + Math.sin(dragFlutterPhaseRef.current * 0.6) * 0.12);
+    };
+    draggingRef.current = true;
+    dragFlutterPhaseRef.current = 0;
+    startFlutter();
+  }
+
+  // 起一个 rAF 循环，持续给少掉的相位喂值，保证鼠标静止时裙子也因为惯性微摆
+  function startFlutter() {
+    if (dragFlutterRafRef.current !== null) {
+      return;
+    }
+    const tick = () => {
+      if (!draggingRef.current) {
+        dragFlutterRafRef.current = null;
+        return;
+      }
+      const model = getLive2dModel();
+      if (model?.setDragging) {
+        dragFlutterPhaseRef.current += 0.18;
+        model.setDragging(
+          Math.sin(dragFlutterPhaseRef.current) * 0.18,
+          Math.cos(dragFlutterPhaseRef.current * 0.7) * 0.1,
+        );
+      }
+      dragFlutterRafRef.current = window.requestAnimationFrame(tick);
+    };
+    dragFlutterRafRef.current = window.requestAnimationFrame(tick);
+  }
+
+  // 拖动/卸载结束：恢复模型原 setDragging 并停止飘动循环（复位到初始状态）
+  function stopDragFlutter() {
+    draggingRef.current = false;
+    if (dragFlutterRafRef.current !== null) {
+      window.cancelAnimationFrame(dragFlutterRafRef.current);
+      dragFlutterRafRef.current = null;
+    }
+    if (dragOrigSetDraggingRef.current) {
+      const model = getLive2dModel();
+      if (model) {
+        model.setDragging = dragOrigSetDraggingRef.current;
+      }
+      dragOrigSetDraggingRef.current = null;
+    }
+  }
+
   function onPointerDown(event: React.PointerEvent<HTMLDivElement>) {
     // 忽略合成事件（triggerModelTap 派发的 pointerdown），避免误触发拖拽
     if (!event.isTrusted || event.button !== 0) {
@@ -584,6 +707,7 @@ export function Live2DWidget() {
       origTop: wrapper.offsetTop,
     };
     setDragging(true);
+    startDragFlutter();
     document.body.style.cursor = "grabbing";
     document.body.style.userSelect = "none";
     document.body.dataset.live2dDragging = "true";
@@ -616,6 +740,7 @@ export function Live2DWidget() {
       }
       dragStateRef.current = null;
       setDragging(false);
+      stopDragFlutter();
       document.body.style.cursor = "";
       document.body.style.userSelect = "";
       delete document.body.dataset.live2dDragging;
@@ -661,9 +786,9 @@ export function Live2DWidget() {
         className="fixed bottom-2 z-40"
         style={{ ...positionStyle, ...(hidden ? { display: "none" } : {}) }}
       >
-        <div className={`flex items-end gap-2 ${dragging ? "pointer-events-none" : ""}`}>
+        <div className={`flex items-end gap-1 ${dragging ? "pointer-events-none" : ""}`}>
           {/* 竖排工具栏：首页 / 聊天 / 投喂 / 隐藏（从上到下） */}
-          <div className="relative flex flex-col items-center gap-1.5">
+          <div className="relative flex flex-col items-center gap-1">
             {showFood && !error ? (
               <div className="absolute right-full top-1/2 mr-2 flex -translate-y-1/2 flex-col gap-1 rounded-2xl border border-black/10 bg-w p-1.5 shadow dark:border-white/10">
                 {FOODS.map((food) => (
@@ -705,7 +830,7 @@ export function Live2DWidget() {
               aria-label={t("theme.live2d.feed.button")}
               title={t("theme.live2d.feed.button")}
             >
-              <i className="ri-spoon-line" />
+              <i className="ri-restaurant-line" />
             </button>
             <button
               type="button"

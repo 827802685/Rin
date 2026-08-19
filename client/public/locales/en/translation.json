@@ -890,8 +890,10 @@
         "yum1": "Wow! Thanks for feeding me, it's delicious~",
         "yum2": "Mmm, so sweet! I love it!",
         "yum3": "So happy, one more bite please~",
-        "cake": "The cake is really tasty!",
-        "generic": "So delicious!"
+        "cake": "The cake is really tasty, so soft and sweet~",
+        "donut": "The donut is amazing, frosting stuck to my lips~",
+        "fish": "Fresh sashimi, melts in my mouth, one more slice please~",
+        "dessert": "The pudding is silky smooth, so comforting~"
       },
       "error": {
         "webgl": "WebGL is not supported in this browser, so the Live2D model cannot be rendered",
