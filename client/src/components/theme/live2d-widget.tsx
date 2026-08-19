@@ -862,21 +862,25 @@ export function Live2DWidget() {
       `#live2d{width:100% !important;height:100% !important;position:relative;display:block;`,
       `opacity:0;transition:opacity .4s ease;}`,
       `#live2d.rin-live2d-ready{opacity:1;}`,
-      // 气泡：浮在模型上方，淡蓝色半透明背景（保持透明效果，仅改颜色为淡蓝）
+      // 气泡：浮在模型上方，淡蓝色半透明背景（保持透明效果，仅改颜色为淡蓝）。
+      // 注意：插件 waifu.css 在覆盖样式之后加载，且选择器特异性相同（都是 #waifu-tips），
+      // 因此这里所有属性都必须带 !important，否则会被插件默认的米色样式覆盖。
       `#waifu-tips{position:absolute !important;bottom:100% !important;left:50% !important;`,
       `transform:translateX(-50%) !important;margin:0 0 8px !important;`,
-      `width:max-content !important;max-width:220px;min-height:0 !important;`,
-      `background:rgba(186,225,248,.92);border:1px solid rgba(90,176,232,.45);`,
-      `border-radius:12px;box-shadow:0 4px 16px rgba(90,176,232,.28);`,
-      `color:#2a4a6b;font-size:12px;line-height:1.5;padding:6px 10px;opacity:0;`,
-      `transition:opacity .2s;z-index:20;pointer-events:none;text-align:center;`,
+      `width:max-content !important;max-width:220px !important;min-height:0 !important;`,
+      `background:rgba(186,225,248,.92) !important;border:1px solid rgba(90,176,232,.45) !important;`,
+      `border-radius:12px !important;box-shadow:0 4px 16px rgba(90,176,232,.28) !important;`,
+      `color:#2a4a6b !important;font-size:12px !important;line-height:1.5 !important;`,
+      `padding:6px 10px !important;opacity:0 !important;`,
+      `transition:opacity .2s !important;z-index:20 !important;pointer-events:none !important;`,
+      `text-align:center !important;`,
       `animation:none !important;overflow:visible !important;text-overflow:clip !important;`,
       `word-break:normal !important;}`,
-      `[data-color-mode="dark"] #waifu-tips{background:rgba(46,84,120,.9);`,
-      `border-color:rgba(120,180,230,.35);color:#dceaf7;}`,
-      `#waifu-tips.waifu-tips-active{opacity:1;}`,
-      `#waifu-tips span{color:#2a4a6b;}`,
-      `[data-color-mode="dark"] #waifu-tips span{color:#dceaf7;}`,
+      `[data-color-mode="dark"] #waifu-tips{background:rgba(46,84,120,.9) !important;`,
+      `border-color:rgba(120,180,230,.35) !important;color:#dceaf7 !important;}`,
+      `#waifu-tips.waifu-tips-active{opacity:1 !important;}`,
+      `#waifu-tips span{color:#2a4a6b !important;}`,
+      `[data-color-mode="dark"] #waifu-tips span{color:#dceaf7 !important;}`,
       // 工具列与开关交给 React 按钮
       `#waifu-tool,#waifu-toggle{display:none !important}`,
     ].join("\n");
@@ -982,6 +986,10 @@ export function Live2DWidget() {
 
         // 3) 加载样式与插件脚本（均为判重，可安全重复挂载）
         await loadStylesheet(WIDGET_CSS);
+        // 插件 waifu.css 加载完成后，把我们的覆盖样式重新追加到 <head> 末尾，
+        // 确保它在 DOM 顺序上位于插件样式之后（配合 !important 双保险，避免被米色默认样式覆盖）。
+        document.getElementById(OVERRIDE_STYLE_ID)?.remove();
+        document.head.appendChild(overrideStyle);
         await loadModuleScript(WIDGET_SCRIPT);
         if (disposed) return;
 
