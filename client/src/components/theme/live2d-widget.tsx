@@ -344,6 +344,28 @@ async function patchLive2dApp(): Promise<boolean> {
     const origRun = AppDelegate.prototype.run;
     AppDelegate.prototype.run = function (this: unknown, ...args: unknown[]) {
       (window as unknown as { __rinLive2dApp?: unknown }).__rinLive2dApp = this;
+      // 兜底：监听 WebGL context lost，阻止默认行为（默认会导致上下文永久丢失），
+      // 让浏览器有机会自动恢复。正常场景下隐藏用的是 visibility 方案不会触发，
+      // 这里仅防止极端情况（GPU 重置/内存压力）下模型永久空白。
+      const bindCtxGuard = () => {
+        const canvas = document.getElementById("live2d");
+        if (!canvas) return false;
+        if (canvas.dataset.rinCtxGuard === "1") return true;
+        canvas.dataset.rinCtxGuard = "1";
+        canvas.addEventListener(
+          "webglcontextlost",
+          (e) => e.preventDefault(),
+          false,
+        );
+        return true;
+      };
+      if (!bindCtxGuard()) {
+        const timer = window.setInterval(() => {
+          if (bindCtxGuard()) {
+            window.clearInterval(timer);
+          }
+        }, 500);
+      }
       return (origRun as (...a: unknown[]) => unknown).apply(this, args);
     };
     return true;
@@ -1240,7 +1262,15 @@ export function Live2DWidget() {
       <div
         ref={outerRef}
         className="fixed bottom-2 z-40"
-        style={{ ...positionStyle, ...(hidden ? { display: "none" } : {}) }}
+        style={{
+          ...positionStyle,
+          // 隐藏时不能用 display:none：canvas 尺寸归零会导致 WebGL 上下文丢失，
+          // 渲染器 update() 因 isContextLost() 直接返回，重新显示后模型无法再渲染。
+          // 改用 visibility+opacity+pointer-events 隐藏，保持 canvas 尺寸与 WebGL 上下文。
+          ...(hidden
+            ? { visibility: "hidden", opacity: 0, pointerEvents: "none" }
+            : {}),
+        }}
       >
         <div className={`flex items-end gap-1 ${dragging ? "pointer-events-none" : ""}`}>
           {/* 竖排工具栏：首页 / 聊天 / 投喂 / 摸一摸 / 动作 / 隐藏（从上到下） */}
