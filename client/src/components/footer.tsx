@@ -32,7 +32,12 @@ function Footer() {
 
         mountedScriptNodesRef.current.forEach((script) => script.remove());
         mountedScriptNodesRef.current = [];
-        container.replaceChildren();
+        // 注意：不能用 container.replaceChildren()，该方法较新（2020），在老内核 WebView
+        // （如智能手表）上不存在会抛 "replaceChildren is not a function"。
+        // 改用 while + removeChild 兼容所有内核。
+        while (container.firstChild) {
+            container.removeChild(container.firstChild);
+        }
 
         if (!footerHtml) {
             return;
