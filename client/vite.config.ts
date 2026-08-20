@@ -1,5 +1,5 @@
 import { defineConfig, type Plugin } from 'vite'
-import { existsSync, createReadStream, statSync } from 'node:fs'
+import { existsSync, readdirSync, createReadStream, statSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { dirname, join, normalize } from 'node:path'
 import react from '@vitejs/plugin-react-swc'
@@ -10,17 +10,34 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 /**
  * Live2D 看板娘本地模型源（仅 dev）。
  *
- * 看板娘插件从远端 CDN 拉 98.9MB 的 moc3/4K 贴图，开发时极慢。这里用一个
- * Vite dev 中间件把本地 models/furina 目录按插件期望的路径结构暴露出来，
- * 让看板娘在开发环境直接读本地文件（毫秒级）。
+ * 看板娘插件从远端 CDN 拉大体积 moc3/4K 贴图，开发时极慢。这里用一个
+ * Vite dev 中间件把本地 models/ 下每个子目录按插件期望的路径结构暴露出来，
+ * 让看板娘在开发环境直接读本地文件（毫秒级），生产构建不受影响（apply:"serve"）。
  *
  * 插件期望的 CDN 结构（与 https://827802685.github.io/Live2D/ 一致）：
- *   <cdnRoot>model_list.json              -> {"messages":[...],"models":["furina"]}
- *   <cdnRoot>model/furina/<FileReferences>  -> furina.model3.json 里引用的各文件
+ *   <cdnRoot>model_list.json              -> {"messages":[...],"models":["<name>", ...]}
+ *   <cdnRoot>model/<name>/index.json      -> 模型配置入口（模型库存量清单）
+ *   <cdnRoot>model/<name>/<FileReferences> -> index.json 里引用的各文件
+ *
  * 我们把 CDN 根指向 http://localhost:<devPort>/rin-live2d-cdn/ 即可命中这里。
+ * 说明：
+ *   - modelsDir 下每个子目录对应一个模型 <name>（目录名即模型名）；
+ *   - 若某模型目录内自带 index.json，则插件直接使用它；
+ *     否则（如 furina 配置文件名是 furina.model3.json）把 index.json 别名映射过去。
  */
 function rinLive2dLocalCdn(): Plugin {
-  const modelsDir = join(__dirname, "../models/furina");
+  const modelsDir = join(__dirname, "../models");
+  // 收集本地模型名（子目录），保持与仓库 models/ 目录一致
+  const modelNames = () => {
+    try {
+      return readdirSync(modelsDir, { withFileTypes: true })
+        .filter((d) => d.isDirectory())
+        .map((d) => d.name)
+        .sort();
+    } catch {
+      return [];
+    }
+  };
   return {
     name: "rin:live2d-local-cdn",
     apply: "serve",
@@ -34,25 +51,39 @@ function rinLive2dLocalCdn(): Plugin {
         } catch {
           target = url.slice("/rin-live2d-cdn/".length);
         }
-        // 根清单：返回单一模型 furina
+        // 根清单：返回本地全部模型（与生产 CDN 保持一致，含 furina 与 BCSZ1.1）
         if (target === "model_list.json") {
           res.setHeader("content-type", "application/json");
-          res.end(JSON.stringify({ messages: ["本地模型加载中 ~"], models: ["furina"] }));
+          res.end(JSON.stringify({ messages: ["本地模型加载中 ~"], models: modelNames() }));
           return;
         }
-        // 模型文件：model/furina/<path>
-        const marker = "model/furina/";
+        // 模型文件：model/<name>/<path>
+        const marker = "model/";
         if (!target.startsWith(marker)) {
           res.statusCode = 404;
           res.end("not found");
           return;
         }
-        // 插件把模型清单里给定的模型名 <name> 映射为 model/<name>/index.json，
-        // 而本地模型配置文件名是 furina.model3.json，这里做一次别名映射。
-        let rel = target.slice(marker.length);
-        if (rel === "index.json") rel = "furina.model3.json";
-        const file = normalize(join(modelsDir, rel));
-        if (!file.startsWith(normalize(modelsDir))) {
+        const afterMarker = target.slice(marker.length); // <name>/<path>
+        const slash = afterMarker.indexOf("/");
+        if (slash < 0) {
+          res.statusCode = 404;
+          res.end("not found");
+          return;
+        }
+        const name = decodeURIComponent(afterMarker.slice(0, slash));
+        const modelDir = normalize(join(modelsDir, name));
+        if (!modelDir.startsWith(normalize(modelsDir) + "/") || !statSync(modelDir, { throwIfNoEntry: false })?.isDirectory()) {
+          res.statusCode = 404;
+          res.end("not found");
+          return;
+        }
+        // 模型配置入口：优先 <name>/index.json，否则别名到 <name>/<name>.model3.json
+        let rel = decodeURIComponent(afterMarker.slice(slash + 1));
+        const model3Index = indexConfigFor(modelDir, name);
+        if (rel === "index.json" && model3Index) rel = model3Index;
+        const file = normalize(join(modelDir, rel));
+        if (!file.startsWith(normalize(modelDir) + "/")) {
           res.statusCode = 403;
           res.end("forbidden");
           return;
@@ -68,7 +99,9 @@ function rinLive2dLocalCdn(): Plugin {
             ? "application/json"
             : file.endsWith(".png")
               ? "image/png"
-              : "application/octet-stream";
+              : file.endsWith(".wav") || file.endsWith(".mp3")
+                ? "audio/wav"
+                : "application/octet-stream";
         res.setHeader("content-type", mime);
         res.setHeader("cache-control", "no-store");
         res.setHeader("content-length", String(statSync(file).size));
@@ -77,6 +110,13 @@ function rinLive2dLocalCdn(): Plugin {
       });
     },
   };
+}
+
+// 若模型目录内没有 index.json，则把配置文件名规约为 <name>.model3.json（如 furina）
+function indexConfigFor(modelDir: string, name: string): string | null {
+  if (existsSync(join(modelDir, "index.json"))) return null;
+  const rel = `${name}.model3.json`;
+  return existsSync(join(modelDir, rel)) ? rel : null;
 }
 
 /**

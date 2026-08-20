@@ -16,14 +16,14 @@ import { ClientConfigContext } from "../../state/config";
  *   - 悬停身体：渲染器派发 live2d:hoverbody → 插件在 #waifu-tips 显示气泡；
  *   - 点击模型：渲染器播放 TapBody 动作/表情并派发 live2d:tapbody → 插件显示气泡；
  *   - 空闲/复制/切页：插件按 waifu-tips.json 定时显示气泡；
- *   - 投喂/摸一摸按钮：通过合成 pointerdown 触发模型真实动作 + showTips 显示自定义气泡。
+ *   - 换模型/摸一摸按钮：通过合成 pointerdown 触发模型真实动作 + showTips 显示自定义气泡。
  *
  * 与 Demo 的差异（为适配博客）：
  *   - 模型源：优先 github.io 直连（实测最快、同源 CORS），失败自动回退加速代理；
  *   - 隐藏插件自带的 #waifu-tool（工具列）与 #waifu-toggle（开关），交互交给 React 按钮；
  *   - 气泡复用插件的 #waifu-tips，仅重写样式贴合博客主题（蓝色气泡）；
  *   - 不加载 config-panel.js（参数面板），保持博客干净；
- *   - 保留 React 外壳：文件夹拖拽、投喂/摸一摸/隐藏按钮、加载进度、错误提示。
+ *   - 保留 React 外壳：文件夹拖拽、换模型/摸一摸/隐藏按钮、加载进度、错误提示。
  *
  * 本版本针对用户反馈做的优化：
  *   1. 衣服重力飘动：拖动时用真实指针速度驱动模型拖拽参数（替代原假正弦波），
@@ -33,7 +33,7 @@ import { ClientConfigContext } from "../../state/config";
  *   4. 透明区域点击穿透：点击画布时读取该点像素 alpha，透明则把点击透传给后面的元素；
  *   5. 新增动作：摸摸/挥手/摇头/跳舞（JS 驱动参数动画），并修复点击/悬停/表情轮播
  *      （原模型配置缺少 HitAreas 导致原生命中检测永远失败，动作从未真正触发）；
- *   6. 投喂保留 + 新增摸摸按钮；
+ *   6. 换模型按钮：支持在 furina / BCSZ1.1 之间切换（复用插件 modelId 机制）；
  *   7. 对话框改为蓝色；
  *   8. 渲染门控：模型完整加载（CompleteSetup）前不显示模型，避免露出半成品；
  *   9. 颈部错位：支持通过 widget.live2d.layout 注入 Layout 微调模型位置/缩放。
@@ -58,11 +58,12 @@ const CDN_CANDIDATES = [
   "https://raw-githubusercontent-com-gh.zjkl0330.dpdns.org/827802685/Live2D/refs/heads/master/",
 ];
 
-// 首次加载模型文件总字节数（moc3 95MB + 4K 贴图 8MB + physics + cdi + idle 动作），作为进度分母
-const EXPECTED_TOTAL = 103740290;
-
-// 模型文件清单（用于预取最大文件；与 CDN model/furina/index.json 的 FileReferences 对应）
-const MODEL_FILES = ["furina.moc3", "furina.8192/texture_00.png"];
+// 各模型首次加载的核心文件总字节数（moc3 + 贴图 + physics + cdi + 配置），作为进度分母。
+// furina：moc3 95MB + 4K 贴图 8MB + 其余；BCSZ1.1：贴图 13.9MB + moc3 1.28MB + 其余（约 22.6MB）
+const EXPECTED_TOTAL_BY_NAME: Record<AvatarModel, number> = {
+  furina: 103740290,
+  "BCSZ1.1": 22639505,
+};
 
 // 透明像素判定阈值：alpha 低于该值视为"透明区域"，点击透传给后面的元素
 const CLICK_ALPHA_THRESHOLD = 16;
@@ -95,12 +96,16 @@ const CSS_MARK = "rin-live2d-widget--css";
 const SCRIPT_MARK = "rin-live2d-widget--script";
 const OVERRIDE_STYLE_ID = "rin-live2d-widget--override";
 
-const FOODS = [
-  { key: "cake", icon: "🍰" },
-  { key: "donut", icon: "🍩" },
-  { key: "fish", icon: "🍣" },
-  { key: "dessert", icon: "🍮" },
-];
+// 看板娘可选模型（与 CDN model_list.json 的 models 顺序一致，供"换模型"切换）。
+// 名字即 CDN 模型目录名；展示名用 i18n（theme.live2d.switch.<name>）。
+const AVATAR_MODELS = ["furina", "BCSZ1.1"] as const;
+type AvatarModel = (typeof AVATAR_MODELS)[number];
+
+// 各模型的核心大文件（用于预取，加速首次加载）
+const MODEL_FILES_BY_NAME: Record<AvatarModel, string[]> = {
+  furina: ["furina.moc3", "furina.8192/texture_00.png"],
+  "BCSZ1.1": ["BCSZ1.1.moc3", "textures/texture_00.png"],
+};
 
 // 芙宁娜聊天人设：注入给设置里绑定的 AI，让它以芙宁娜的口吻回复
 const FURINA_SYSTEM_PROMPT =
@@ -422,9 +427,10 @@ type ProgressState = { loaded: number; total: number };
  */
 function installProgressTracker(
   onProgress: (p: ProgressState) => void,
+  total: number,
   layoutConfig?: Record<string, number> | null,
 ): () => void {
-  const state: ProgressState = { loaded: 0, total: EXPECTED_TOTAL };
+  const state: ProgressState = { loaded: 0, total };
   const origFetch = window.fetch.bind(window);
   // 已开始计数的 URL（同一文件只计一次，避免预取 + 插件加载重复计数）
   const countingUrls = new Set<string>();
@@ -536,11 +542,12 @@ async function pickCdnRoot(): Promise<string> {
   return CDN_CANDIDATES[0];
 }
 
-// 探测到 CDN 根地址后立即并行预取最大的模型文件（moc3/贴图），
+// 探测到 CDN 根地址后立即并行预取当前模型的核心文件（moc3/贴图），
 // 不等插件脚本加载；插件稍后请求同一 URL 时命中浏览器/SW 缓存。
-function prefetchModel(cdnRoot: string) {
-  const base = `${cdnRoot}model/furina/`;
-  for (const file of MODEL_FILES) {
+function prefetchModel(cdnRoot: string, name: AvatarModel) {
+  const base = `${cdnRoot}model/${name}/`;
+  const files = MODEL_FILES_BY_NAME[name] ?? [];
+  for (const file of files) {
     fetch(`${base}${file}`, { mode: "cors" }).catch(() => {
       // 预取失败不阻塞主流程
     });
@@ -643,8 +650,10 @@ export function Live2DWidget() {
   const [rendered, setRendered] = useState(false);
   const [progress, setProgress] = useState<ProgressState | null>(null);
   const [dragging, setDragging] = useState(false);
-  const [feeding, setFeeding] = useState(false);
-  const [showFood, setShowFood] = useState(false);
+  const [showModelPicker, setShowModelPicker] = useState(false);
+  const [activeModel, setActiveModel] = useState<AvatarModel>("furina");
+  // 模型版本号：切换模型时自增，作为外层 key 强制重挂载组件以加载新模型
+  const [modelVersion, setModelVersion] = useState(0);
   const [showActions, setShowActions] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
   const [chatMessages, setChatMessages] = useState<AIChatMessage[]>([]);
@@ -717,40 +726,25 @@ export function Live2DWidget() {
   }
 
   /**
-   * 触发模型点击动作。原实现依赖渲染器的 onTap → hitTest（需要模型配置 HitAreas），
-   * 但该模型配置缺少 HitAreas，导致命中检测永远失败、动作从未真正触发。
-   * 这里改为直接调用模型 API：播放 TapBody 动作（变芒/变荒）+ 随机表情。
+   * 切换看板娘模型。
    *
-   * 注意：CDN 的 tap.motion3.json 内部 Loop:true，动作会无限循环播放，
-   * 导致模型一直保持变身状态不恢复（渲染器因动作未结束也不会回到 Idle）。
-   * 因此在动作时长（1.6s）后强制停止动作与表情，让渲染器自动回到待机。
+   * 插件通过 localStorage 的 "modelId"（对应 model_list.json 的 models 下标）决定加载哪个模型，
+   * 且只在 initWidget 初始化时读取一次。因此切换模型 = 更新 modelId 后强制重挂载本组件，
+   * 让 useEffect 重新走一遍"探测 CDN → 预取 → initWidget"流程，加载新模型。
    */
-  function triggerModelTap() {
-    const model = getLive2dModel();
-    if (!model) return;
+  function switchModel(name: AvatarModel) {
+    const nextIndex = AVATAR_MODELS.indexOf(name);
+    if (nextIndex < 0) return;
     try {
-      model.startRandomMotion?.("TapBody", 2);
-      model.setRandomExpression?.();
-      window.setTimeout(() => {
-        try {
-          model._motionManager?.stopAllMotions?.();
-          model._expressionManager?.stopAllMotions?.();
-        } catch {
-          // ignore
-        }
-      }, 1700);
+      localStorage.setItem("modelId", String(nextIndex));
     } catch {
       // ignore
     }
-  }
-
-  function feedModel(item: { key: string; icon: string }) {
-    // 触发模型真实动作（播放 TapBody + 随机表情），再显示对应食物的专属文案
-    triggerModelTap();
-    showTips(t(`theme.live2d.feed.${item.key}`), 3600);
-    setShowFood(false);
-    setFeeding(true);
-    window.setTimeout(() => setFeeding(false), 500);
+    setActiveModel(name);
+    setShowModelPicker(false);
+    setModelVersion((v) => v + 1);
+    // 提示切换中，稍后新模型就绪时气泡会被覆盖
+    showTips(t("theme.live2d.switch.switching"), 3000);
   }
 
   function petModel() {
@@ -855,8 +849,10 @@ export function Live2DWidget() {
       localStorage.removeItem("waifu-disabled");
       localStorage.removeItem("waifu-display");
       sessionStorage.removeItem("waifu-message-priority");
-      // model 总数 = 1（models:[furina]），显式把 modelId 固定为 0，避免历史遗留值越界
-      localStorage.setItem("modelId", "0");
+      // 读取当前选中的模型下标（默认 0 = furina）；切换模型时由 switchModel 写入
+      const saved = Number(localStorage.getItem("modelId") ?? "0");
+      const idx = Number.isFinite(saved) && saved >= 0 && saved < AVATAR_MODELS.length ? saved : 0;
+      localStorage.setItem("modelId", String(idx));
     } catch {
       // ignore
     }
@@ -936,6 +932,7 @@ export function Live2DWidget() {
         lastProgressAtRef.current = Date.now();
         if (!disposed) setProgress(p);
       },
+      EXPECTED_TOTAL_BY_NAME[activeModel],
       layoutConfig,
     );
 
@@ -1021,9 +1018,9 @@ export function Live2DWidget() {
         const cdnRoot = await pickCdnRoot();
         if (disposed) return;
 
-        // 2) 探测到根地址后立即并行预取最大的模型文件（moc3/贴图），
-        //    不等插件脚本加载，让 91MB 的 moc3 尽早开始下载
-        prefetchModel(cdnRoot);
+        // 2) 探测到根地址后立即并行预取当前模型的核心文件（moc3/贴图），
+        //    不等插件脚本加载，让大体积 moc3 尽早开始下载
+        prefetchModel(cdnRoot, activeModel);
 
         // 3) 加载样式与插件脚本（均为判重，可安全重复挂载）
         await loadStylesheet(WIDGET_CSS);
@@ -1053,7 +1050,7 @@ export function Live2DWidget() {
           cubism2Path: CUBISM2_PATH,
           cubism5Path: CUBISM5_PATH,
           tools: TOOLS,
-          modelId: 0,
+          modelId: AVATAR_MODELS.indexOf(activeModel),
           logLevel: "info",
           // 插件自带拖拽关闭，交给 React 文件夹拖拽统一处理
           drag: false,
@@ -1105,9 +1102,10 @@ export function Live2DWidget() {
         // ignore
       }
     };
-    // 仅在挂载时加载一次；组件内部 re-render（隐藏/拖动等）不重载插件
+    // 挂载时加载一次；切换模型（modelVersion 自增）时重新加载插件以加载新模型。
+    // 组件内部 re-render（隐藏/拖动等）不重载插件
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [modelVersion]);
 
   /**
    * 拖动时驱动衣服/头发飘动的物理：接管模型的 setDragging，用真实指针速度喂值，
@@ -1323,20 +1321,27 @@ export function Live2DWidget() {
         }}
       >
         <div className={`flex items-end gap-1 ${dragging ? "pointer-events-none" : ""}`}>
-          {/* 竖排工具栏：首页 / 聊天 / 投喂 / 摸一摸 / 动作 / 隐藏（从上到下） */}
+          {/* 竖排工具栏：首页 / 聊天 / 换模型 / 摸一摸 / 动作 / 隐藏（从上到下） */}
           <div className="relative flex flex-col items-center gap-1">
-            {showFood && !error ? (
+            {showModelPicker && !error ? (
               <div className="absolute right-full top-1/2 mr-2 flex -translate-y-1/2 flex-col gap-1 rounded-2xl border border-black/10 bg-w p-1.5 shadow dark:border-white/10">
-                {FOODS.map((food) => (
+                {AVATAR_MODELS.map((name) => (
                   <button
-                    key={food.key}
+                    key={name}
                     type="button"
-                    onClick={() => feedModel(food)}
-                    className="flex h-8 w-8 items-center justify-center rounded-full text-base transition hover:scale-110 hover:bg-neutral-100 dark:hover:bg-white/10"
-                    aria-label={t("theme.live2d.feed.food", { food: t(`theme.live2d.feed.name.${food.key}`) })}
-                    title={t(`theme.live2d.feed.name.${food.key}`)}
+                    onClick={() => switchModel(name)}
+                    className={`flex h-8 items-center gap-2 rounded-full px-3 text-sm transition hover:bg-neutral-100 dark:hover:bg-white/10 ${
+                      name === activeModel ? "text-theme" : "t-muted"
+                    }`}
+                    aria-label={t(`theme.live2d.switch.${name}`)}
+                    title={t(`theme.live2d.switch.${name}`)}
                   >
-                    {food.icon}
+                    <i
+                      className={
+                        name === "furina" ? "ri-water-flash-line" : "ri-fox-line"
+                      }
+                    />
+                    <span>{t(`theme.live2d.switch.${name}`)}</span>
                   </button>
                 ))}
               </div>
@@ -1385,12 +1390,12 @@ export function Live2DWidget() {
             </button>
             <button
               type="button"
-              onClick={() => setShowFood((value) => !value)}
-              className={`rounded-full bg-w p-2 text-sm shadow transition ${showFood ? "text-theme" : "t-muted hover:text-theme"}`}
-              aria-label={t("theme.live2d.feed.button")}
-              title={t("theme.live2d.feed.button")}
+              onClick={() => setShowModelPicker((value) => !value)}
+              className={`rounded-full bg-w p-2 text-sm shadow transition ${showModelPicker ? "text-theme" : "t-muted hover:text-theme"}`}
+              aria-label={t("theme.live2d.switch.button")}
+              title={t("theme.live2d.switch.button")}
             >
-              <i className="ri-restaurant-line" />
+              <i className="ri-refresh-line" />
             </button>
             <button
               type="button"
@@ -1521,12 +1526,6 @@ export function Live2DWidget() {
               ) : null}
             </div>
           )}
-
-          {feeding ? (
-            <div className="pointer-events-none text-3xl transition-all duration-500">
-              <i className="ri-heart-3-fill text-theme" />
-            </div>
-          ) : null}
         </div>
       </div>
     </>
