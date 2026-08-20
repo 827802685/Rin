@@ -23,6 +23,7 @@ export const CLIENT_CONFIG_DEFAULTS = new Map(
     "widget.live2d.model": "https://raw-githubusercontent-com-gh.zjkl0330.dpdns.org/827802685/Live2D/refs/heads/master/model/furina/furina.model3.json",
     "widget.live2d.scale": 1,
     "widget.live2d.layout": "",
+    "widget.live2d.edge": false,
     "widget.cursor.enabled": false,
     "widget.cursor.default": "/cursors/furina/normal.png",
     "widget.cursor.pointer": "/cursors/furina/link.png",

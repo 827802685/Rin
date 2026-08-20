@@ -49,8 +49,11 @@ const CUBISM5_PATH = `${DIST}live2dcubismcore.min.js`;
 // 渲染器 chunk（AppDelegate 所在模块），用于捕获模型实例以驱动衣服/头发物理
 const CHUNK_URL = `${DIST}chunk/index2.js`;
 
-// 模型根地址候选：优先 github.io 直连（实测最快、同源 CORS），失败回退加速代理（Demo 默认）
+// 模型根地址候选：优先本地（dev，Vite 中间件提供，毫秒级），其次 github.io 直连，
+// 最后回退加速代理（Demo 默认）。
 const CDN_CANDIDATES = [
+  // dev 环境下由 vite.config.ts 的 rinLive2dLocalCdn 中间件提供本地模型文件
+  ...(import.meta.env.DEV ? [`${location.origin}/rin-live2d-cdn/`] : []),
   "https://827802685.github.io/Live2D/",
   "https://raw-githubusercontent-com-gh.zjkl0330.dpdns.org/827802685/Live2D/refs/heads/master/",
 ];
@@ -65,6 +68,14 @@ const MODEL_FILES = ["furina.moc3", "furina.8192/texture_00.png"];
 const CLICK_ALPHA_THRESHOLD = 16;
 // 点击 vs 拖拽的判定阈值（像素）
 const DRAG_START_THRESHOLD = 6;
+
+// ---- 趴在屏幕边缘（edgeRest）模式参数 ----
+// 实现思路：模型整体放大并锚定在底部中心，再用 clip-path 把下半身"裁到屏幕外"，
+// 只露出上半身，配合底部一条"桌面边缘"高光，看起来像双手搭在屏幕底边。
+// 因为裁的是 #live2d 画布本身，不会影响浮在上方的 #waifu-tips 气泡。
+const EDGE_SCALE = 1.45; // 放大倍数
+const EDGE_CLIP_TOP = "10%"; // 顶部裁掉的比例（去掉超出画面的头顶）
+const EDGE_CLIP_BOTTOM = "32%"; // 底部裁掉的比例（隐藏下半身/腿）
 
 // initWidget 的配置结构（对应 stevenjoezhang/live2d-widget 的 dist/autoload.js）
 type InitWidgetConfig = {
@@ -674,6 +685,10 @@ export function Live2DWidget() {
   const rawScale = Number(config.get("widget.live2d.scale") ?? 1);
   // 防止配置被误调成超大值导致模型挡住整个页面：限制在安全范围内
   const scaleValue = Number.isFinite(rawScale) ? Math.min(Math.max(rawScale, 0.1), 2) : 1;
+  // 趴在屏幕边缘模式：仅显示模型上半身，双手像趴在桌面一样搭在屏幕底部边缘
+  const edgeRest =
+    config.get<boolean>("widget.live2d.edge") === true ||
+    config.get<string>("widget.live2d.edge")?.toString().trim().toLowerCase() === "true";
   // 颈部/位置微调：widget.live2d.layout（JSON），注入模型配置的 Layout 段
   const layoutConfig = parseLayoutConfig(String(config.get("widget.live2d.layout") ?? ""));
 
@@ -847,9 +862,11 @@ export function Live2DWidget() {
     }
 
     // ---- 注入我们自己的覆盖样式：把插件 #waifu 定位进 React 容器，气泡改为蓝色 ----
+    // 先创建覆盖样式元素（可重复挂载，后续在插件样式之后会再重挂一次保证优先级）
     const overrideStyle = document.createElement("style");
     overrideStyle.id = OVERRIDE_STYLE_ID;
-    overrideStyle.textContent = [
+
+    const rules = [
       `#${OVERRIDE_STYLE_ID}{}`,
       // 模型容器：占满 React 容器，取消插件默认的 fixed 定位与过渡
       `#waifu{position:absolute !important;top:0;left:0;bottom:auto !important;`,
@@ -883,7 +900,31 @@ export function Live2DWidget() {
       `[data-color-mode="dark"] #waifu-tips span{color:#dceaf7 !important;}`,
       // 工具列与开关交给 React 按钮
       `#waifu-tool,#waifu-toggle{display:none !important}`,
-    ].join("\n");
+    ];
+    // 趴在屏幕边缘：放大模型 + 裁掉下半身 + 底部画一条"桌面边缘"高光
+    if (edgeRest) {
+      rules.push(
+        // 容器底部对齐屏幕底边，模型整体放大并锚定底部
+        `#waifu{bottom:0 !important;transform:none !important;}`,
+        `#live2d{transform:scale(${EDGE_SCALE});transform-origin:50% 100%;`,
+        `clip-path:inset(${EDGE_CLIP_TOP} 0 ${EDGE_CLIP_BOTTOM} 0);}`,
+        // 桌面边缘：模型下方一条细高光，模拟桌面反射/厚度
+        `#waifu::after{content:"";position:absolute;left:0;right:0;bottom:0;`,
+        `height:10px;background:linear-gradient(180deg,rgba(0,0,0,0) 0%,`,
+        `rgba(255,255,255,.25) 40%,rgba(0,0,0,.12) 100%);`,
+        `pointer-events:none;z-index:1;}`,
+        `[data-color-mode="dark"] #waifu::after{`,
+        `background:linear-gradient(180deg,rgba(0,0,0,0) 0%,`,
+        `rgba(255,255,255,.08) 40%,rgba(0,0,0,.35) 100%);}`,
+      );
+      // 桌面横条视觉（比高光更明显）：画一条横贯容器底部的"桌沿"线
+      rules.push(
+        `#waifu::before{content:"";position:absolute;left:0;right:0;bottom:10px;`,
+        `height:2px;background:rgba(120,180,230,.35);`,
+        `pointer-events:none;z-index:1;}`,
+      );
+    }
+    overrideStyle.textContent = rules.join("\n");
     document.head.appendChild(overrideStyle);
 
     // ---- 复刻 Demo：给图片加载统一加 crossOrigin ----
