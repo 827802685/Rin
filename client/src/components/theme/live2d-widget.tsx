@@ -652,8 +652,15 @@ export function Live2DWidget() {
   const [dragging, setDragging] = useState(false);
   const [showModelPicker, setShowModelPicker] = useState(false);
   const [activeModel, setActiveModel] = useState<AvatarModel>("furina");
-  // 模型版本号：切换模型时自增，作为外层 key 强制重挂载组件以加载新模型
+  // 回退用的模型版本号（仅当渲染器实例不可用时才重挂载组件）：
+  // 切换模型时自增，作为外层 key 强制重挂载组件以加载新模型。
   const [modelVersion, setModelVersion] = useState(0);
+  // 当前生效模型的 CDN 根地址（initWidget 探测成功后写入，供切换模型拼接 index.json）
+  const cdnRootRef = useRef<string>("");
+  // 渲染"就绪门控"轮询的启动 / 停止句柄（首屏与切换模型共用，切换会复用同一个
+  // WebGL 渲染器实例并重新轮询，彻底避免"重挂载组件 → 第二个 WebGL 上下文"的隐患）
+  const readyPollStartRef = useRef<(() => void) | null>(null);
+  const readyPollStopRef = useRef<(() => void) | null>(null);
   const [showActions, setShowActions] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
   const [chatMessages, setChatMessages] = useState<AIChatMessage[]>([]);
@@ -728,9 +735,14 @@ export function Live2DWidget() {
   /**
    * 切换看板娘模型。
    *
-   * 插件通过 localStorage 的 "modelId"（对应 model_list.json 的 models 下标）决定加载哪个模型，
-   * 且只在 initWidget 初始化时读取一次。因此切换模型 = 更新 modelId 后强制重挂载本组件，
-   * 让 useEffect 重新走一遍"探测 CDN → 预取 → initWidget"流程，加载新模型。
+   * 首选方案：复用已就绪的 Cubism5 渲染器实例（plugin 已挂到 window.__rinLive2dApp，
+   * 它来自 chunk/index2.js 的 AppDelegate），直接调用其 changeModel(index.json URL)。
+   * 这是 live2d-widget 插件内部 loadModel 用的原生切换方式：模型 moc3/贴图/物理/动作
+   * 由渲染器按 index.json 的 FileReferences 重新拉取，并复用同一个 WebGL 上下文渲染，
+   * 不会产生第二个实例，也不依赖 model_list.json 的 models 下标（即使生产 CDN 的
+   * model_list 尚未更新出新模型，只要 model/<name>/index.json 可访问就能切换）。
+   *
+   * 兜底方案：仅当渲染器实例尚未就绪时，才走"更新 modelId + 重挂载组件"的老路径。
    */
   function switchModel(name: AvatarModel) {
     const nextIndex = AVATAR_MODELS.indexOf(name);
@@ -742,9 +754,31 @@ export function Live2DWidget() {
     }
     setActiveModel(name);
     setShowModelPicker(false);
-    setModelVersion((v) => v + 1);
-    // 提示切换中，稍后新模型就绪时气泡会被覆盖
     showTips(t("theme.live2d.switch.switching"), 3000);
+
+    const app = (window as unknown as { __rinLive2dApp?: unknown })
+      .__rinLive2dApp;
+    const canChange = app && typeof (app as { changeModel?: unknown }).changeModel === "function";
+    // 渲染器就绪且已知道 CDN 根地址 → 复用实例直接换模型
+    if (canChange && cdnRootRef.current) {
+      // 收起当前模型，显示加载态，等待新模型就绪后淡入
+      renderedRef.current = false;
+      setRendered(false);
+      setError(null);
+      document.getElementById("live2d")?.classList.remove("rin-live2d-ready");
+      const indexUrl = `${cdnRootRef.current}model/${name}/index.json`;
+      try {
+        (app as { changeModel: (u: string) => void }).changeModel(indexUrl);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : String(err));
+        return;
+      }
+      // 重新开启"就绪门控"轮询，等新模型 CompleteSetup 后淡入
+      readyPollStartRef.current?.();
+      return;
+    }
+    // 兜底：渲染器还没就绪，退回重挂载组件重新 initWidget
+    setModelVersion((v) => v + 1);
   }
 
   function petModel() {
@@ -941,30 +975,50 @@ export function Live2DWidget() {
     // 用共享 Promise 保证 initWidget 前补丁已就绪，避免插件先创建实例导致动作/物理失效。
     const patchPromise = patchLive2dApp();
 
-    // ---- 渲染门控：轮询模型状态，CompleteSetup(22) 后才放行模型 ----
+    // ---- 渲染"就绪门控"：轮询模型状态，CompleteSetup(22) 后才放行 ----
     // 原实现监听 live2d:rendered（渲染循环一启动就触发，并非模型真正渲染完成），
     // 导致遮罩过早消失、露出没加载完的模型。改为轮询模型实例状态更准确。
-    const modelReadyTimer = window.setInterval(() => {
-      if (disposed || renderedRef.current) {
-        window.clearInterval(modelReadyTimer);
-        return;
+    // 该逻辑同时服务首屏与"切换模型"（切换后复用同一个渲染器实例，只是把画布收起、
+    // 重新开启轮询、等新模型就绪后再淡入），因此封装成 start/stop 并注册到 ref 供
+    // switchModel 调用；每次 start 前都会 stop 掉上一个轮询，避免重复 interval。
+    let readyPollTimer: number | undefined;
+    const stopReadyPoll = () => {
+      if (readyPollTimer) {
+        window.clearInterval(readyPollTimer);
+        readyPollTimer = undefined;
       }
-      const model = getLive2dModel();
-      if (model && model._state === 22) {
-        renderedRef.current = true;
-        setRendered(true);
-        setError(null);
-        // 就绪后给画布加"已就绪"类，淡入模型
-        document.getElementById("live2d")?.classList.add("rin-live2d-ready");
-        // 给模型实例包一层 update，注入动作参数动画
-        patchModelForActions(model);
-        // 模型就绪后打个招呼（挥手）
-        window.setTimeout(() => {
-          if (!disposed) playAction("wave");
-        }, 800);
-        window.clearInterval(modelReadyTimer);
-      }
-    }, 300);
+    };
+    const startReadyPoll = () => {
+      stopReadyPoll();
+      // 从 start 起的"预热窗口"内先不判就绪：切换模型时 changeModel 需要一点时间
+      // 重置内部模型状态，避免轮询把还未真正切换的旧模型（_state 仍为 22）误判为就绪。
+      const gatedAt = Date.now();
+      readyPollTimer = window.setInterval(() => {
+        if (disposed || renderedRef.current) {
+          stopReadyPoll();
+          return;
+        }
+        if (Date.now() - gatedAt < 600) return;
+        const model = getLive2dModel();
+        if (model && model._state === 22) {
+          renderedRef.current = true;
+          setRendered(true);
+          setError(null);
+          // 就绪后给画布加"已就绪"类，淡入模型
+          document.getElementById("live2d")?.classList.add("rin-live2d-ready");
+          // 给当前模型实例包一层 update，注入动作参数动画
+          patchModelForActions(model);
+          // 模型就绪后打个招呼（挥手）
+          window.setTimeout(() => {
+            if (!disposed) playAction("wave");
+          }, 800);
+          stopReadyPoll();
+        }
+      }, 300);
+    };
+    readyPollStartRef.current = startReadyPoll;
+    readyPollStopRef.current = stopReadyPoll;
+    startReadyPoll();
 
     // ---- 兜底：下载停滞（连续 2 分钟无进展且未渲染）时提示用户 ----
     const stallTimer = window.setInterval(() => {
@@ -1016,6 +1070,7 @@ export function Live2DWidget() {
 
         // 1) 探测可用的模型源（github.io 优先，失败回退代理）
         const cdnRoot = await pickCdnRoot();
+        cdnRootRef.current = cdnRoot;
         if (disposed) return;
 
         // 2) 探测到根地址后立即并行预取当前模型的核心文件（moc3/贴图），
@@ -1069,7 +1124,7 @@ export function Live2DWidget() {
 
     return () => {
       disposed = true;
-      window.clearInterval(modelReadyTimer);
+      readyPollStopRef.current?.();
       window.clearInterval(stallTimer);
       window.clearInterval(idleTimer);
       window.removeEventListener("pointermove", onWindowMoveRef.current);
