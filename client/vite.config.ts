@@ -30,17 +30,22 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
  */
 function rinLive2dLocalCdn(): Plugin {
   const modelsDir = join(__dirname, "../models");
-  // 收集本地模型名（子目录），保持与仓库 models/ 目录一致
-  const modelNames = () => {
+  // 漫游模型顺序：必须与前端 live2d-widget.tsx 的 AVATAR_MODELS 完全一致
+  // （["furina","BCSZ1.1"]），不要用目录字典序（会排成 ["BCSZ1.1","furina"]），
+  // 否则插件用 modelId 下标解析模型名会取错。
+  const AVATAR_MODEL_ORDER = ["furina", "BCSZ1.1"];
+  const existsSorted = () => {
     try {
       return readdirSync(modelsDir, { withFileTypes: true })
         .filter((d) => d.isDirectory())
-        .map((d) => d.name)
-        .sort();
+        .map((d) => d.name);
     } catch {
-      return [];
+      return [] as string[];
     }
   };
+  // 收集本地模型名：按前端固定顺序返回，仅保留实际存在的目录
+  const modelNames = () =>
+    AVATAR_MODEL_ORDER.filter((n) => existsSorted().includes(n));
   return {
     name: "rin:live2d-local-cdn",
     apply: "serve",
@@ -192,7 +197,11 @@ function rinLive2dBundledModel(): Plugin {
       cpSync(src, modelDir, { recursive: true });
       writeFileSync(
         join(out, 'model_list.json'),
-        JSON.stringify({ messages: [], models: ['BCSZ1.1'] }),
+        // 注意：models 数组的下标必须与前端 live2d-widget.tsx 的 AVATAR_MODELS 完全一致
+        // （["furina","BCSZ1.1"]），因为插件用 modelId 下标去解析模型名并加载
+        // model/<models[modelId]>/index.json；BCSZ1.1 恒定占下标 1。打包根虽只含
+        // BCSZ1.1 文件，但用户不选 furina 就不会请求它，下标对齐即可正确命中 BCSZ1.1。
+        JSON.stringify({ messages: [], models: ['furina', 'BCSZ1.1'] }),
       );
       console.log('[rin] Live2D 模型已随产物打包: live2d-bundled/');
     },
