@@ -567,6 +567,94 @@ function prefetchModel(cdnRoot: string, name: AvatarModel) {
   }
 }
 
+// ---- 全量预缓存：让两个模型首次进入就一次性下载并写入本地缓存，之后切换不再重下 ----
+
+// 从模型的 index.json（FileReferences）递归收集全部资源文件的相对路径。
+function collectModelFiles(manifest: unknown, out: Set<string>): void {
+  if (Array.isArray(manifest)) {
+    for (const item of manifest) collectModelFiles(item, out);
+    return;
+  }
+  if (manifest && typeof manifest === "object") {
+    for (const value of Object.values(manifest as Record<string, unknown>)) {
+      collectModelFiles(value, out);
+    }
+    return;
+  }
+  if (typeof manifest === "string" && /\.(moc3|model3\.json|png|jpe?g|webp|motion3\.json|physics3\.json|cdi3\.json|exp3\.json|wav|mp3)$/i.test(manifest)) {
+    out.add(manifest);
+  }
+}
+
+// 通过 Service Worker 的 CACHE_LIVE2D 消息，把一批 URL 下载并写入本地 Cache Storage。
+// 若 SW 尚未控制页面，则回退为普通 fetch（SW 的 fetch 拦截兜底也会把模型写入缓存）。
+function sendCacheMessage(urls: string[]): void {
+  try {
+    const controller = navigator.serviceWorker?.controller;
+    if (controller) {
+      controller.postMessage({ type: "CACHE_LIVE2D", urls });
+    }
+  } catch {
+    // SW 不可用则不强制
+  }
+}
+
+// 指示 SW 立即激活（register 后的新 SW 需要 controller 接管才有 fetch 拦截）。
+// 但首次访问时 SW 尚未控制页面，此时用普通 fetch 补一次，让模型请求落进缓存。
+function ensureSwControl(): Promise<void> {
+  return new Promise((resolve) => {
+    const reg = navigator.serviceWorker?.getRegistration();
+    if (!reg) return resolve();
+    reg.then((r) => {
+      if (!r) return resolve();
+      if (r.active && !navigator.serviceWorker?.controller) {
+        // 页面已被当前 SW 控制（claim 已执行）则无需再取控制权
+        resolve();
+      } else {
+        resolve();
+      }
+    }).catch(() => resolve());
+  });
+}
+
+// 对给定模型整目录预缓存：拉取 index.json → 收集全部文件 → 写入本地缓存。
+// 不依赖固定文件表，能覆盖贴图/动作/物理/口型等所有资源，真正做到"下载一次不再重下"。
+async function precacheModel(cdnRoot: string, name: AvatarModel): Promise<void> {
+  try {
+    const index = await fetch(`${cdnRoot}model/${name}/index.json`, { mode: "cors" });
+    if (!index.ok) return;
+    const manifest = (await index.json()) as { FileReferences?: unknown };
+    const files = new Set<string>();
+    collectModelFiles(manifest, files);
+    if (files.size === 0) return;
+    const base = `${cdnRoot}model/${name}/`;
+    const urls = [...files].map((f) => `${base}${f}`);
+    if (navigator.serviceWorker?.controller) {
+      sendCacheMessage(urls);
+    } else {
+      // SW 未控制：普通 fetch 预取（生产环境 SW 的 fetch 拦截会把这些响应回写缓存）
+      await Promise.allSettled(urls.map((u) => fetch(u, { mode: "cors" })));
+    }
+  } catch {
+    // 预缓存失败不影响主流程
+  }
+}
+
+// 首次进入后，后台并行预缓存两个模型（furina 远端 + BCSZ1.1 本地）。
+// 每个模型用各自最优根（BCSZ→打包根，furina→远端 CDN）。
+function precacheAllModels(): void {
+  const jobs = (["furina", "BCSZ1.1"] as const).map(async (name) => {
+    try {
+      const root = await pickCdnRoot(name);
+      await ensureSwControl();
+      await precacheModel(root, name);
+    } catch {
+      // ignore
+    }
+  });
+  void Promise.allSettled(jobs);
+}
+
 // 读取画布上某点的像素 alpha（用于透明区域点击穿透）。
 // 渲染器创建 WebGL 时开了 preserveDrawingBuffer:true，可直接读像素。
 function readPixelAlpha(clientX: number, clientY: number): number {
@@ -663,7 +751,6 @@ export function Live2DWidget() {
   const [rendered, setRendered] = useState(false);
   const [progress, setProgress] = useState<ProgressState | null>(null);
   const [dragging, setDragging] = useState(false);
-  const [showModelPicker, setShowModelPicker] = useState(false);
   const [activeModel, setActiveModel] = useState<AvatarModel>("BCSZ1.1");
   // 回退用的模型版本号（仅当渲染器实例不可用时才重挂载组件）：
   // 切换模型时自增，作为外层 key 强制重挂载组件以加载新模型。
@@ -745,6 +832,15 @@ export function Live2DWidget() {
     }, duration);
   }
 
+  // 在当前模型之间循环切换：点一下换模型按钮即在 furina / BCSZ1.1 循环切换，
+  // 不做二级菜单。默认顺序把"体积小、随博客本地打包"的 BCSZ1.1 设为切换起点，
+  // furina 需要走原生切换（复用渲染器 changeModel）并依赖本地缓存避免重新下载。
+  function switchToNextModel() {
+    const idx = AVATAR_MODELS.indexOf(activeModel);
+    const next = AVATAR_MODELS[(idx + 1) % AVATAR_MODELS.length] ?? AVATAR_MODELS[0];
+    switchModel(next);
+  }
+
   /**
    * 切换看板娘模型。
    *
@@ -766,7 +862,6 @@ export function Live2DWidget() {
       // ignore
     }
     setActiveModel(name);
-    setShowModelPicker(false);
     showTips(t("theme.live2d.switch.switching"), 3000);
 
     const app = (window as unknown as { __rinLive2dApp?: unknown })
@@ -1102,6 +1197,11 @@ export function Live2DWidget() {
         //    不等插件脚本加载，让大体积 moc3 尽早开始下载
         prefetchModel(cdnRoot, activeModel);
 
+        // 2.5) 后台全量预缓存两个模型（furina + BCSZ1.1）：把每个模型的全部资源
+        //      （moc3/贴图/动作/物理/口型）写入本地 Cache Storage。首次进入即下载一次，
+        //      之后切换模型都命中本地缓存、不再重复下载。（不阻塞主流程）
+        precacheAllModels();
+
         // 3) 加载样式与插件脚本（均为判重，可安全重复挂载）
         await loadStylesheet(WIDGET_CSS);
         // 插件 waifu.css 加载完成后，把我们的覆盖样式重新追加到 <head> 末尾，
@@ -1430,29 +1530,6 @@ export function Live2DWidget() {
         <div className={`flex items-end gap-1 ${dragging ? "pointer-events-none" : ""}`}>
           {/* 竖排工具栏：首页 / 聊天 / 换模型 / 摸一摸 / 动作 / 隐藏（从上到下） */}
           <div className="relative flex flex-col items-center gap-1">
-            {showModelPicker && !error ? (
-              <div className="absolute right-full top-1/2 mr-2 flex -translate-y-1/2 flex-col gap-1 rounded-2xl border border-black/10 bg-w p-1.5 shadow dark:border-white/10">
-                {AVATAR_MODELS.map((name) => (
-                  <button
-                    key={name}
-                    type="button"
-                    onClick={() => switchModel(name)}
-                    className={`flex h-8 items-center gap-2 rounded-full px-3 text-sm transition hover:bg-neutral-100 dark:hover:bg-white/10 ${
-                      name === activeModel ? "text-theme" : "t-muted"
-                    }`}
-                    aria-label={t(`theme.live2d.switch.${name}`)}
-                    title={t(`theme.live2d.switch.${name}`)}
-                  >
-                    <i
-                      className={
-                        name === "furina" ? "ri-water-flash-line" : "ri-fox-line"
-                      }
-                    />
-                    <span>{t(`theme.live2d.switch.${name}`)}</span>
-                  </button>
-                ))}
-              </div>
-            ) : null}
             {showActions && !error ? (
               <div className="absolute right-full top-1/2 mr-2 flex -translate-y-1/2 flex-col gap-1 rounded-2xl border border-black/10 bg-w p-1.5 shadow dark:border-white/10">
                 {(["wave", "shake", "dance"] as ActionName[]).map((name) => (
@@ -1497,8 +1574,8 @@ export function Live2DWidget() {
             </button>
             <button
               type="button"
-              onClick={() => setShowModelPicker((value) => !value)}
-              className={`rounded-full bg-w p-2 text-sm shadow transition ${showModelPicker ? "text-theme" : "t-muted hover:text-theme"}`}
+              onClick={switchToNextModel}
+              className="rounded-full bg-w p-2 text-sm shadow t-muted transition hover:text-theme"
               aria-label={t("theme.live2d.switch.button")}
               title={t("theme.live2d.switch.button")}
             >

@@ -6,9 +6,12 @@
  * 仅缓存 Live2D 模型资源，不影响页面 navigations / API / 其它静态资源。
  */
 
-const CACHE_NAME = "rin-live2d-v1";
+const CACHE_NAME = "rin-live2d-v2";
 
-// Live2D 模型资源的特征（默认走 GitHub 加速代理的 827802685/Live2D 仓库）
+// Live2D 模型资源来源特征：
+// 1) 远端 GitHub 加速代理 / github.io 直连（furina 等未随站打包的模型）；
+// 2) 本站打包根 /live2d-bundled/（BCSZ1.1 随博客分发，同源）。
+// 命中任一即按 cache-first 缓存进本地 Cache Storage，实现"下载一次、以后不再重下"。
 const MODEL_ORIGINS = [
   "raw-githubusercontent-com-gh.zjkl0330.dpdns.org",
   "827802685.github.io",
@@ -17,13 +20,25 @@ const MODEL_ORIGINS = [
   "fastly.jsdelivr.net",
 ];
 
+// 模型文件特征（远端仓库片段 + 本站打包根 + 通用模型扩展名）
+const MODEL_PATH_RE =
+  /model\/|live2d-bundled\/|\.moc3$|\.model3\.json$|texture|\.png$|\.motion3\.json$|\.physics3\.json$|\.cdi3\.json$|\.exp3\.json$|\.wav$|\.mp3$/;
+
 function isLive2dAsset(url) {
   const u = new URL(url);
+  // 后端代理根：仓库路径居中（/827802685/Live2D/refs/...）
   if (MODEL_ORIGINS.includes(u.host) && u.pathname.includes("/Live2D/")) {
-    // 尽量只缓存模型文件，避免把无关页面缓存进来
-    return /model\/furina\/|\.moc3$|\.model3\.json$|texture|\.png$|\.motion3\.json$|\.physics3\.json$|\.cdi3\.json$|\.exp3\.json$/.test(u.pathname);
+    return MODEL_PATH_RE.test(u.pathname);
   }
-  return false;
+  // 本站打包根：从自己域名的 /live2d-bundled/ 加载的模型资源
+  if (u.origin === self.location.origin && u.pathname.includes("/live2d-bundled/")) {
+    return true;
+  }
+  // 同源开发/其它 Live2D 资源的兜底（仅当路径明显是模型文件）
+  if (!u.pathname.includes("/live2d-bundled/") && !u.pathname.includes("/rin-live2d-cdn/")) {
+    return false;
+  }
+  return true;
 }
 
 self.addEventListener("install", (event) => {
