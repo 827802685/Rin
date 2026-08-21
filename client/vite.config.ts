@@ -1,5 +1,8 @@
 import { defineConfig, type Plugin } from 'vite'
-import { existsSync, readdirSync, createReadStream, statSync } from 'node:fs'
+import {
+  existsSync, readdirSync, createReadStream, statSync, rmSync, mkdirSync,
+  writeFileSync, cpSync,
+} from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { dirname, join, normalize } from 'node:path'
 import react from '@vitejs/plugin-react-swc'
@@ -159,6 +162,43 @@ function monacoLongDistanceHintShim(): Plugin {
   };
 }
 
+/**
+ * Live2D 看板娘模型打进产物（仅 build）。
+ *
+ * Cloudflare Pages 单文件上限 25MiB：furina 的 moc3 单文件约 95MB 超限，只能走远端
+ * CDN；但 BCSZ1.1 整个模型约 22MB、单文件最大约 2.1MB，完全可随博客静态资源一起
+ * 分发（同域、全球 CDN、毫秒级，彻底摆脱远端 github.io 的小水管）。
+ *
+ * 产物结构（与插件期望的 CDN 布局一致）：
+ *   <root>/live2d-bundled/model_list.json          -> {"messages":[],"models":["BCSZ1.1"]}
+ *   <root>/live2d-bundled/model/BCSZ1.1/index.json  -> 模型配置入口
+ *   <root>/live2d-bundled/model/BCSZ1.1/...         -> 其余模型文件
+ * 前端的 BCSZ1.1 候选根即为 `${location.origin}/live2d-bundled/`。
+ */
+function rinLive2dBundledModel(): Plugin {
+  const src = join(__dirname, '../models/BCSZ1.1');
+  return {
+    name: 'rin:live2d-bundled-model',
+    apply: 'build',
+    closeBundle() {
+      const out = join(__dirname, '../dist/client/live2d-bundled');
+      const modelDir = join(out, 'model/BCSZ1.1');
+      if (!existsSync(src)) {
+        console.warn('[rin] models/BCSZ1.1 不存在，跳过 Live2D 模型打包');
+        return;
+      }
+      rmSync(modelDir, { recursive: true, force: true });
+      mkdirSync(modelDir, { recursive: true });
+      cpSync(src, modelDir, { recursive: true });
+      writeFileSync(
+        join(out, 'model_list.json'),
+        JSON.stringify({ messages: [], models: ['BCSZ1.1'] }),
+      );
+      console.log('[rin] Live2D 模型已随产物打包: live2d-bundled/');
+    },
+  };
+}
+
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => {
   const isDev = mode === 'development';
@@ -178,6 +218,7 @@ export default defineConfig(({ mode }) => {
       react(),
       monacoLongDistanceHintShim(),
       ...(isDev ? [rinLive2dLocalCdn()] : []),
+      rinLive2dBundledModel(),
       // Only open visualizer in build mode
       visualizer({ open: !isDev })
     ],

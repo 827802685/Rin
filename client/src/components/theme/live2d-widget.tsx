@@ -49,14 +49,23 @@ const CUBISM5_PATH = `${DIST}live2dcubismcore.min.js`;
 // 渲染器 chunk（AppDelegate 所在模块），用于捕获模型实例以驱动衣服/头发物理
 const CHUNK_URL = `${DIST}chunk/index2.js`;
 
-// 模型根地址候选：优先本地（dev，Vite 中间件提供，毫秒级），其次 github.io 直连，
-// 最后回退加速代理（Demo 默认）。
-const CDN_CANDIDATES = [
-  // dev 环境下由 vite.config.ts 的 rinLive2dLocalCdn 中间件提供本地模型文件
-  ...(import.meta.env.DEV ? [`${location.origin}/rin-live2d-cdn/`] : []),
+// 模型根地址候选（按模型区分）。生产环境：
+//  - BCSZ1.1 已随博客打包成静态资源（见 vite.config.ts rinLive2dBundledModel），
+//    优先本域本地根，毫秒级、摆脱远端 github.io 小水管；
+//  - furina 的 moc3 单文件约 95MB 超 Cloudflare Pages 25MiB 限制，无法打包，只能走
+//    远端 github.io 直连，失败回退加速代理（Demo 默认）。
+// dev 环境统一由 vite.config.ts 的 rinLive2dLocalCdn 中间件提供本地模型文件。
+const REMOTE_CDN_CANDIDATES = [
   "https://827802685.github.io/Live2D/",
   "https://raw-githubusercontent-com-gh.zjkl0330.dpdns.org/827802685/Live2D/refs/heads/master/",
-];
+] as const;
+
+// 各模型优先使用的本地/打包根（非远端 CDN）。BCSZ1.1 生产走随博客分发的打包根。
+function bundledRootFor(name: AvatarModel): string {
+  if (name === "furina") return "";
+  if (import.meta.env.DEV) return `${location.origin}/rin-live2d-cdn/`;
+  return `${location.origin}/live2d-bundled/`;
+}
 
 // 各模型首次加载的核心文件总字节数（moc3 + 贴图 + physics + cdi + 配置），作为进度分母。
 // furina：moc3 95MB + 4K 贴图 8MB + 其余；BCSZ1.1：贴图 13.9MB + moc3 1.28MB + 其余（约 22.6MB）
@@ -524,25 +533,29 @@ function installProgressTracker(
   };
 }
 
-// 探测可用的模型源：依次请求 model_list.json，返回第一个能正常返回模型清单的根地址
-async function pickCdnRoot(): Promise<string> {
-  for (const root of CDN_CANDIDATES) {
+// 探测可用的模型源：按目标模型组装候选根（本地/打包根优先），
+// 依次请求该根下的 model_list.json，返回第一个能正常返回模型清单的根地址。
+async function pickCdnRoot(name: AvatarModel): Promise<string> {
+  const localRoot = bundledRootFor(name);
+  const candidates = [
+    ...(localRoot ? [localRoot] : []),
+    ...REMOTE_CDN_CANDIDATES,
+  ];
+  for (const root of candidates) {
     try {
       const res = await fetch(`${root}model_list.json`, { mode: "cors" });
       if (res.ok) {
-        const data = (await res.json()) as { models?: unknown[] };
-        if (data && Array.isArray(data.models) && data.models.length > 0) {
-          return root;
-        }
+        // 根可达即可（切换按 name 直接拼 index.json，不依赖 model_list 的下标/content）
+        return root;
       }
     } catch {
       // 尝试下一个候选
     }
   }
-  return CDN_CANDIDATES[0];
+  return candidates[0];
 }
 
-// 探测到 CDN 根地址后立即并行预取当前模型的核心文件（moc3/贴图），
+// 探测到模型根地址后立即并行预取当前模型的核心文件（moc3/贴图），
 // 不等插件脚本加载；插件稍后请求同一 URL 时命中浏览器/SW 缓存。
 function prefetchModel(cdnRoot: string, name: AvatarModel) {
   const base = `${cdnRoot}model/${name}/`;
@@ -651,7 +664,7 @@ export function Live2DWidget() {
   const [progress, setProgress] = useState<ProgressState | null>(null);
   const [dragging, setDragging] = useState(false);
   const [showModelPicker, setShowModelPicker] = useState(false);
-  const [activeModel, setActiveModel] = useState<AvatarModel>("furina");
+  const [activeModel, setActiveModel] = useState<AvatarModel>("BCSZ1.1");
   // 回退用的模型版本号（仅当渲染器实例不可用时才重挂载组件）：
   // 切换模型时自增，作为外层 key 强制重挂载组件以加载新模型。
   const [modelVersion, setModelVersion] = useState(0);
@@ -759,22 +772,28 @@ export function Live2DWidget() {
     const app = (window as unknown as { __rinLive2dApp?: unknown })
       .__rinLive2dApp;
     const canChange = app && typeof (app as { changeModel?: unknown }).changeModel === "function";
-    // 渲染器就绪且已知道 CDN 根地址 → 复用实例直接换模型
-    if (canChange && cdnRootRef.current) {
+    // 渲染器就绪 → 复用实例直接换模型（按目标模型选根：
+    // BCSZ1.1 走随博客打包的本域根，furina 走远端 github.io）
+    if (canChange) {
       // 收起当前模型，显示加载态，等待新模型就绪后淡入
       renderedRef.current = false;
       setRendered(false);
       setError(null);
       document.getElementById("live2d")?.classList.remove("rin-live2d-ready");
-      const indexUrl = `${cdnRootRef.current}model/${name}/index.json`;
-      try {
-        (app as { changeModel: (u: string) => void }).changeModel(indexUrl);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : String(err));
-        return;
-      }
-      // 重新开启"就绪门控"轮询，等新模型 CompleteSetup 后淡入
-      readyPollStartRef.current?.();
+      // 目标模型用自己的根加载（本地打包根与远端根不可互通）
+      void (async () => {
+        const root = await pickCdnRoot(name);
+        cdnRootRef.current = root;
+        // 渲染器就绪即可切换，无需等待 pick（pick 秒回）。
+        const indexUrl = `${root}model/${name}/index.json`;
+        try {
+          (app as { changeModel: (u: string) => void }).changeModel(indexUrl);
+          // 重新开启"就绪门控"轮询，等新模型 CompleteSetup 后淡入
+          readyPollStartRef.current?.();
+        } catch (err) {
+          setError(err instanceof Error ? err.message : String(err));
+        }
+      })();
       return;
     }
     // 兜底：渲染器还没就绪，退回重挂载组件重新 initWidget
@@ -1068,8 +1087,8 @@ export function Live2DWidget() {
         // 不做 WebGL 前置检查：与 Demo 的 live2d-widget 插件行为一致。
         // 插件在运行时直接创建 WebGL 上下文，若浏览器不支持会自行在控制台报错并降级。
 
-        // 1) 探测可用的模型源（github.io 优先，失败回退代理）
-        const cdnRoot = await pickCdnRoot();
+        // 1) 探测可用的模型源（按 activeModel：BCSZ1.1 走本地打包根，furina 走远端 CDN）
+        const cdnRoot = await pickCdnRoot(activeModel);
         cdnRootRef.current = cdnRoot;
         if (disposed) return;
 
