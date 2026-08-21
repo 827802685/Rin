@@ -197,11 +197,12 @@ function rinLive2dBundledModel(): Plugin {
       cpSync(src, modelDir, { recursive: true });
       writeFileSync(
         join(out, 'model_list.json'),
-        // 注意：models 数组的下标必须与前端 live2d-widget.tsx 的 AVATAR_MODELS 完全一致
-        // （["furina","BCSZ1.1"]），因为插件用 modelId 下标去解析模型名并加载
-        // model/<models[modelId]>/index.json；BCSZ1.1 恒定占下标 1。打包根虽只含
-        // BCSZ1.1 文件，但用户不选 furina 就不会请求它，下标对齐即可正确命中 BCSZ1.1。
-        JSON.stringify({ messages: [], models: ['furina', 'BCSZ1.1'] }),
+        // 打包根只声明 BCSZ1.1（下标 0 = BCSZ1.1）。
+        // 原则：本域打包根只放"可随站打包的模型"；furina 单文件 95MB 超 Pages 限制
+        // 不放这里。插件 initCheck 用 localStorage.modelId 按下标取 model_list.models
+        // 拼 index.json；本根只有 BCSZ1.1 时 modelId 恒为 0 → 恒命中 BCSZ1.1。
+        // 想切 furina 时 switchModel 会重新 pickCdnRoot 到远端 github.io 根加载。
+        JSON.stringify({ messages: [], models: ['BCSZ1.1'] }),
       );
       console.log('[rin] Live2D 模型已随产物打包: live2d-bundled/');
     },

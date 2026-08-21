@@ -902,10 +902,16 @@ export function Live2DWidget() {
       localStorage.removeItem("waifu-disabled");
       localStorage.removeItem("waifu-display");
       sessionStorage.removeItem("waifu-message-priority");
-      // 读取当前选中的模型下标（默认 0 = furina）；切换模型时由 switchModel 写入
-      const saved = Number(localStorage.getItem("modelId") ?? "0");
-      const idx = Number.isFinite(saved) && saved >= 0 && saved < AVATAR_MODELS.length ? saved : 0;
-      localStorage.setItem("modelId", String(idx));
+      // 读取本次挂载要加载的模型（默认 BCSZ1.1，本地打包根即刻可用、无需下载）。
+      // 与插件联动：插件 initCheck 优先读 localStorage.modelId 决定加载哪个模型。
+      // 语义约定（与打包根 model_list=["BCSZ1.1"] 对齐）：
+      //   localStorage.modelId = 0 → 插件加载 models[0]=BCSZ1.1（打包根恒命中 BCSZ1.1）。
+      //   首屏一律固定 BCSZ1.1（写 0），state 同步为 BCSZ1.1，保证 state 与插件实际
+      //   加载的模型一致（否则 state 说 BCSZ1.1、插件却按历史值加载别的，打包根只
+      //   有 BCSZ1.1 → model/<别的模型> 404 → 卡死）。furina 只通过"换模型"按钮走
+      //   远端 github.io 根加载，不作为首屏默认。
+      localStorage.setItem("modelId", "0");
+      setActiveModel("BCSZ1.1");
     } catch {
       // ignore
     }
@@ -1118,13 +1124,40 @@ export function Live2DWidget() {
         }
 
         // 6) 复刻 Demo 的调用方式（cdnPath + modelId；毛豆 furina 为 Cubism5 / 使用 cubism5Path）
+        // modelId：插件加载的模型 = 当前 cdnPath 的 model_list.models[modelId]。
+        // 注意：不同根的 models 列表不同且下标不互通——
+        //   - 打包根（生产 BCSZ1.1）：models=["BCSZ1.1"]，BCSZ1.1 恒在下标 0；
+        //   - 远端 github.io 根：models=["furina"]（实测只含 furina，不含 BCSZ），furina=0。
+        // 因此不能想当然写死 0 或全局下标，必须按"命中根的实际 model_list"解析目标模型的
+        // 真实下标。若命中根里根本没有 activeModel（如拿 BCSZ1.1 却落到 furina-only 的远端根），
+        // 说明打包资源没随站点发布，此时应明确报错而非静默改加载别的模型
+        // （否则 state 说 BCSZ、插件却加载 furina、进度用 BCSZ 的 22.6MB 当分母 →
+        // 22MB 就显示 100%，其实 furina 的 95MB 还没下完 → 表现就是"卡在 100%不显示"）。
+        const modelListRes = await fetch(`${cdnRoot}model_list.json`, { mode: "cors" });
+        if (!modelListRes.ok) {
+          throw new Error(`模型清单不可用: ${cdnRoot}model_list.json`);
+        }
+        const modelList = (await modelListRes.json()) as { models?: unknown[] };
+        const resolvedId = modelList.models?.indexOf(activeModel) ?? -1;
+        if (resolvedId < 0) {
+          throw new Error(
+            `模型 ${activeModel} 未在当前源(${cdnRoot})的 model_list 中。` +
+              `请确认该模型已随站点打包发布（打包根应为 ${location.origin}/live2d-bundled/）`,
+          );
+        }
+        // 让插件 initCheck 读到的 modelId 与这里一致（插件会优先用 localStorage 值覆盖 config）
+        try {
+          localStorage.setItem("modelId", String(resolvedId));
+        } catch {
+          // ignore
+        }
         loader({
           waifuPath: WIDGET_JSON,
           cdnPath: cdnRoot,
           cubism2Path: CUBISM2_PATH,
           cubism5Path: CUBISM5_PATH,
           tools: TOOLS,
-          modelId: AVATAR_MODELS.indexOf(activeModel),
+          modelId: resolvedId,
           logLevel: "info",
           // 插件自带拖拽关闭，交给 React 文件夹拖拽统一处理
           drag: false,
