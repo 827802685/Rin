@@ -864,6 +864,23 @@
         "desc": "JSON injected into the model's Layout to fine-tune its position/scale on the canvas, e.g. to fix neck misalignment. Example: {\"Center Y\": 0.05}",
         "label": "Layout JSON"
       },
+      "defaultModel": {
+        "title": "Default model",
+        "desc": "Which mascot model to show when the page loads"
+      },
+      "custom": {
+        "title": "Custom models",
+        "desc": "Add your own Live2D models. Enter a character name and the manifest URL (.model3.json or index.json), then switch to it on the mascot.",
+        "empty": "No custom models yet",
+        "add": "Add model",
+        "remove": "Remove",
+        "defaultFlag": "Default",
+        "namePlaceholder": "Character name, e.g. My New Character",
+        "urlPlaceholder": "https://…/index.json or .model3.json",
+        "need_both": "Please fill in both a name and a URL",
+        "invalid_url": "URL must start with http/https, or a site path starting with /",
+        "dup_name": "A custom model with this name already exists"
+      },
       "show": "Show mascot",
       "hide": "Hide mascot",
       "poke": "Pat",

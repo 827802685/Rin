@@ -864,6 +864,23 @@
         "desc": "注入模型 Layout 的 JSON，用於微調模型在畫布中的位置/縮放，可解決頸部錯位等問題。範例：{\"Center Y\": 0.05}",
         "label": "Layout JSON"
       },
+      "defaultModel": {
+        "title": "預設模型",
+        "desc": "頁面載入時優先展示的看板娘模型"
+      },
+      "custom": {
+        "title": "自訂模型",
+        "desc": "加入你自己的 Live2D 模型。填入角色名稱與模型清單位址（.model3.json 或 index.json），即可在看板娘上切換。",
+        "empty": "還沒有自訂模型",
+        "add": "加入模型",
+        "remove": "刪除",
+        "defaultFlag": "預設",
+        "namePlaceholder": "角色名稱，如：我的新角色",
+        "urlPlaceholder": "https://…/index.json 或 .model3.json",
+        "need_both": "請同時填寫角色名稱與模型位址",
+        "invalid_url": "模型位址需以 http/https 開頭，或以 / 開頭的站內路徑",
+        "dup_name": "已有同名的自訂模型"
+      },
       "show": "顯示看板娘",
       "hide": "隱藏看板娘",
       "poke": "摸一摸",

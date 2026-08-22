@@ -39,6 +39,13 @@ import { ClientConfigContext } from "../../state/config";
  *   9. 颈部错位：支持通过 widget.live2d.layout 注入 Layout 微调模型位置/缩放。
  */
 
+// 保存模块加载时的"原生 fetch"引用。组件挂载/切换时 installProgressTracker 会短暂
+// 替换 window.fetch（为模型文件做流式进度统计 + Layout 注入）。后台预下载模型缓存时
+// 若走被替换的 window.fetch，会把预下载字节也计进页面进度，导致进度虚高到 100%+
+// 且预下载与当前绘制模型抢带宽（表现为"卡在100%但不渲染"）。因此预缓存一律走原生
+// fetch，完全旁路进度统计与 Layout 注入。
+const nativeFetch: typeof fetch = window.fetch;
+
 // 插件资源根目录（相对 waifu-tips.js 所在处）
 const DIST = "https://827802685.github.io/Live2D/dist/";
 const WIDGET_CSS = `${DIST}waifu.css`;
@@ -61,18 +68,12 @@ const REMOTE_CDN_CANDIDATES = [
 ] as const;
 
 // 各模型优先使用的本地/打包根（非远端 CDN）。BCSZ1.1 生产走随博客分发的打包根。
-function bundledRootFor(name: AvatarModel): string {
+// 仅对内置模型生效；自定义模型不看根，直接用其配置 url（在 switchModel/prefetch 中另行处理）。
+function bundledRootFor(name: string): string {
   if (name === "furina") return "";
   if (import.meta.env.DEV) return `${location.origin}/rin-live2d-cdn/`;
   return `${location.origin}/live2d-bundled/`;
 }
-
-// 各模型首次加载的核心文件总字节数（moc3 + 贴图 + physics + cdi + 配置），作为进度分母。
-// furina：moc3 95MB + 4K 贴图 8MB + 其余；BCSZ1.1：贴图 13.9MB + moc3 1.28MB + 其余（约 22.6MB）
-const EXPECTED_TOTAL_BY_NAME: Record<AvatarModel, number> = {
-  furina: 103740290,
-  "BCSZ1.1": 22639505,
-};
 
 // 透明像素判定阈值：alpha 低于该值视为"透明区域"，点击透传给后面的元素
 const CLICK_ALPHA_THRESHOLD = 16;
@@ -105,15 +106,64 @@ const CSS_MARK = "rin-live2d-widget--css";
 const SCRIPT_MARK = "rin-live2d-widget--script";
 const OVERRIDE_STYLE_ID = "rin-live2d-widget--override";
 
-// 看板娘可选模型（与 CDN model_list.json 的 models 顺序一致，供"换模型"切换）。
-// 名字即 CDN 模型目录名；展示名用 i18n（theme.live2d.switch.<name>）。
-const AVATAR_MODELS = ["furina", "BCSZ1.1"] as const;
-type AvatarModel = (typeof AVATAR_MODELS)[number];
+// 内置模型 id（furina 走远端 github.io；BCSZ1.1 走随博客打包的本域根）。
+// showcase 展示名用 i18n（theme.live2d.switch.<name>）。
+const BASE_MODELS = ["furina", "BCSZ1.1"] as const;
+type AvatarModel = (typeof BASE_MODELS)[number];
 
-// 各模型的核心大文件（用于预取，加速首次加载）
-const MODEL_FILES_BY_NAME: Record<AvatarModel, string[]> = {
+// 一个自定义模型的配置（设置里"添加模型"生成）
+type CustomModel = {
+  // 唯一 id（用于默认模型、localStorage 持久化、本地存储键），如 "my-model-abc"
+  id: string;
+  // 展示名（角色名），如 "新角色"
+  name: string;
+  // 模型清单文件地址（.model3.json 或 index.json），渲染器直接由图它加载
+  url: string;
+};
+
+// 读设置里的自定义模型列表（widget.live2d.customModels，JSON 数组）。失效返回空数组。
+function readCustomModels(config: { get: (k: string) => unknown }): CustomModel[] {
+  const raw = config.get("widget.live2d.customModels");
+  if (typeof raw !== "string" || !raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    const arr = Array.isArray(parsed) ? parsed : [];
+    if (!Array.isArray(arr)) return [];
+    return arr.filter(
+      (x): x is CustomModel =>
+        !!x &&
+        typeof x === "object" &&
+        typeof (x as CustomModel).id === "string" &&
+        typeof (x as CustomModel).name === "string" &&
+        typeof (x as CustomModel).url === "string",
+    );
+  } catch {
+    return [];
+  }
+}
+
+// 默认模型 id：优先读取设置 widget.live2d.defaultModel；不合法则回退 furina。
+function resolveDefaultName(
+  configured: unknown,
+  custom: CustomModel[] = [],
+): string {
+  const s = typeof configured === "string" ? configured.trim() : "";
+  if (BASE_MODELS.includes(s as AvatarModel)) return s as AvatarModel;
+  if (custom.some((c) => c.id === s)) return s;
+  return "furina";
+}
+
+// 各模型的核心大文件（用于预取，加速首次加载）。自定义模型无常量表，走 index.json 全量预缓存。
+const MODEL_FILES_BY_NAME: Record<string, string[]> = {
   furina: ["furina.moc3", "furina.8192/texture_00.png"],
   "BCSZ1.1": ["BCSZ1.1.moc3", "textures/texture_00.png"],
+};
+
+// 各模型进度分母（moc3 + 贴图 + 其它核心文件）。仅内置模型有精确值；
+// 自定义模型以 0 作为"总字节未知"，进度仅显示已下载量（见 installProgressTracker 处理）。
+const EXPECTED_TOTAL_BY_NAME: Record<string, number> = {
+  furina: 103740290,
+  "BCSZ1.1": 22639505,
 };
 
 // 芙宁娜聊天人设：注入给设置里绑定的 AI，让它以芙宁娜的口吻回复
@@ -535,7 +585,7 @@ function installProgressTracker(
 
 // 探测可用的模型源：按目标模型组装候选根（本地/打包根优先），
 // 依次请求该根下的 model_list.json，返回第一个能正常返回模型清单的根地址。
-async function pickCdnRoot(name: AvatarModel): Promise<string> {
+async function pickCdnRoot(name: string): Promise<string> {
   const localRoot = bundledRootFor(name);
   const candidates = [
     ...(localRoot ? [localRoot] : []),
@@ -557,7 +607,7 @@ async function pickCdnRoot(name: AvatarModel): Promise<string> {
 
 // 探测到模型根地址后立即并行预取当前模型的核心文件（moc3/贴图），
 // 不等插件脚本加载；插件稍后请求同一 URL 时命中浏览器/SW 缓存。
-function prefetchModel(cdnRoot: string, name: AvatarModel) {
+function prefetchModel(cdnRoot: string, name: string) {
   const base = `${cdnRoot}model/${name}/`;
   const files = MODEL_FILES_BY_NAME[name] ?? [];
   for (const file of files) {
@@ -619,9 +669,10 @@ function ensureSwControl(): Promise<void> {
 
 // 对给定模型整目录预缓存：拉取 index.json → 收集全部文件 → 写入本地缓存。
 // 不依赖固定文件表，能覆盖贴图/动作/物理/口型等所有资源，真正做到"下载一次不再重下"。
-async function precacheModel(cdnRoot: string, name: AvatarModel): Promise<void> {
+// 一律走 nativeFetch：旁路进度统计与 Layout 注入，避免干扰当前模型的下载进度。
+async function precacheModel(cdnRoot: string, name: string): Promise<void> {
   try {
-    const index = await fetch(`${cdnRoot}model/${name}/index.json`, { mode: "cors" });
+    const index = await nativeFetch(`${cdnRoot}model/${name}/index.json`, { mode: "cors" });
     if (!index.ok) return;
     const manifest = (await index.json()) as { FileReferences?: unknown };
     const files = new Set<string>();
@@ -633,7 +684,7 @@ async function precacheModel(cdnRoot: string, name: AvatarModel): Promise<void> 
       sendCacheMessage(urls);
     } else {
       // SW 未控制：普通 fetch 预取（生产环境 SW 的 fetch 拦截会把这些响应回写缓存）
-      await Promise.allSettled(urls.map((u) => fetch(u, { mode: "cors" })));
+      await Promise.allSettled(urls.map((u) => nativeFetch(u, { mode: "cors" })));
     }
   } catch {
     // 预缓存失败不影响主流程
@@ -751,7 +802,16 @@ export function Live2DWidget() {
   const [rendered, setRendered] = useState(false);
   const [progress, setProgress] = useState<ProgressState | null>(null);
   const [dragging, setDragging] = useState(false);
-  const [activeModel, setActiveModel] = useState<AvatarModel>("BCSZ1.1");
+  const [activeModel, setActiveModel] = useState<string>("furina");
+  // 默认模型引用：供 useEffect 初始化读取。缺省 furina；可被设置项 widget.live2d.defaultModel 覆盖
+  // （"furina" / "BCSZ1.1" / 自定义模型 id）。仅在挂载时读取一次，后续切换不受影响。
+  const defaultModelRef = useRef<string>(
+    resolveDefaultName(config.get("widget.live2d.defaultModel"), readCustomModels(config)),
+  );
+  // 自定义模型列表的 ref 镜像（渲染期间稳定引用；设置修改后经关键重载生效）
+  const customModelsRef = useRef<CustomModel[]>(readCustomModels(config));
+  // 上一次"模型配置签名"，用于检测默认/自定义模型设置变化并触发重载
+  const prevModelsSigRef = useRef<string | undefined>(undefined);
   // 回退用的模型版本号（仅当渲染器实例不可用时才重挂载组件）：
   // 切换模型时自增，作为外层 key 强制重挂载组件以加载新模型。
   const [modelVersion, setModelVersion] = useState(0);
@@ -832,12 +892,19 @@ export function Live2DWidget() {
     }, duration);
   }
 
-  // 在当前模型之间循环切换：点一下换模型按钮即在 furina / BCSZ1.1 循环切换，
-  // 不做二级菜单。默认顺序把"体积小、随博客本地打包"的 BCSZ1.1 设为切换起点，
-  // furina 需要走原生切换（复用渲染器 changeModel）并依赖本地缓存避免重新下载。
+  // 全部可选模型的 id（内置 + 自定义，用于换模型循环）。顺序即循环顺序。
+  function allModelIds() {
+    const custom = customModelsRef.current;
+    const ids: string[] = [...BASE_MODELS, ...custom.map((c) => c.id)];
+    return ids;
+  }
+
+  // 在当前模型之间循环切换：点一下换模型按钮即在所有模型间循环（内置 furina/BCSZ1.1 +
+  // 自定义模型），不做二级菜单。
   function switchToNextModel() {
-    const idx = AVATAR_MODELS.indexOf(activeModel);
-    const next = AVATAR_MODELS[(idx + 1) % AVATAR_MODELS.length] ?? AVATAR_MODELS[0];
+    const ids = allModelIds();
+    const idx = ids.indexOf(activeModel);
+    const next = ids[(idx + 1) % ids.length] ?? ids[0];
     switchModel(next);
   }
 
@@ -853,11 +920,15 @@ export function Live2DWidget() {
    *
    * 兜底方案：仅当渲染器实例尚未就绪时，才走"更新 modelId + 重挂载组件"的老路径。
    */
-  function switchModel(name: AvatarModel) {
-    const nextIndex = AVATAR_MODELS.indexOf(name);
-    if (nextIndex < 0) return;
+  function switchModel(name: string) {
+    // 内置模型存在 AVATAR_MODELS，自定义模型在其配置表里
+    const isBase = (BASE_MODELS as readonly string[]).includes(name);
+    const custom = customModelsRef.current.find((c) => c.id === name);
+    if (!isBase && !custom) return;
+    // fitted for localStorage.modelId：仅内置模型有意义；自定义模型存 -1（插件 initCheck 兜底用不到）
+    const modelId = isBase ? (BASE_MODELS as readonly string[]).indexOf(name) : -1;
     try {
-      localStorage.setItem("modelId", String(nextIndex));
+      localStorage.setItem("modelId", String(modelId));
     } catch {
       // ignore
     }
@@ -867,8 +938,8 @@ export function Live2DWidget() {
     const app = (window as unknown as { __rinLive2dApp?: unknown })
       .__rinLive2dApp;
     const canChange = app && typeof (app as { changeModel?: unknown }).changeModel === "function";
-    // 渲染器就绪 → 复用实例直接换模型（按目标模型选根：
-    // BCSZ1.1 走随博客打包的本域根，furina 走远端 github.io）
+    // 渲染器就绪 → 复用实例直接换模型。内置模型按目标选根（BCSZ→打包根、furina→远端）；
+    // 自定义模型直接用其配置的 .model3.json url 加载。
     if (canChange) {
       // 收起当前模型，显示加载态，等待新模型就绪后淡入
       renderedRef.current = false;
@@ -877,10 +948,15 @@ export function Live2DWidget() {
       document.getElementById("live2d")?.classList.remove("rin-live2d-ready");
       // 目标模型用自己的根加载（本地打包根与远端根不可互通）
       void (async () => {
-        const root = await pickCdnRoot(name);
-        cdnRootRef.current = root;
-        // 渲染器就绪即可切换，无需等待 pick（pick 秒回）。
-        const indexUrl = `${root}model/${name}/index.json`;
+        let indexUrl: string;
+        if (custom) {
+          // 自定义：直接用配置 url
+          indexUrl = custom.url;
+        } else {
+          const root = await pickCdnRoot(name);
+          cdnRootRef.current = root;
+          indexUrl = `${root}model/${name}/index.json`;
+        }
         try {
           (app as { changeModel: (u: string) => void }).changeModel(indexUrl);
           // 重新开启"就绪门控"轮询，等新模型 CompleteSetup 后淡入
@@ -997,16 +1073,21 @@ export function Live2DWidget() {
       localStorage.removeItem("waifu-disabled");
       localStorage.removeItem("waifu-display");
       sessionStorage.removeItem("waifu-message-priority");
-      // 读取本次挂载要加载的模型（默认 BCSZ1.1，本地打包根即刻可用、无需下载）。
-      // 与插件联动：插件 initCheck 优先读 localStorage.modelId 决定加载哪个模型。
-      // 语义约定（与打包根 model_list=["BCSZ1.1"] 对齐）：
-      //   localStorage.modelId = 0 → 插件加载 models[0]=BCSZ1.1（打包根恒命中 BCSZ1.1）。
-      //   首屏一律固定 BCSZ1.1（写 0），state 同步为 BCSZ1.1，保证 state 与插件实际
-      //   加载的模型一致（否则 state 说 BCSZ1.1、插件却按历史值加载别的，打包根只
-      //   有 BCSZ1.1 → model/<别的模型> 404 → 卡死）。furina 只通过"换模型"按钮走
-      //   远端 github.io 根加载，不作为首屏默认。
-      localStorage.setItem("modelId", "0");
-      setActiveModel("BCSZ1.1");
+      // 读取本次挂载要加载的默认模型（缺省 furina）。首屏由 pickCdnRoot(activeModel)
+      // 自动选根：furina 走远端 github.io（其 model_list=["furina"]，下标 0），BCSZ1.1 走
+      // 本地打包根。下方 loader 前还会按"命中根的实际 model_list"再解析一次真实下标，
+      // 因此这里 modelId 的值仅供插件 initCheck 初始参考，真正下标以后续解析为准。
+      const initDefault = defaultModelRef.current;
+      const initDefaultIsBase = (BASE_MODELS as readonly string[]).includes(initDefault);
+      try {
+        localStorage.setItem(
+          "modelId",
+          String(initDefaultIsBase ? (BASE_MODELS as readonly string[]).indexOf(initDefault) : -1),
+        );
+      } catch {
+        // ignore
+      }
+      setActiveModel(initDefault);
     } catch {
       // ignore
     }
@@ -1081,12 +1162,15 @@ export function Live2DWidget() {
     patchGlobalImage();
 
     // ---- 下载进度追踪（必须在 initWidget 之前安装；流式计数 + Layout 注入）----
+    // 进度分母：内置模型用精确总字节数；自定义模型未知 → 传 0，UI 只显示已下载量。
+    const isBaseActive = (BASE_MODELS as readonly string[]).includes(activeModel);
+    const progressTotal = isBaseActive ? EXPECTED_TOTAL_BY_NAME[activeModel] : 0;
     const restoreFetch = installProgressTracker(
       (p) => {
         lastProgressAtRef.current = Date.now();
         if (!disposed) setProgress(p);
       },
-      EXPECTED_TOTAL_BY_NAME[activeModel],
+      progressTotal,
       layoutConfig,
     );
 
@@ -1223,6 +1307,12 @@ export function Live2DWidget() {
           );
         }
 
+        // 5.5) 若首次默认模型是"自定义模型"（不在内置链表里），无法用 loader 的
+        //      cdnPath+modelId 拉取（那是基于内置 model_list 的）。此时先用 loader 加载
+        //      一个内置占位（furina），随后立即 changeModel(自定义 url) 切到目标模型。
+        const customTarget = customModelsRef.current.find((c) => c.id === activeModel);
+        const isCustomDefault = !!customTarget;
+
         // 6) 复刻 Demo 的调用方式（cdnPath + modelId；毛豆 furina 为 Cubism5 / 使用 cubism5Path）
         // modelId：插件加载的模型 = 当前 cdnPath 的 model_list.models[modelId]。
         // 注意：不同根的 models 列表不同且下标不互通——
@@ -1233,15 +1323,16 @@ export function Live2DWidget() {
         // 说明打包资源没随站点发布，此时应明确报错而非静默改加载别的模型
         // （否则 state 说 BCSZ、插件却加载 furina、进度用 BCSZ 的 22.6MB 当分母 →
         // 22MB 就显示 100%，其实 furina 的 95MB 还没下完 → 表现就是"卡在 100%不显示"）。
+        const loadFor = isCustomDefault ? "furina" : activeModel;
         const modelListRes = await fetch(`${cdnRoot}model_list.json`, { mode: "cors" });
         if (!modelListRes.ok) {
           throw new Error(`模型清单不可用: ${cdnRoot}model_list.json`);
         }
         const modelList = (await modelListRes.json()) as { models?: unknown[] };
-        const resolvedId = modelList.models?.indexOf(activeModel) ?? -1;
+        const resolvedId = modelList.models?.indexOf(loadFor) ?? -1;
         if (resolvedId < 0) {
           throw new Error(
-            `模型 ${activeModel} 未在当前源(${cdnRoot})的 model_list 中。` +
+            `模型 ${loadFor} 未在当前源(${cdnRoot})的 model_list 中。` +
               `请确认该模型已随站点打包发布（打包根应为 ${location.origin}/live2d-bundled/）`,
           );
         }
@@ -1263,6 +1354,18 @@ export function Live2DWidget() {
           drag: false,
         });
         if (disposed) return;
+
+        // 5.6) 若首屏默认是自定义模型，loader 已挂载占位模型（内置），现在切到目标自定义
+        if (isCustomDefault && customTarget) {
+          const app = (window as unknown as { __rinLive2dApp?: unknown })
+            .__rinLive2dApp as { changeModel?: (u: string) => void } | undefined;
+          if (app && typeof app.changeModel === "function") {
+            renderedRef.current = false;
+            setRendered(false);
+            setError(null);
+            app.changeModel(customTarget.url);
+          }
+        }
 
         // 7) initWidget 同步执行到 r() 的第一步（插入 #waifu）后即返回，
         //    因此在调用返回后立刻把 #waifu 放进 React 容器
@@ -1313,6 +1416,21 @@ export function Live2DWidget() {
     // 组件内部 re-render（隐藏/拖动等）不重载插件
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [modelVersion]);
+
+  // 设置里修改默认模型 / 增删自定义模型后，重载看板娘以应用新的模型列表。
+  // 依赖这两个配置值的变化；变化时重置回默认模型并重挂载插件。
+  const settingsModelsSig = `${config.get<string>("widget.live2d.defaultModel")}|${config.get<string>("widget.live2d.customModels")}`;
+  useEffect(() => {
+    const prev = prevModelsSigRef.current;
+    prevModelsSigRef.current = settingsModelsSig;
+    // 跳过首次挂载（首屏已按默认加载）
+    if (prev === undefined) return;
+    if (prev === settingsModelsSig) return;
+    // 模型配置变化：重置到默认模型并重载
+    setActiveModel(defaultModelRef.current);
+    setModelVersion((v) => v + 1);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [settingsModelsSig]);
 
   /**
    * 拖动时驱动衣服/头发飘动的物理：接管模型的 setDragging，用真实指针速度喂值，
@@ -1496,10 +1614,10 @@ export function Live2DWidget() {
     ? { left: `${pos.left}px`, top: `${pos.top}px` }
     : anchorStyle;
 
-  // 加载进度百分比（0-100）
-  const pct = progress
+  // 加载进度百分比（0-100）。自定义模型不知总字节数（total=0）时返回 null，仅显示已下载量。
+  const pct = progress && progress.total > 0
     ? Math.min(100, Math.round((progress.loaded / progress.total) * 100))
-    : 0;
+    : null;
 
   return (
     <>
@@ -1631,18 +1749,21 @@ export function Live2DWidget() {
                   <div className="h-1.5 w-28 overflow-hidden rounded-full bg-neutral-200 dark:bg-neutral-700">
                     <div
                       className="h-full rounded-full bg-theme transition-[width] duration-300"
-                      style={{ width: `${pct}%` }}
+                      style={{ width: `${pct ?? 0}%` }}
                     />
                   </div>
                   <span className="t-muted">
                     {progress
-                      ? `${t("theme.live2d.loading.downloading")} ${pct}%`
+                      ? pct != null
+                        ? `${t("theme.live2d.loading.downloading")} ${pct}%`
+                        : `${t("theme.live2d.loading.downloading")}…`
                       : t("theme.live2d.loading.connecting")}
                   </span>
                   {progress ? (
                     <span className="t-muted text-[10px]">
-                      {(progress.loaded / 1048576).toFixed(1)} /{" "}
-                      {(progress.total / 1048576).toFixed(1)} MB
+                      {progress.total > 0
+                        ? `${(progress.loaded / 1048576).toFixed(1)} / ${(progress.total / 1048576).toFixed(1)} MB`
+                        : `${(progress.loaded / 1048576).toFixed(1)} MB`}
                     </span>
                   ) : null}
                 </div>

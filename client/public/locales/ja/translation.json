@@ -855,6 +855,23 @@
         "desc": "モデルの Layout に注入する JSON で、キャンバス上の位置・拡大率を微調整します（首のズレ解消など）。例：{\"Center Y\": 0.05}",
         "label": "Layout JSON"
       },
+      "defaultModel": {
+        "title": "デフォルトモデル",
+        "desc": "ページ読み込み時に最初に表示するマスコットモデル"
+      },
+      "custom": {
+        "title": "カスタムモデル",
+        "desc": "独自の Live2D モデルを追加できます。キャラクター名とマニフェストURL（.model3.json または index.json）を入力して、マスコットで切り替えましょう。",
+        "empty": "カスタムモデルはまだありません",
+        "add": "モデルを追加",
+        "remove": "削除",
+        "defaultFlag": "デフォルト",
+        "namePlaceholder": "キャラクター名（例：新しいキャラ）",
+        "urlPlaceholder": "https://…/index.json または .model3.json",
+        "need_both": "名前とURLの両方を入力してください",
+        "invalid_url": "URLは http/https で始まるか、/ で始まるサイト内パスである必要があります",
+        "dup_name": "同名のカスタムモデルが既に存在します"
+      },
       "show": "マスコットを表示",
       "hide": "マスコットを非表示",
       "poke": "なでる",

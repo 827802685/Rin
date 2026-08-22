@@ -97,6 +97,9 @@ export function SettingsTheme() {
   const ref = useRef(false);
   const initialDraftRef = useRef<SettingsDraft>({ clientConfig: {}, serverConfig: {} });
   const { showAlert, AlertUI } = useAlert();
+  // 设置页"添加自定义模型"表单
+  const [newModelName, setNewModelName] = useState("");
+  const [newModelUrl, setNewModelUrl] = useState("");
 
   function getDraftThemeColor(nextDraft: SettingsDraft) {
     return typeof nextDraft.clientConfig["theme.color"] === "string" ? nextDraft.clientConfig["theme.color"] : undefined;
@@ -137,6 +140,23 @@ export function SettingsTheme() {
   const live2dEnabled = clientConfig.getBoolean("widget.live2d.enabled");
   const live2dPosition = String(clientConfig.get("widget.live2d.position") ?? "right");
   const live2dScale = String(clientConfig.get("widget.live2d.scale") ?? "1");
+  // 默认模型 id（furina / BCSZ1.1 / 自定义模型 id）
+  const live2dDefaultModel = String(clientConfig.get("widget.live2d.defaultModel") ?? "furina");
+  // 自定义模型列表配置（JSON 数组 [{ id, name, url }]，由设置里"添加模型"生成）
+  const live2dCustomModelsRaw = String(clientConfig.get("widget.live2d.customModels") ?? "[]");
+  // 解析后的自定义模型列表（失效返回空数组）
+  const live2dCustomModels = useMemo<{ id: string; name: string; url: string }[]>(() => {
+    try {
+      const arr = JSON.parse(live2dCustomModelsRaw);
+      if (!Array.isArray(arr)) return [];
+      return arr.filter(
+        (x): x is { id: string; name: string; url: string } =>
+          !!x && typeof x.id === "string" && typeof x.name === "string" && typeof x.url === "string",
+      );
+    } catch {
+      return [];
+    }
+  }, [live2dCustomModelsRaw]);
   const cursorEnabled = clientConfig.getBoolean("widget.cursor.enabled");
   const cursorDefault = String(clientConfig.get("widget.cursor.default") ?? "/cursors/furina/normal.png");
   const cursorPointer = String(clientConfig.get("widget.cursor.pointer") ?? "/cursors/furina/link.png");
@@ -156,6 +176,43 @@ export function SettingsTheme() {
 
   function setConfigValue(key: string, value: unknown) {
     setDraft((current) => updateDraftConfig(current, "client", key, value));
+  }
+
+  // 写入自定义模型列表（JSON）
+  function saveCustomModels(list: { id: string; name: string; url: string }[]) {
+    setConfigValue("widget.live2d.customModels", JSON.stringify(list));
+  }
+
+  // 添加一个自定义模型（生成唯一 id）
+  function handleAddCustomModel() {
+    const name = newModelName.trim();
+    const url = newModelUrl.trim();
+    if (!name || !url) {
+      showAlert(t("theme.live2d.custom.need_both"));
+      return;
+    }
+    if (!/^https?:\/\//i.test(url) && !url.startsWith("/")) {
+      showAlert(t("theme.live2d.custom.invalid_url"));
+      return;
+    }
+    if (live2dCustomModels.some((c) => c.name === name)) {
+      showAlert(t("theme.live2d.custom.dup_name"));
+      return;
+    }
+    const id = `custom-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
+    const next = [...live2dCustomModels, { id, name, url }];
+    saveCustomModels(next);
+    setNewModelName("");
+    setNewModelUrl("");
+  }
+
+  // 删除一个自定义模型；若其为当前默认模型，重置默认模型为 furina
+  function handleRemoveCustomModel(id: string) {
+    const next = live2dCustomModels.filter((c) => c.id !== id);
+    saveCustomModels(next);
+    if (live2dDefaultModel === id) {
+      setConfigValue("widget.live2d.defaultModel", "furina");
+    }
   }
 
   function handleReset() {
@@ -444,6 +501,104 @@ export function SettingsTheme() {
                   setConfigValue("widget.live2d.layout", value);
                 }}
               />
+              <SettingsCard>
+                <SettingsCardRow
+                  header={
+                    <SettingsCardHeader
+                      title={t("theme.live2d.defaultModel.title")}
+                      description={t("theme.live2d.defaultModel.desc")}
+                    />
+                  }
+                  action={<span />}
+                />
+                <SettingsCardBody>
+                  <select
+                    value={live2dDefaultModel}
+                    onChange={(event) => {
+                      setConfigValue("widget.live2d.defaultModel", event.target.value);
+                    }}
+                    className="w-full rounded-xl border border-black/10 bg-w px-4 py-2.5 text-sm t-primary outline-none transition-colors focus:border-black/20 focus:ring-2 focus:ring-theme/10 dark:border-white/10 dark:focus:border-white/20"
+                  >
+                    <option value="furina">{t("theme.live2d.switch.furina")}</option>
+                    <option value="BCSZ1.1">{t("theme.live2d.switch.BCSZ1.1")}</option>
+                    {live2dCustomModels.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name}
+                      </option>
+                    ))}
+                  </select>
+                </SettingsCardBody>
+              </SettingsCard>
+              <SettingsCard>
+                <SettingsCardRow
+                  header={
+                    <SettingsCardHeader
+                      title={t("theme.live2d.custom.title")}
+                      description={t("theme.live2d.custom.desc")}
+                    />
+                  }
+                  action={<span />}
+                />
+                <SettingsCardBody>
+                  {/* 已有自定义模型列表 */}
+                  {live2dCustomModels.length === 0 ? (
+                    <p className="mb-2 text-xs t-muted">{t("theme.live2d.custom.empty")}</p>
+                  ) : (
+                    <ul className="mb-2 flex flex-col gap-1">
+                      {live2dCustomModels.map((c) => (
+                        <li
+                          key={c.id}
+                          className="flex items-center justify-between gap-2 rounded-lg border border-black/10 bg-neutral-50 px-3 py-1.5 text-sm dark:border-white/10 dark:bg-neutral-800"
+                        >
+                          <div className="flex min-w-0 flex-col">
+                            <span className="truncate font-medium t-primary">
+                              {c.name}
+                              {c.id === live2dDefaultModel ? (
+                                <span className="ml-1 text-xs text-theme">
+                                  {t("theme.live2d.custom.defaultFlag")}
+                                </span>
+                              ) : null}
+                            </span>
+                            <span className="truncate text-xs t-muted">{c.url}</span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveCustomModel(c.id)}
+                            className="shrink-0 rounded-full px-1 text-neutral-400 transition hover:text-red-500"
+                            aria-label={t("theme.live2d.custom.remove")}
+                            title={t("theme.live2d.custom.remove")}
+                          >
+                            <i className="ri-delete-bin-line" />
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  {/* 添加自定义模型表单 */}
+                  <div className="flex flex-col gap-2">
+                    <input
+                      value={newModelName}
+                      onChange={(event) => setNewModelName(event.target.value)}
+                      placeholder={t("theme.live2d.custom.namePlaceholder")}
+                      className="w-full rounded-xl border border-black/10 bg-w px-4 py-2.5 text-sm t-primary outline-none transition-colors placeholder:text-neutral-400 focus:border-black/20 focus:ring-2 focus:ring-theme/10 dark:border-white/10 dark:focus:border-white/20"
+                    />
+                    <input
+                      value={newModelUrl}
+                      onChange={(event) => setNewModelUrl(event.target.value)}
+                      placeholder={t("theme.live2d.custom.urlPlaceholder")}
+                      className="w-full rounded-xl border border-black/10 bg-w px-4 py-2.5 text-sm t-primary outline-none transition-colors placeholder:text-neutral-400 focus:border-black/20 focus:ring-2 focus:ring-theme/10 dark:border-white/10 dark:focus:border-white/20"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleAddCustomModel}
+                      className="inline-flex items-center justify-center gap-1 rounded-full bg-theme px-4 py-2 text-sm font-medium text-white transition hover:bg-theme-hover"
+                    >
+                      <i className="ri-add-line" />
+                      {t("theme.live2d.custom.add")}
+                    </button>
+                  </div>
+                </SettingsCardBody>
+              </SettingsCard>
             </>
           ) : null}
 

@@ -24,6 +24,8 @@ export const CLIENT_CONFIG_DEFAULTS = new Map(
     "widget.live2d.scale": 1,
     "widget.live2d.layout": "",
     "widget.live2d.edge": false,
+    "widget.live2d.defaultModel": "furina",
+    "widget.live2d.customModels": "[]",
     "widget.cursor.enabled": false,
     "widget.cursor.default": "/cursors/furina/normal.png",
     "widget.cursor.pointer": "/cursors/furina/link.png",
