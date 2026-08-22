@@ -19,7 +19,7 @@ import { ClientConfigContext } from "../../state/config";
  *   - 换模型/摸一摸按钮：通过合成 pointerdown 触发模型真实动作 + showTips 显示自定义气泡。
  *
  * 与 Demo 的差异（为适配博客）：
- *   - 模型源：优先 github.io 直连（实测最快、同源 CORS），失败自动回退加速代理；
+ *   - 模型源：优先 dpdns 加速镜像（国内直连更快、更稳），失败自动回退 github.io 直连；
  *   - 隐藏插件自带的 #waifu-tool（工具列）与 #waifu-toggle（开关），交互交给 React 按钮；
  *   - 气泡复用插件的 #waifu-tips，仅重写样式贴合博客主题（蓝色气泡）；
  *   - 不加载 config-panel.js（参数面板），保持博客干净；
@@ -58,13 +58,13 @@ const CHUNK_URL = `${DIST}chunk/index2.js`;
 
 // 模型根地址候选（按模型区分）。生产环境：
 //  - BCSZ1.1 已随博客打包成静态资源（见 vite.config.ts rinLive2dBundledModel），
-//    优先本域本地根，毫秒级、摆脱远端 github.io 小水管；
+//    优先本域本地根，毫秒级、摆脱远端 CDN；
 //  - furina 的 moc3 单文件约 95MB 超 Cloudflare Pages 25MiB 限制，无法打包，只能走
-//    远端 github.io 直连，失败回退加速代理（Demo 默认）。
+//    远端模型源。优先 dpdns 加速镜像（国内直连更快、更稳），失败回退 github.io 直连。
 // dev 环境统一由 vite.config.ts 的 rinLive2dLocalCdn 中间件提供本地模型文件。
 const REMOTE_CDN_CANDIDATES = [
-  "https://827802685.github.io/Live2D/",
   "https://raw-githubusercontent-com-gh.zjkl0330.dpdns.org/827802685/Live2D/refs/heads/master/",
+  "https://827802685.github.io/Live2D/",
 ] as const;
 
 // 各模型优先使用的本地/打包根（非远端 CDN）。BCSZ1.1 生产走随博客分发的打包根。
