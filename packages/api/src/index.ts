@@ -8,4 +8,10 @@ export * from './types';
 export * from './schemas';
 
 // Schema validator
-export { t } from './schema-validator';
+export {
+  t,
+  parseSchema,
+  describeIssues,
+  type ValidationIssue,
+  type SchemaParseResult,
+} from './schema-validator';

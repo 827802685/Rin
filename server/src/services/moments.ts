@@ -3,7 +3,7 @@ import { Hono } from "hono";
 import { moments } from "../db/schema";
 import type { AppContext } from "../core/hono-types";
 import { profileAsync } from "../core/server-timing";
-import { momentCreateSchema, momentUpdateSchema } from "@rin/api";
+import { momentCreateSchema, momentUpdateSchema, parseSchema, describeIssues } from "@rin/api";
 
 export function MomentsService(): Hono {
     const app = new Hono();
@@ -57,20 +57,22 @@ export function MomentsService(): Hono {
         const uid = c.get('uid');
         const admin = c.get('admin');
         const body = await profileAsync(c, 'moments_create_parse', () => c.req.json());
-        const { content } = body;
-        
+
         if (!uid) {
             return c.text('Unauthorized', 401);
         }
-        
+
         if (!admin) {
             return c.text('Permission denied', 403);
         }
-        
-        if (!content) {
-            return c.text('Content is required', 400);
+
+        const parsed = parseSchema<{ content: string }>(momentCreateSchema, body);
+        if (!parsed.success) {
+            return c.text(describeIssues(parsed.issues), 400);
         }
-        
+
+        const { content } = parsed.data;
+
         const date = new Date();
         const result = await profileAsync(c, 'moments_create_insert', () => db.insert(moments).values({
             content, uid, createdAt: date, updatedAt: date
@@ -93,27 +95,29 @@ export function MomentsService(): Hono {
         const admin = c.get('admin');
         const id = c.req.param('id');
         const body = await profileAsync(c, 'moments_update_parse', () => c.req.json());
-        const { content } = body;
-        
+
         if (!uid) {
             return c.text('Unauthorized', 401);
         }
-        
+
         if (!admin) {
             return c.text('Permission denied', 403);
         }
-        
+
+        const parsed = parseSchema<{ content: string }>(momentUpdateSchema, body);
+        if (!parsed.success) {
+            return c.text(describeIssues(parsed.issues), 400);
+        }
+
+        const { content } = parsed.data;
+
         const id_num = parseInt(id);
         const moment = await profileAsync(c, 'moments_update_lookup', () => db.query.moments.findFirst({ where: eq(moments.id, id_num) }));
-        
+
         if (!moment) {
             return c.text('Not found', 404);
         }
-        
-        if (!content) {
-            return c.text('Content is required', 400);
-        }
-        
+
         await profileAsync(c, 'moments_update_db', () => db.update(moments).set({
             content,
             updatedAt: new Date()

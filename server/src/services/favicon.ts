@@ -96,6 +96,10 @@ export function FaviconService(): Hono {
                 console.error("Error fetching favicon:", error);
                 return c.text(`Error fetching favicon: ${error.message}`);
             }
+
+            c.status(500);
+            console.error("Error fetching favicon:", error);
+            return c.text("Error fetching favicon");
         }
     });
 
@@ -123,6 +127,10 @@ export function FaviconService(): Hono {
                 console.error("Error fetching original favicon:", error);
                 return c.text(`Error fetching original favicon: ${error.message}`);
             }
+
+            c.status(500);
+            console.error("Error fetching original favicon:", error);
+            return c.text("Error fetching original favicon");
         }
     });
 
@@ -205,6 +213,10 @@ export function FaviconService(): Hono {
                 console.error("Error processing favicon:", error);
                 return c.text(`Error processing favicon: ${error.message}`);
             }
+
+            c.status(500);
+            console.error("Error processing favicon:", error);
+            return c.text("Error processing favicon");
         }
     });
 

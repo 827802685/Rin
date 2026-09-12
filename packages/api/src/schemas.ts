@@ -92,11 +92,11 @@ export const friendUpdateSchema = t.Object({
 // ============================================================================
 
 export const momentCreateSchema = t.Object({
-  content: t.String(),
+  content: t.String({ minLength: 1 }),
 });
 
 export const momentUpdateSchema = t.Object({
-  content: t.String(),
+  content: t.String({ minLength: 1 }),
 });
 
 // ============================================================================
