@@ -1,6 +1,7 @@
 import { getApp } from "./app-instance";
 
-const ROOT_FEED_PATTERN = /^\/(rss\.xml|atom\.xml|rss\.json|feed\.json|feed\.xml)$/;
+// Documents crawlers expect at the site root: syndication feeds plus SEO files.
+const ROOT_ROUTE_PATTERN = /^\/(rss\.xml|atom\.xml|rss\.json|feed\.json|feed\.xml|sitemap\.xml|robots\.txt)$/;
 const APP_PUBLIC_ROUTE_PATTERN = /^\/(favicon|favicon\.ico)(?:\/|$)/;
 
 function isApiRequest(pathname: string) {
@@ -13,8 +14,8 @@ function rewriteApiRequest(request: Request) {
   return new Request(url, request);
 }
 
-function isRootFeedRequest(pathname: string) {
-  return ROOT_FEED_PATTERN.test(pathname);
+function isRootRoute(pathname: string) {
+  return ROOT_ROUTE_PATTERN.test(pathname);
 }
 
 function isAppPublicRoute(pathname: string) {
@@ -61,7 +62,7 @@ export async function handleFetch(request: Request, env: Env): Promise<Response>
   const url = new URL(request.url);
   const pathname = url.pathname;
 
-  if (isRootFeedRequest(pathname)) {
+  if (isRootRoute(pathname)) {
     return getApp().fetch(request, env);
   }
 

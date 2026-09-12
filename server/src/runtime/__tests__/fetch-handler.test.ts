@@ -33,6 +33,25 @@ describe("handleFetch", () => {
     expect(getAppFetch).toHaveBeenCalledTimes(0);
   });
 
+  it("routes sitemap.xml and robots.txt to the app before static assets", async () => {
+    getAppFetch.mockImplementation(async () => new Response("seo-body", { status: 200 }));
+
+    const { handleFetch } = await import("../fetch-handler");
+    const assetFetch = mock(async () => new Response("asset-body", { status: 200 }));
+
+    for (const path of ["/sitemap.xml", "/robots.txt"]) {
+      const response = await handleFetch(new Request(`http://localhost${path}`), {
+        ASSETS: { fetch: assetFetch },
+      } as unknown as Env);
+
+      expect(await response.text()).toBe("seo-body");
+      expect(new URL(getAppFetch.mock.calls.at(-1)?.[0].url).pathname).toBe(path);
+    }
+
+    // Crawler documents must never be answered by the static asset bucket.
+    expect(assetFetch).toHaveBeenCalledTimes(0);
+  });
+
   it("routes /api/blob requests to the app before static assets", async () => {
     getAppFetch.mockResolvedValue(new Response("blob-body", { status: 200 }));
 
