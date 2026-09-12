@@ -1,6 +1,6 @@
 import i18next from "i18next";
+import { SiteMeta } from "../components/site-meta";
 import { useCallback, useContext, useEffect, useRef, useState } from "react";
-import { Helmet } from 'react-helmet';
 import { useTranslation } from "react-i18next";
 import Modal from 'react-modal';
 import { FlatActionButton, FlatPanel, SearchableSelect } from "@rin/ui";
@@ -11,8 +11,6 @@ import { client } from "../app/runtime";
 import { ClientConfigContext } from "../state/config";
 import { ProfileContext } from "../state/profile";
 
-import { useSiteConfig } from "../hooks/useSiteConfig";
-import { siteName } from "../utils/constants";
 
 
 type FriendItem = {
@@ -48,7 +46,6 @@ async function publish({ name, avatar, desc, url, showAlert }: { name: string, a
 
 export function FriendsPage() {
     const { t } = useTranslation()
-    const siteConfig = useSiteConfig();
     const config = useContext(ClientConfigContext)
     let [apply] = useState<FriendItem>()
     const [name, setName] = useState("")
@@ -84,15 +81,7 @@ export function FriendsPage() {
     function publishButton() {
         publish({ name, desc, avatar, url, showAlert })
     }
-    return (<>
-        <Helmet>
-            <title>{`${t('friends.title')} - ${siteConfig.name}`}</title>
-            <meta property="og:site_name" content={siteName} />
-            <meta property="og:title" content={t('friends.title')} />
-            <meta property="og:image" content={siteConfig.avatar} />
-            <meta property="og:type" content="article" />
-            <meta property="og:url" content={document.URL} />
-        </Helmet>
+    return (<SiteMeta title={t('friends.title')}>
         <Waiting for={friendsAvailable.length !== 0 || friendsUnavailable.length !== 0 || status === "idle"}>
             <main className="w-full flex flex-col justify-center items-center mb-8 t-primary ani-show">
                 <FriendList title={t('friends.title')} show={friendsAvailable.length > 0} friends={friendsAvailable} />
@@ -121,7 +110,7 @@ export function FriendsPage() {
             </main>
         </Waiting>
         <AlertUI />
-    </>)
+    </SiteMeta>)
 }
 
 function FriendList({ title, show, friends }: { title: string, show: boolean, friends: FriendItem[] }) {

@@ -84,6 +84,8 @@
       "title$keyword": "Search: {{keyword}}"
     },
     "title": "Articles",
+    "reading_time": "~{{minute}} min read",
+    "word_count": "{{count}} words",
     "top": {
       "confirm": "Are you sure you want to top this article?",
       "success": "Topped successfully",
@@ -1020,5 +1022,10 @@
         "label": "Length"
       }
     }
+  },
+  "code_block": {
+    "copy": "Copy",
+    "copied": "Copied",
+    "failed": "Copy failed"
   }
 }

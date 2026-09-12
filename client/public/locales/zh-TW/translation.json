@@ -84,6 +84,8 @@
       "title$keyword": "搜尋：{{keyword}}"
     },
     "title": "文章",
+    "reading_time": "約 {{minute}} 分鐘讀完",
+    "word_count": "字數 {{count}}",
     "top": {
       "confirm": "確定置頂這篇文章嗎？",
       "success": "置頂成功",
@@ -1020,5 +1022,10 @@
         "label": "長度"
       }
     }
+  },
+  "code_block": {
+    "copy": "複製",
+    "copied": "已複製",
+    "failed": "複製失敗"
   }
 }

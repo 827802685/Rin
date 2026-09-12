@@ -1,15 +1,12 @@
 import { useContext, useEffect, useRef, useState } from "react";
-import { Helmet } from "react-helmet";
+import { SiteMeta } from "../components/site-meta";
 import { useTranslation } from "react-i18next";
 import type { AIChatMessage } from "@rin/api";
 import { client } from "../app/runtime";
-import { useSiteConfig } from "../hooks/useSiteConfig";
 import { ClientConfigContext } from "../state/config";
-import { siteName } from "../utils/constants";
 
 export function AIPage() {
     const { t } = useTranslation();
-    const siteConfig = useSiteConfig();
     const config = useContext(ClientConfigContext);
     const aiEnabled = config.get<boolean>("ai_summary.enabled") === true;
 
@@ -49,15 +46,7 @@ export function AIPage() {
     }
 
     return (
-        <>
-            <Helmet>
-                <title>{`${t("ai.title")} - ${siteConfig.name}`}</title>
-                <meta property="og:site_name" content={siteName} />
-                <meta property="og:title" content={t("ai.title")} />
-                <meta property="og:image" content={siteConfig.avatar} />
-                <meta property="og:type" content="article" />
-                <meta property="og:url" content={document.URL} />
-            </Helmet>
+        <SiteMeta title={t("ai.title")}>
             <main className="w-full flex flex-col justify-center items-center mb-8 t-primary ani-show">
                 <div className="wauto">
                     <div className="flex flex-col overflow-hidden rounded-2xl bg-w shadow-xl shadow-light">
@@ -141,6 +130,6 @@ export function AIPage() {
                     </div>
                 </div>
             </main>
-        </>
+        </SiteMeta>
     );
 }

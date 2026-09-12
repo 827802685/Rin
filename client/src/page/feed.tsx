@@ -1,6 +1,5 @@
 import type { Feed } from "@rin/api";
-import { useContext, useEffect, useRef, useState } from "react";
-import { Helmet } from "react-helmet";
+import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import ReactModal from "react-modal";
 import Popup from "reactjs-popup";
@@ -9,17 +8,18 @@ import { useAlert, useConfirm } from "../components/dialog";
 import { HashTag } from "../components/hashtag";
 import { Waiting } from "../components/loading";
 import { Markdown } from "../components/markdown";
+import { SiteMeta } from "../components/site-meta";
 import { client } from "../app/runtime";
 import { ClientConfigContext } from "../state/config";
 import { ProfileContext } from "../state/profile";
-import { useSiteConfig } from "../hooks/useSiteConfig";
-import { siteName } from "../utils/constants";
 import { timeago } from "../utils/timeago";
 import { Button } from "../components/button";
 import { Tips } from "../components/tips";
 import mermaid from "mermaid";
 import { AdjacentSection } from "../components/adjacent_feed.tsx";
+import { ReadingProgress } from "../components/reading-progress";
 import { stripImageUrlMetadata } from "../utils/image-upload";
+import { estimateReading } from "../utils/reading-time";
 import { ShareBar } from "../components/theme/share-bar";
 
 function extractFirstMarkdownImageUrl(content: string) {
@@ -33,7 +33,7 @@ function extractFirstMarkdownImageUrl(content: string) {
 
 export function FeedPage({ id, TOC, clean }: { id: string, TOC: () => JSX.Element, clean: (id: string) => void }) {
   const { t } = useTranslation();
-  const siteConfig = useSiteConfig();
+
   const profile = useContext(ProfileContext);
   const [feed, setFeed] = useState<Feed>();
   const [error, setError] = useState<string>();
@@ -48,6 +48,10 @@ export function FeedPage({ id, TOC, clean }: { id: string, TOC: () => JSX.Elemen
   const hasAISummary = Boolean(feed?.ai_summary?.trim());
   const showAISummaryState = feed?.ai_summary_status === "pending" || feed?.ai_summary_status === "processing" || feed?.ai_summary_status === "failed";
   const hashtags = Array.isArray(feed?.hashtags) ? feed.hashtags : [];
+  const reading = useMemo(
+    () => (feed ? estimateReading(feed.content ?? "") : null),
+    [feed],
+  );
   function deleteFeed() {
     // Confirm
     showConfirm(
@@ -135,35 +139,17 @@ export function FeedPage({ id, TOC, clean }: { id: string, TOC: () => JSX.Elemen
   return (
     <Waiting for={feed || error}>
       {feed && (
-        <Helmet>
-          <title>{`${feed.title ?? "Unnamed"} - ${siteConfig.name}`}</title>
-          <meta property="og:site_name" content={siteName} />
-          <meta property="og:title" content={feed.title ?? ""} />
-          <meta property="og:image" content={headImage ?? siteConfig.avatar} />
-          <meta property="og:type" content="article" />
-          <meta property="og:url" content={document.URL} />
-          <meta
-            name="og:description"
-            content={
-              feed.content.length > 200
-                ? feed.content.substring(0, 200)
-                : feed.content
-            }
-          />
-          <meta name="author" content={feed.user.username} />
-          <meta
-            name="keywords"
-            content={hashtags.map(({ name }) => name).join(", ")}
-          />
-          <meta
-            name="description"
-            content={
-              feed.content.length > 200
-                ? feed.content.substring(0, 200)
-                : feed.content
-            }
-          />
-        </Helmet>
+        <SiteMeta
+          title={feed.title ?? "Unnamed"}
+          description={
+            feed.content.length > 200
+              ? feed.content.substring(0, 200)
+              : feed.content
+          }
+          image={headImage}
+          keywords={hashtags.map(({ name }) => name).join(", ")}
+          author={feed.user.username}
+        />
       )}
       <div className="w-full flex flex-row justify-center ani-show">
         {error && (
@@ -182,6 +168,7 @@ export function FeedPage({ id, TOC, clean }: { id: string, TOC: () => JSX.Elemen
         )}
         {feed && !error && (
           <>
+            <ReadingProgress />
             <div className="xl:w-64" />
             <main className="wauto">
               <article
@@ -222,6 +209,13 @@ export function FeedPage({ id, TOC, clean }: { id: string, TOC: () => JSX.Elemen
                         {feed.uv}
                       </span>
                     </p>}
+                    {reading && reading.words > 0 && (
+                      <p className="text-[12px] text-gray-400 font-normal">
+                        <span>{t("article.word_count", { count: reading.words })}</span>
+                        <span> · </span>
+                        <span>{t("article.reading_time", { minute: reading.minutes })}</span>
+                      </p>
+                    )}
                     <div className="flex flex-row items-center">
                       <h1 className="text-2xl font-bold t-primary break-all">
                         {feed.title}

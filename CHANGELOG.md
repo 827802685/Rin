@@ -12,16 +12,34 @@ which automatically generates release notes from commit messages.
 ## [Unreleased]
 
 ### Added
+- **Sitemap and robots**: New `SEOService` serves `GET /sitemap.xml` (home page, published articles, tag pages) and `GET /robots.txt`, both routed from the site root ahead of the static asset lookup.
+- **Reading progress**: A thin theme-coloured progress bar tracks scroll position on article pages.
+- **Word count and reading time**: Article pages show the counted words/characters and an estimated reading time, with CJK and Latin text counted separately.
+- **Code block copy improvements**: Code blocks now show their language, use translated copy labels, and fall back to a selection-based copy when the async clipboard API is unavailable.
 
 ### Changed
+- **Password storage**: Passwords are hashed with PBKDF2-HMAC-SHA256 using a random per-password salt instead of unsalted SHA-256. Legacy digests still verify and are transparently upgraded on the next successful login.
+- **Shared page metadata**: Public pages now render their Open Graph tags through a single `SiteMeta` component instead of repeating the same `<Helmet>` block in every page.
 
 ### Deprecated
 
 ### Removed
+- **Dead client code**: Removed the unused `useError` hook and the unused `useSiteConfigValue` helper.
+- **Dead API client**: Removed `client.aiConfig`, which called the long-removed `/api/ai-config` endpoints.
+- **Deprecated contract entries**: Removed the stale `AI_CONFIG_GET` / `AI_CONFIG_UPDATE` path constants.
 
 ### Fixed
+- **Pinned posts**: `feeds.top` was declared in the schema but never created by any migration, so pinning and every `ORDER BY feeds.top` query failed on a freshly migrated database. Added migration `0011` and corrected the inverted `fix-top-field` check, which used to skip newly migrated databases.
+- **Search wildcard injection**: Search keywords are now escaped before being used in a `LIKE` pattern, so `%` and `_` are matched literally instead of acting as wildcards.
+- **AI chat abuse**: `POST /ai/chat` had no throttling. It now requires the AI integration to be enabled and enforces a per-IP (or per-user) request budget.
+- **Login abuse**: `POST /auth/login` is rate limited per IP.
+- **OAuth state validation**: The GitHub callback accepted a request when both the `state` parameter and the `state` cookie were missing, because `undefined === undefined` passed the check. Both must now be present and match, compared in constant time, and the state is no longer written to logs.
+- **API contract drift**: `API_PATHS` had no consumers and several wrong entries (missing `/api` prefix, deprecated endpoints, missing routes). It is now aligned with the real route table and covered by a test that fails if they diverge again.
+- **Translation gaps**: Added the seven missing Japanese `login.*` strings and added a test asserting all four locales stay key-for-key identical.
 
 ### Security
+- Password comparison now uses a constant-time comparison instead of `!==` on digests.
+- Rate limiting data is stored in a new `rate_limits` table (migration `0012`) and reclaimed by the scheduled job.
 
 ## [v0.3.0] - 2026-03-12
 

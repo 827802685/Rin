@@ -8,7 +8,9 @@ import {
 } from "react-syntax-highlighter/dist/esm/styles/prism";
 import rehypeKatex from "rehype-katex";
 import rehypeRaw from "rehype-raw";
+import { useTranslation } from "react-i18next";
 import gfm from "remark-gfm";
+import { copyText } from "../utils/clipboard";
 import remarkMermaid from "../remark/remarkMermaid";
 import { remarkAlert } from "remark-github-blockquote-alert";
 import remarkMath from "remark-math";
@@ -178,7 +180,9 @@ export function Markdown({ content }: { content: string }) {
           }
         },
         code(props) {
-          const [copied, setCopied] = React.useState(false);
+          type CopyState = "idle" | "copied" | "failed";
+          const [copyState, setCopyState] = React.useState<CopyState>("idle");
+          const { t } = useTranslation();
           const { children, className, node, ...rest } = props;
           const match = /language-(\w+)/.exec(className || "");
 
@@ -201,8 +205,20 @@ export function Markdown({ content }: { content: string }) {
           const language = match ? match[1] : "";
 
           if (isCodeBlock) {
+            const rawCode = String(children).replace(/\n$/, "");
+            const buttonLabel = copyState === "copied"
+              ? t("code_block.copied")
+              : copyState === "failed"
+                ? t("code_block.failed")
+                : t("code_block.copy");
+
             return (
               <div className="relative group">
+                {language && (
+                  <span className="pointer-events-none absolute left-3 top-1 select-none rounded-md bg-w/80 px-2 py-1 text-[11px] uppercase tracking-wide text-gray-500 opacity-0 transition-opacity group-hover:opacity-100 dark:text-neutral-400">
+                    {language}
+                  </span>
+                )}
                 <SyntaxHighlighter
                   PreTag="div"
                   className="rounded"
@@ -215,16 +231,21 @@ export function Markdown({ content }: { content: string }) {
                   wrapLongLines={true}
                   codeTagProps={{ style: codeBlockStyle }}
                 >
-                  {String(children).replace(/\n$/, "")}
+                  {rawCode}
                 </SyntaxHighlighter>
-                <button className="absolute top-1 right-1 px-2 py-1 bg-w rounded-md text-sm bg-hover select-none invisible group-hover:visible"
-                  onClick={() => {
-                    navigator.clipboard.writeText(String(children));
-                    setCopied(true);
-                    setTimeout(() => setCopied(false), 2000);
+                <button
+                  type="button"
+                  aria-label={t("code_block.copy")}
+                  title={buttonLabel}
+                  className={`absolute top-1 right-1 flex items-center gap-1 rounded-md bg-w px-2 py-1 text-sm bg-hover transition select-none ${copyState === "idle" ? "invisible group-hover:visible" : "visible"} ${copyState === "failed" ? "text-red-500" : "text-theme"}`}
+                  onClick={async () => {
+                    const ok = await copyText(rawCode);
+                    setCopyState(ok ? "copied" : "failed");
+                    setTimeout(() => setCopyState("idle"), 2000);
                   }}
                 >
-                  {copied ? "Copied!" : "Copy"}
+                  <i className={copyState === "copied" ? "ri-check-line" : "ri-file-copy-line"} />
+                  <span>{buttonLabel}</span>
                 </button>
               </div>
             );

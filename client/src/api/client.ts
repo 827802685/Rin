@@ -28,7 +28,6 @@ import type {
   CreateMomentRequest,
   ConfigType,
   ConfigResponse,
-  AIConfig,
   AIChatMessage,
   AIChatRequest,
   AIChatResponse,
@@ -545,26 +544,6 @@ class ConfigAPI {
 }
 
 /**
- * AI Config API methods (deprecated, use ConfigAPI instead)
- * @deprecated AI config is now part of server config. Use client.config.get('server') and client.config.update('server', {...}) instead.
- */
-class AIConfigAPI {
-  constructor(private http: HttpClient) {}
-
-  // GET /api/ai-config
-  /** @deprecated Use client.config.get('server') instead */
-  async get(): Promise<ApiResponse<AIConfig>> {
-    return this.http.get<AIConfig>("/api/ai-config");
-  }
-
-  // POST /api/ai-config
-  /** @deprecated Use client.config.update('server', {...}) instead */
-  async update(body: Partial<AIConfig>): Promise<ApiResponse<void>> {
-    return this.http.post<void>("/api/ai-config", body);
-  }
-}
-
-/**
  * AI Chat API methods
  */
 class ChatAPI {
@@ -677,7 +656,6 @@ export class ApiClient {
   friend: FriendAPI;
   moments: MomentsAPI;
   config: ConfigAPI;
-  aiConfig: AIConfigAPI;
   chat: ChatAPI;
   storage: StorageAPI;
   search: SearchAPI;
@@ -694,7 +672,6 @@ export class ApiClient {
     this.friend = new FriendAPI(this.http);
     this.moments = new MomentsAPI(this.http);
     this.config = new ConfigAPI(this.http);
-    this.aiConfig = new AIConfigAPI(this.http);
     this.chat = new ChatAPI(this.http);
     this.storage = new StorageAPI(this.http);
     this.search = new SearchAPI(this.http);

@@ -58,8 +58,9 @@ This repository is a product monorepo, not a framework monorepo.
 
 - `client/` is the web application, not a reusable package.
 - `server/` is the Worker application, not a generic framework core.
-- `packages/api/` is the only stable shared package today.
-- `packages/ui/` exists in the tree but is not yet a real workspace package; treat it as incomplete work until it has its own `package.json`, tsconfig, exports, and consumers.
+- `packages/api/` is the stable shared package for API contracts, schemas, and transport-facing types.
+- `packages/ui/` is a real workspace package: it has its own `package.json`, `tsconfig.json`, explicit `exports`, a `typecheck` script, and consumers in `client/`.
+- `packages/config/` is a real workspace package holding shared config keys, defaults, and parsing; it is consumed by both `client/` and `server/`.
 - `cli/` is an engineering tool for this repo, not a runtime dependency of the product.
 
 ### Refactor Direction

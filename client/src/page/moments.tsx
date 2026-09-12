@@ -1,9 +1,8 @@
 import { useContext, useEffect, useRef, useState } from "react"
-import { Helmet } from 'react-helmet'
+import { SiteMeta } from "../components/site-meta";
 import { client } from "../app/runtime"
 
 import { useSiteConfig } from "../hooks/useSiteConfig";
-import { siteName } from "../utils/constants"
 import { useTranslation } from "react-i18next"
 import { ProfileContext } from "../state/profile"
 import { tryInt } from "../utils/int"
@@ -163,15 +162,7 @@ export function MomentsPage() {
     }, [limit])
     
     return (
-        <>
-            <Helmet>
-                <title>{`${t('moments.title')} - ${siteConfig.name}`}</title>
-                <meta property="og:site_name" content={siteName} />
-                <meta property="og:title" content={t('moments.title')} />
-                <meta property="og:image" content={siteConfig.avatar} />
-                <meta property="og:type" content="article" />
-                <meta property="og:url" content={document.URL} />
-            </Helmet>
+        <SiteMeta title={t('moments.title')}>
             <Waiting for={!loading}>
                 <main className="w-full flex flex-col justify-center items-center mb-8 ani-show">
                     <div className="wauto text-start text-black dark:text-white py-4 text-4xl font-bold">
@@ -287,6 +278,6 @@ export function MomentsPage() {
             
             <AlertUI />
             <ConfirmUI />
-        </>
+        </SiteMeta>
     )
 }

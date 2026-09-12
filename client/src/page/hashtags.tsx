@@ -1,12 +1,10 @@
 import { useEffect, useRef, useState } from "react";
-import { Helmet } from 'react-helmet';
+import { SiteMeta } from "../components/site-meta";
 import { useTranslation } from "react-i18next";
 import { Link } from "wouter";
 import { HashTag } from "../components/hashtag";
 import { Waiting } from "../components/loading";
 import { client } from "../app/runtime";
-import { useSiteConfig } from "../hooks/useSiteConfig";
-import { siteName } from "../utils/constants";
 
 type Hashtag = {
     id: number;
@@ -18,7 +16,6 @@ type Hashtag = {
 
 export function HashtagsPage() {
     const { t } = useTranslation();
-    const siteConfig = useSiteConfig();
     const [hashtags, setHashtags] = useState<Hashtag[]>();
     const [sortBy, setSortBy] = useState<'latest' | 'popular'>('latest');
     const ref = useRef(false);
@@ -47,15 +44,7 @@ export function HashtagsPage() {
         });
 
     return (
-        <>
-            <Helmet>
-                <title>{`${t('hashtags')} - ${siteConfig.name}`}</title>
-                <meta property="og:site_name" content={siteName} />
-                <meta property="og:title" content={t('hashtags')} />
-                <meta property="og:image" content={siteConfig.avatar} />
-                <meta property="og:type" content="article" />
-                <meta property="og:url" content={document.URL} />
-            </Helmet>
+        <SiteMeta title={t('hashtags')}>
             <Waiting for={hashtags}>
                 <main className="w-full flex flex-col justify-center items-center mb-8 ani-show">
                     <div className="wauto text-start py-4 text-4xl font-bold">
@@ -103,6 +92,6 @@ export function HashtagsPage() {
                     </div>
                 </main>
             </Waiting>
-        </>
+        </SiteMeta>
     )
 }

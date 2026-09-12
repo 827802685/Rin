@@ -1,10 +1,8 @@
 import {useEffect, useRef, useState} from "react"
-import {Helmet} from 'react-helmet'
+import { SiteMeta } from "../components/site-meta";
 import {Link} from "wouter"
 import {Waiting} from "../components/loading"
 import { client } from "../app/runtime"
-import {useSiteConfig} from "../hooks/useSiteConfig";
-import {siteName} from "../utils/constants"
 import {useTranslation} from "react-i18next";
 
 interface FeedItem {
@@ -18,7 +16,6 @@ export function TimelinePage() {
     const [length, setLength] = useState(0)
     const ref = useRef(false)
     const { t } = useTranslation()
-    const siteConfig = useSiteConfig();
     function fetchFeeds() {
         client.feed.timeline()
         .then(({ data }) => {
@@ -49,15 +46,7 @@ export function TimelinePage() {
         ref.current = true
     }, [])
     return (
-        <>
-            <Helmet>
-                <title>{`${t('timeline')} - ${siteConfig.name}`}</title>
-                <meta property="og:site_name" content={siteName} />
-                <meta property="og:title" content={t('timeline')} />
-                <meta property="og:image" content={siteConfig.avatar} />
-                <meta property="og:type" content="article" />
-                <meta property="og:url" content={document.URL} />
-            </Helmet>
+        <SiteMeta title={t('timeline')}>
             <Waiting for={feeds}>
                 <main className="w-full flex flex-col justify-center items-center mb-8 ani-show">
                     <div className="wauto text-start text-black dark:text-white py-4 text-4xl font-bold">
@@ -90,7 +79,7 @@ export function TimelinePage() {
                     ))}
                 </main>
             </Waiting>
-        </>
+        </SiteMeta>
     )
 }
 

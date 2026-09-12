@@ -84,6 +84,8 @@
       "title$keyword": "検索: {{keyword}}"
     },
     "title": "記事",
+    "reading_time": "約 {{minute}} 分で読めます",
+    "word_count": "{{count}} 文字",
     "top": {
       "confirm": "この記事をトップにしてもよろしいですか？",
       "success": "トップに成功しました",
@@ -239,7 +241,16 @@
   "listed": "記事にリスト",
   "load_more": "もっと読み込む",
   "login": {
+    "error": {
+      "empty": "ユーザー名とパスワードを入力してください",
+      "failed": "ログインに失敗しました",
+      "invalid": "ユーザー名またはパスワードが正しくありません",
+      "network": "ネットワークエラーが発生しました。もう一度お試しください"
+    },
+    "loading": "ログイン中...",
+    "no_methods": "利用できるログイン方法がありません",
     "oauth_only": "続行するにはログインしてください",
+    "or": "または",
     "password": {
       "placeholder": "パスワードを入力してください"
     },
@@ -1011,5 +1022,10 @@
         "label": "文字数"
       }
     }
+  },
+  "code_block": {
+    "copy": "コピー",
+    "copied": "コピーしました",
+    "failed": "コピーに失敗しました"
   }
 }

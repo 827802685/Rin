@@ -40,23 +40,3 @@ export function useSiteConfig() {
     };
 }
 
-// Hook to get a specific site config value
-export function useSiteConfigValue<K extends keyof typeof SITE_CONFIG_KEYS>(
-    key: K
-): typeof SITE_CONFIG_KEYS[K] extends "site.page_size" ? number : string {
-    const config = useContext(ClientConfigContext);
-    const configKey = SITE_CONFIG_KEYS[key];
-
-    if (key === "pageSize") {
-        const value = config.get<string | number>(configKey);
-        const parsed =
-            typeof value === "number"
-                ? value
-                : typeof value === "string"
-                    ? parseInt(value, 10)
-                    : NaN;
-        return (Number.isFinite(parsed) ? parsed : 5) as any;
-    }
-
-    return (config.get<string>(configKey) || "") as any;
-}

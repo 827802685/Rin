@@ -1,27 +1,16 @@
 import { useContext, useState } from "react";
-import { Helmet } from "react-helmet";
 import { useTranslation } from "react-i18next";
-import { useSiteConfig } from "../hooks/useSiteConfig";
+import { SiteMeta } from "../components/site-meta";
 import { ClientConfigContext } from "../state/config";
-import { siteName } from "../utils/constants";
 import { parseToolsConfig, type ToolItem } from "../utils/tools";
 
 export function ToolsPage() {
   const { t } = useTranslation();
-  const siteConfig = useSiteConfig();
   const config = useContext(ClientConfigContext);
   const tools = parseToolsConfig(config.get("tools"));
 
   return (
-    <>
-      <Helmet>
-        <title>{`${t("tools.title")} - ${siteConfig.name}`}</title>
-        <meta property="og:site_name" content={siteName} />
-        <meta property="og:title" content={t("tools.title")} />
-        <meta property="og:image" content={siteConfig.avatar} />
-        <meta property="og:type" content="article" />
-        <meta property="og:url" content={document.URL} />
-      </Helmet>
+    <SiteMeta title={t("tools.title")}>
       <main className="w-full flex flex-col justify-center items-center mb-8 t-primary ani-show">
         <div className="wauto">
           <div className="wauto text-start py-4">
@@ -41,7 +30,7 @@ export function ToolsPage() {
           )}
         </div>
       </main>
-    </>
+    </SiteMeta>
   );
 }
 
