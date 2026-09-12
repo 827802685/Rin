@@ -1,5 +1,5 @@
 import { relations, sql } from "drizzle-orm";
-import { integer, sqliteTable, text, unique } from "drizzle-orm/sqlite-core";
+import { integer, sqliteTable, text, unique, uniqueIndex } from "drizzle-orm/sqlite-core";
 
 const created_at = integer("created_at", { mode: 'timestamp' }).default(sql`(unixepoch())`).notNull();
 const updated_at = integer("updated_at", { mode: 'timestamp' }).default(sql`(unixepoch())`).notNull();
@@ -110,6 +110,17 @@ export const cache = sqliteTable("cache", {
 }, (table) => ({
     // 复合唯一约束：key + type
     keyTypeUnique: unique().on(table.key, table.type),
+}));
+
+export const rateLimits = sqliteTable("rate_limits", {
+    id: integer("id").primaryKey(),
+    // Identifies one (scope, window) pair, e.g. `login:203.0.113.4:1800000`.
+    bucketKey: text("bucket_key").notNull(),
+    windowStart: integer("window_start").notNull(),
+    count: integer("count").default(0).notNull(),
+    updatedAt: updated_at,
+}, (table) => ({
+    bucketKeyUnique: uniqueIndex("rate_limits_bucket_key_unique").on(table.bucketKey),
 }));
 
 export const feedsRelations = relations(feeds, ({ many, one }) => ({

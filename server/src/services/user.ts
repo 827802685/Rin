@@ -4,6 +4,7 @@ import { getCookie, setCookie, deleteCookie } from "hono/cookie";
 import type { AppContext } from "../core/hono-types";
 import { profileAsync } from "../core/server-timing";
 import { setJWTCookie } from "../core/hono-middleware";
+import { timingSafeEqual } from "../utils/password";
 import { users } from "../db/schema";
 import {
     BadRequestError,
@@ -58,11 +59,14 @@ export function UserService(): Hono {
         const query = c.req.query();
         const stateCookie = getCookie(c, 'state');
 
-        console.log('param_state', query.state);
-        console.log('cookie_state', stateCookie);
+        // Verify state to prevent CSRF attacks. Both sides must be present and
+        // non-empty, otherwise an attacker could simply omit `state` and have
+        // `undefined === undefined` pass the check.
+        const stateMatches = Boolean(query.state)
+            && Boolean(stateCookie)
+            && timingSafeEqual(new TextEncoder().encode(query.state || ""), new TextEncoder().encode(stateCookie || ""));
 
-        // Verify state to prevent CSRF attacks
-        if (query.state !== stateCookie) {
+        if (!stateMatches) {
             throw new BadRequestError('Invalid state parameter');
         }
 

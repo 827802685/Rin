@@ -331,10 +331,16 @@ export const API_PATHS = {
   FEED_TIMELINE: '/api/feed/timeline',
   FEED_GET: (id: number | string) => `/api/feed/${id}`,
   FEED_CREATE: '/api/feed',
-  FEED_UPDATE: (id: number) => `/api/feed/${id}`,
-  FEED_DELETE: (id: number) => `/api/feed/${id}`,
+  FEED_UPDATE: (id: number | string) => `/api/feed/${id}`,
+  FEED_DELETE: (id: number | string) => `/api/feed/${id}`,
   FEED_ADJACENT: (id: number | string) => `/api/feed/adjacent/${id}`,
-  FEED_SET_TOP: (id: number) => `/api/feed/top/${id}`,
+  FEED_SET_TOP: (id: number | string) => `/api/feed/top/${id}`,
+
+  // Search
+  SEARCH: (keyword: string) => `/api/search/${encodeURIComponent(keyword)}`,
+
+  // WordPress import
+  WP_IMPORT: '/api/wp',
 
   // Auth
   AUTH_STATUS: '/api/auth/status',
@@ -345,58 +351,78 @@ export const API_PATHS = {
   USER_UPDATE_PROFILE: '/api/user/profile',
   USER_LOGOUT: '/api/user/logout',
   USER_GITHUB: '/api/user/github',
+  USER_GITHUB_CALLBACK: '/api/user/github/callback',
 
   // Tag
   TAG_LIST: '/api/tag',
   TAG_GET: (name: string) => `/api/tag/${encodeURIComponent(name)}`,
 
   // Comment
-  COMMENT_LIST: (feedId: number) => `/api/comment/${feedId}`,
-  COMMENT_CREATE: (feedId: number) => `/api/comment/${feedId}`,
-  COMMENT_DELETE: (id: number) => `/api/comment/${id}`,
+  COMMENT_LIST: (feedId: number | string) => `/api/comment/${feedId}`,
+  COMMENT_CREATE: (feedId: number | string) => `/api/comment/${feedId}`,
+  COMMENT_DELETE: (id: number | string) => `/api/comment/${id}`,
 
   // Friend
   FRIEND_LIST: '/api/friend',
   FRIEND_CREATE: '/api/friend',
-  FRIEND_UPDATE: (id: number) => `/api/friend/${id}`,
-  FRIEND_DELETE: (id: number) => `/api/friend/${id}`,
+  FRIEND_UPDATE: (id: number | string) => `/api/friend/${id}`,
+  FRIEND_DELETE: (id: number | string) => `/api/friend/${id}`,
 
   // Moments
   MOMENTS_LIST: '/api/moments',
   MOMENTS_CREATE: '/api/moments',
-  MOMENTS_UPDATE: (id: number) => `/api/moments/${id}`,
-  MOMENTS_DELETE: (id: number) => `/api/moments/${id}`,
+  MOMENTS_UPDATE: (id: number | string) => `/api/moments/${id}`,
+  MOMENTS_DELETE: (id: number | string) => `/api/moments/${id}`,
 
-  // Config
-  CONFIG_GET: (type: ConfigType) => `/config/${type}`,
-  CONFIG_UPDATE: (type: ConfigType) => `/config/${type}`,
-  CONFIG_CLEAR_CACHE: '/config/cache',
+  // Config (AI settings live under the `server` config type)
+  CONFIG_GET: (type: ConfigType) => `/api/config/${type}`,
+  CONFIG_UPDATE: (type: ConfigType) => `/api/config/${type}`,
+  CONFIG_HEALTH: '/api/config/health',
+  CONFIG_QUEUE_STATUS: '/api/config/queue-status',
+  CONFIG_QUEUE_RETRY: (id: number | string) => `/api/config/queue-status/${id}/retry`,
+  CONFIG_QUEUE_DELETE: (id: number | string) => `/api/config/queue-status/${id}`,
+  CONFIG_COMPAT_TASKS: '/api/config/compat-tasks',
+  CONFIG_COMPAT_AI_SUMMARY: '/api/config/compat-tasks/ai-summary',
+  CONFIG_COMPAT_BLURHASH: '/api/config/compat-tasks/blurhash',
+  CONFIG_COMPAT_BLURHASH_FILL: (id: number | string) => `/api/config/compat-tasks/blurhash/${id}`,
+  CONFIG_TEST_AI: '/api/config/test-ai',
+  CONFIG_TEST_WEBHOOK: '/api/config/test-webhook',
+  CONFIG_CLEAR_CACHE: '/api/config/cache',
 
-  // AI Config (deprecated - use CONFIG_GET/CONFIG_UPDATE with 'server' type instead)
-  /** @deprecated Use CONFIG_GET('server') instead. AI config is now part of server config. */
-  AI_CONFIG_GET: '/ai-config',
-  /** @deprecated Use CONFIG_UPDATE('server', {...}) instead. AI config is now part of server config. */
-  AI_CONFIG_UPDATE: '/ai-config',
+  // Client bootstrap script
+  CONFIG_BOOTSTRAP_JS: '/api/config/client/bootstrap.js',
 
   // AI Chat
-  AI_CHAT: '/ai/chat',
+  AI_CHAT: '/api/ai/chat',
 
   // Storage
-  STORAGE_UPLOAD: '/storage',
+  STORAGE_UPLOAD: '/api/storage',
+  BLOB_GET: (key: string) => `/api/blob/${key}`,
 
-  // Favicon
-  FAVICON_GET: '/favicon',
-  FAVICON_GET_ORIGINAL: '/favicon/original',
-  FAVICON_UPLOAD: '/favicon',
+  // Favicon (also served at the site root by the favicon routes)
+  FAVICON_GET: '/api/favicon',
+  FAVICON_GET_ORIGINAL: '/api/favicon/original',
+  FAVICON_UPLOAD: '/api/favicon',
 
-  // Search
-  SEARCH: (keyword: string) => `/search/${encodeURIComponent(keyword)}`,
-
-  // WordPress
-  WP_IMPORT: '/wp',
-
-  // RSS
+  // RSS-like feeds are served from the site root, not under /api
   RSS_GET: (name: string) => `/${encodeURIComponent(name)}`,
+} as const;
+
+/**
+ * Well known routes served from the site root instead of under `/api`.
+ * Kept here so clients and tests share one source of truth.
+ */
+export const ROOT_PATHS = {
+  RSS_XML: '/rss.xml',
+  ATOM_XML: '/atom.xml',
+  RSS_JSON: '/rss.json',
+  FEED_JSON: '/feed.json',
+  FEED_XML: '/feed.xml',
+  FAVICON: '/favicon',
+  FAVICON_ICO: '/favicon.ico',
+  FAVICON_ORIGINAL: '/favicon/original',
+  SITEMAP_XML: '/sitemap.xml',
+  ROBOTS_TXT: '/robots.txt',
 } as const;
 
 export type APIEndpoint = typeof API_PATHS;

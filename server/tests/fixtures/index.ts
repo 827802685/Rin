@@ -152,6 +152,17 @@ export function createMockDB() {
             UNIQUE(key, type)
         );
 
+        -- Rate limits table
+        CREATE TABLE IF NOT EXISTS rate_limits (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            bucket_key TEXT NOT NULL,
+            window_start INTEGER NOT NULL,
+            count INTEGER DEFAULT 0 NOT NULL,
+            updated_at INTEGER DEFAULT (unixepoch())
+        );
+
+        CREATE UNIQUE INDEX IF NOT EXISTS rate_limits_bucket_key_unique ON rate_limits(bucket_key);
+
         CREATE INDEX IF NOT EXISTS idx_cache_type ON cache(type);
         CREATE INDEX IF NOT EXISTS idx_cache_key ON cache(key);
     `);

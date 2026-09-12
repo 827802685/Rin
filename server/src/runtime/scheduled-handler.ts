@@ -15,7 +15,11 @@ export async function handleScheduled(
 
   const { friendCrontab } = await import("../services/friends");
   const { rssCrontab } = await import("../services/rss");
+  const { cleanupRateLimits } = await import("../utils/rate-limit");
 
   await friendCrontab(env, ctx, db, cache, serverConfig, clientConfig);
   await rssCrontab(env, db);
+
+  // Reclaim abandoned rate limit buckets (longest window is 24h).
+  await cleanupRateLimits(db, 60 * 60 * 24);
 }

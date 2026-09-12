@@ -1,10 +1,12 @@
-import { and, asc, count, desc, eq, gt, like, lt, or } from "drizzle-orm";
+import { and, asc, count, desc, eq, gt, lt, or, sql } from "drizzle-orm";
+import type { AnySQLiteColumn } from "drizzle-orm/sqlite-core";
 import { Hono } from "hono";
 import type { Variables } from "../core/hono-types";
 import { profileAsync } from "../core/server-timing";
 import { feeds, visits, visitStats } from "../db/schema";
 import { HyperLogLog } from "../utils/hyperloglog";
 import { extractImageWithMetadata } from "../utils/image";
+import { containsLikePattern } from "../utils/like";
 import { stripMarkdown } from "../utils/markdown";
 import { syncFeedAISummaryQueueState } from "./feed-ai-summary";
 import { bindTagToPost } from "./tag";
@@ -512,12 +514,13 @@ export function SearchService(): Hono<{
         }
 
         const cacheKey = `search_${keyword}`;
-        const searchKeyword = `%${keyword}%`;
+        const searchKeyword = containsLikePattern(keyword);
+        const matchesKeyword = (column: AnySQLiteColumn) => sql`${column} LIKE ${searchKeyword} ESCAPE '\\'`;
         const whereClause = or(
-            like(feeds.title, searchKeyword),
-            like(feeds.content, searchKeyword),
-            like(feeds.summary, searchKeyword),
-            like(feeds.alias, searchKeyword)
+            matchesKeyword(feeds.title),
+            matchesKeyword(feeds.content),
+            matchesKeyword(feeds.summary),
+            matchesKeyword(feeds.alias)
         );
 
         const feed_list = (await profileAsync(c, 'feed_search_cache_db', () => cache.getOrSet(cacheKey, () => db.query.feeds.findMany({

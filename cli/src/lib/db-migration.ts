@@ -50,13 +50,7 @@ async function runWranglerQuiet(args: string[]) {
   }
 }
 
-export async function fixTopField(type: "local" | "remote", db: string, infoExists: boolean) {
-  if (infoExists) {
-    console.log("New database, skip top field check");
-    return;
-  }
-
-  console.log("Legacy database, check top field");
+export async function hasFeedsTopColumn(type: "local" | "remote", db: string) {
   const result = await runWranglerJson([
     "d1",
     "execute",
@@ -67,20 +61,51 @@ export async function fixTopField(type: "local" | "remote", db: string, infoExis
     "SELECT name FROM pragma_table_info('feeds') WHERE name='top'",
   ]);
 
-  if (result[0].results.length === 0) {
-    console.log("Adding top field to feeds table");
-    await runWranglerQuiet([
-      "d1",
-      "execute",
-      db,
-      `--${type}`,
-      "--json",
-      "--command",
-      "ALTER TABLE feeds ADD COLUMN top INTEGER DEFAULT 0",
-    ]);
-  } else {
-    console.log("Top field already exists in feeds table");
+  return (result[0]?.results?.length ?? 0) > 0;
+}
+
+/**
+ * Some migrations cannot be expressed idempotently in SQLite (notably
+ * `ALTER TABLE ... ADD COLUMN`). Skip them when their effect is already present
+ * so re-running the migration chain on a database that was patched in place
+ * (for example by `rin db fix-top-field`) does not abort the whole run.
+ */
+export async function shouldSkipMigration(
+  fileName: string,
+  type: "local" | "remote",
+  db: string,
+): Promise<boolean> {
+  if (fileName === "0011.sql" && (await hasFeedsTopColumn(type, db))) {
+    console.log("feeds.top already exists, skipping 0011.sql");
+    return true;
   }
+
+  return false;
+}
+
+export async function fixTopField(type: "local" | "remote", db: string, infoExists: boolean) {
+  // `infoExists` is kept for backwards compatible call sites and logging only.
+  // The check itself must always run: a freshly migrated database has the `info`
+  // table but still misses `feeds.top`, which is exactly the case that used to
+  // be skipped and left pinning broken.
+  console.log(infoExists ? "Migrated database" : "Legacy database");
+  console.log("Checking feeds.top field");
+
+  if (await hasFeedsTopColumn(type, db)) {
+    console.log("Top field already exists in feeds table");
+    return;
+  }
+
+  console.log("Adding top field to feeds table");
+  await runWranglerQuiet([
+    "d1",
+    "execute",
+    db,
+    `--${type}`,
+    "--json",
+    "--command",
+    "ALTER TABLE feeds ADD COLUMN top INTEGER NOT NULL DEFAULT 0",
+  ]);
 }
 
 export async function isInfoExist(type: "local" | "remote", db: string) {

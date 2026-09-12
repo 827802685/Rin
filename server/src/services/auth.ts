@@ -1,22 +1,34 @@
+import { getClientIP } from "../utils/request";
+import { hashPassword, needsRehash, timingSafeEqual, verifyPassword } from "../utils/password";
+import { consumeRateLimit } from "../utils/rate-limit";
 import { eq } from "drizzle-orm";
 import { Hono } from "hono";
 import type { AppContext, Variables } from "../core/hono-types";
 import { profileAsync } from "../core/server-timing";
-import { setJWTCookie, clearJWTCookie } from "../core/hono-middleware";
+import { setJWTCookie } from "../core/hono-middleware";
 import { users } from "../db/schema";
 import {
     BadRequestError,
     ForbiddenError,
     InternalServerError,
+    RateLimitError,
 } from "../errors";
 
-// Hash password using SHA-256
-async function hashPassword(password: string): Promise<string> {
+const LOGIN_RATE_LIMIT = 10;
+const LOGIN_WINDOW_SECONDS = 300;
+
+function sameString(left: string, right: string) {
     const encoder = new TextEncoder();
-    const data = encoder.encode(password);
-    const hashBuffer = await crypto.subtle.digest("SHA-256", data);
-    const hashArray = Array.from(new Uint8Array(hashBuffer));
-    return hashArray.map(b => b.toString(16).padStart(2, "0")).join("");
+    return timingSafeEqual(encoder.encode(left), encoder.encode(right));
+}
+
+function publicUser(user: { id: number; username: string; avatar: string | null; permission: number | null }) {
+    return {
+        id: user.id,
+        username: user.username,
+        avatar: user.avatar,
+        permission: user.permission === 1,
+    };
 }
 
 export function PasswordAuthService(): Hono<{
@@ -33,6 +45,18 @@ export function PasswordAuthService(): Hono<{
         const db = c.get('db');
         const env = c.env;
 
+        // Throttle brute force attempts before touching the database.
+        const throttle = await consumeRateLimit(db, {
+            scope: "login",
+            identifier: getClientIP(c),
+            limit: LOGIN_RATE_LIMIT,
+            windowSeconds: LOGIN_WINDOW_SECONDS,
+        });
+
+        if (!throttle.allowed) {
+            throw new RateLimitError('Too many login attempts, please try again later');
+        }
+
         // Check if admin credentials are configured
         const adminUsername = env.ADMIN_USERNAME;
         const adminPassword = env.ADMIN_PASSWORD;
@@ -47,54 +71,56 @@ export function PasswordAuthService(): Hono<{
             throw new BadRequestError('Username and password are required');
         }
 
-        // Hash the provided password
-        const hashedPassword = await profileAsync(c, 'auth_login_hash', () => hashPassword(password));
-
         // Check if this is the admin login
         if (username === adminUsername) {
-            const expectedHash = await profileAsync(c, 'auth_admin_hash', () => hashPassword(adminPassword));
-            
-            if (hashedPassword !== expectedHash) {
+            // The configured admin credential is authoritative, so rotating
+            // ADMIN_PASSWORD in the environment keeps working on every deploy.
+            if (!sameString(password, adminPassword)) {
                 throw new ForbiddenError('Invalid credentials');
             }
 
             // Find or create admin user
-            let user = await profileAsync(c, 'auth_admin_lookup', () => db.query.users.findFirst({ 
-                where: eq(users.openid, "admin") 
+            let user = await profileAsync(c, 'auth_admin_lookup', () => db.query.users.findFirst({
+                where: eq(users.openid, "admin")
             }));
 
             if (!user) {
+                const adminHash = await profileAsync(c, 'auth_admin_hash', () => hashPassword(adminPassword));
+
                 // Create admin user if not exists
                 const result = await profileAsync(c, 'auth_admin_insert', () => db.insert(users).values({
                     username: adminUsername,
                     openid: "admin",
                     avatar: "",
                     permission: 1,
-                    password: expectedHash,
+                    password: adminHash,
                 }).returning({ insertedId: users.id }));
 
                 if (!result || result.length === 0) {
                     throw new InternalServerError('Failed to create admin user');
                 }
 
-                user = await profileAsync(c, 'auth_admin_reload', () => db.query.users.findFirst({ 
-                    where: eq(users.id, result[0].insertedId) 
+                user = await profileAsync(c, 'auth_admin_reload', () => db.query.users.findFirst({
+                    where: eq(users.id, result[0].insertedId)
                 }));
+            } else if (user && needsRehash(user.password)) {
+                const adminHash = await profileAsync(c, 'auth_admin_hash', () => hashPassword(adminPassword));
+                const adminId = user.id;
+
+                // Migrate the legacy unsalted digest (or sync a rotated password).
+                await profileAsync(c, 'auth_admin_sync', () => db.update(users)
+                    .set({ password: adminHash, username: adminUsername })
+                    .where(eq(users.id, adminId)));
             }
 
             if (!user) {
                 throw new InternalServerError('Failed to get admin user');
             }
 
-            if (user.password !== expectedHash) {
-                // Update admin password if changed
-                await profileAsync(c, 'auth_admin_sync', () => db.update(users)
-                    .set({ password: expectedHash, username: adminUsername })
-                    .where(eq(users.id, user.id)));
-            }
+            const admin = user;
 
             // Generate JWT token
-            const token = await profileAsync(c, 'auth_admin_token', () => jwt.sign({ id: user.id }));
+            const token = await profileAsync(c, 'auth_admin_token', () => jwt.sign({ id: admin.id }));
 
             // Set JWT cookie using Hono helper
             setJWTCookie(c, token);
@@ -102,26 +128,32 @@ export function PasswordAuthService(): Hono<{
             return c.json({
                 success: true,
                 token: token,
-                user: {
-                    id: user.id,
-                    username: user.username,
-                    avatar: user.avatar,
-                    permission: user.permission === 1,
-                }
+                user: publicUser(admin),
             });
         }
 
         // Regular user login (if we want to support multiple users with passwords in the future)
-        const user = await profileAsync(c, 'auth_user_lookup', () => db.query.users.findFirst({ 
-            where: eq(users.username, username) 
+        const user = await profileAsync(c, 'auth_user_lookup', () => db.query.users.findFirst({
+            where: eq(users.username, username)
         }));
 
         if (!user || !user.password) {
             throw new ForbiddenError('Invalid credentials');
         }
 
-        if (user.password !== hashedPassword) {
+        const passwordMatches = await profileAsync(c, 'auth_user_verify', () => verifyPassword(password, user.password));
+
+        if (!passwordMatches) {
             throw new ForbiddenError('Invalid credentials');
+        }
+
+        if (needsRehash(user.password)) {
+            const upgradedHash = await profileAsync(c, 'auth_user_hash', () => hashPassword(password));
+
+            // Upgrade legacy SHA-256 digests to PBKDF2 on the next successful login.
+            await profileAsync(c, 'auth_user_rehash', () => db.update(users)
+                .set({ password: upgradedHash })
+                .where(eq(users.id, user.id)));
         }
 
         // Generate JWT token
@@ -133,19 +165,14 @@ export function PasswordAuthService(): Hono<{
         return c.json({
             success: true,
             token: token,
-            user: {
-                id: user.id,
-                username: user.username,
-                avatar: user.avatar,
-                permission: user.permission === 1,
-            }
+            user: publicUser(user),
         });
     });
 
     // Check if password login is available
     app.get("/status", async (c: AppContext) => {
         const env = c.env;
-        
+
         return c.json({
             github: !!(env.RIN_GITHUB_CLIENT_ID && env.RIN_GITHUB_CLIENT_SECRET),
             password: !!(env.ADMIN_USERNAME && env.ADMIN_PASSWORD),
