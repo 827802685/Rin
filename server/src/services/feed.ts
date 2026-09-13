@@ -542,7 +542,14 @@ export function SearchService(): Hono<{
         const limit = c.req.query('limit');
         let keyword = c.req.param('keyword');
 
-        keyword = decodeURI(keyword);
+        // Hono already decodes path params, so a literal `%` arrives here as-is
+        // and decoding it again throws `URIError`. Fall back to the raw value
+        // instead of turning a legitimate search into a 500.
+        try {
+            keyword = decodeURI(keyword);
+        } catch {
+            // keep the already decoded value
+        }
         const page_num = (page ? parseInt(page) > 0 ? parseInt(page) : 1 : 1) - 1;
         const limit_num = limit ? parseInt(limit) > 50 ? 50 : parseInt(limit) : 20;
 
@@ -573,9 +580,13 @@ export function SearchService(): Hono<{
             orderBy: [desc(feeds.createdAt), desc(feeds.updatedAt)],
         })))).map(({ content, hashtags, summary, ...other }: any) => {
             const plainText = stripMarkdown(content);
+            // Feed cards render `avatar`, so search results must expose it just
+            // like the feed list does, otherwise cards lose their cover image.
+            const avatar = extractImageWithMetadata(content);
             return {
                 summary: summary.length > 0 ? summary : plainText.length > 100 ? plainText.slice(0, 100) : plainText,
                 hashtags: hashtags.map(({ hashtag }: any) => hashtag),
+                avatar,
                 ...other
             };
         });
