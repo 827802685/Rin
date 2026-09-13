@@ -1,26 +1,18 @@
 import { SearchableSelect, SettingsCard, SettingsCardBody, SettingsCardHeader, SettingsCardRow } from "@rin/ui";
-import { type ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
+import { type ChangeEvent, useMemo, useRef, useState } from "react";
 import { Helmet } from "react-helmet";
 import { useTranslation } from "react-i18next";
 import ReactLoading from "react-loading";
 import Modal from "react-modal";
 import { client, oauth_url } from "../app/runtime";
 import { Button } from "../components/button";
-import { useAlert } from "../components/dialog.tsx";
 import { useSiteConfig } from "../hooks/useSiteConfig";
-import { applyThemeColor } from "../utils/theme-color";
+import { useSettingsDraft } from "../hooks/use-settings-draft";
 import { AISummarySettings } from "./settings-ai";
 import { ItemButton, ItemImageInput, ItemInput, ItemSwitch, ItemTitle, ItemWithUpload, SaveBar } from "./settings-items";
 import {
-  areSettingsDraftsEqual,
   buildAIConfigDraftValue,
-  createSettingsConfigWrappers,
   importWordPressFile,
-  loadSettingsConfigState,
-  mergeSessionConfig,
-  saveSettingsConfigState,
-  type SettingsDraft,
-  updateDraftConfig,
   uploadFavicon,
 } from "./settings-helpers";
 
@@ -37,76 +29,35 @@ export function Settings() {
   const [isOpen, setIsOpen] = useState(false);
   const [msg, setMsg] = useState("");
   const [msgList, setMsgList] = useState<{ title: string; reason: string }[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
   const [testingWebhook, setTestingWebhook] = useState(false);
   const [webhookTestMessage, setWebhookTestMessage] = useState("");
-  const [draft, setDraft] = useState<SettingsDraft>({ clientConfig: {}, serverConfig: {} });
-  const [initialDraft, setInitialDraft] = useState<SettingsDraft>({ clientConfig: {}, serverConfig: {} });
   const [hasStoredAiApiKey, setHasStoredAiApiKey] = useState(false);
-  const ref = useRef(false);
-  const initialDraftRef = useRef<SettingsDraft>({ clientConfig: {}, serverConfig: {} });
-  const { showAlert, AlertUI } = useAlert();
 
-  function getDraftThemeColor(nextDraft: SettingsDraft) {
-    return typeof nextDraft.clientConfig["theme.color"] === "string" ? nextDraft.clientConfig["theme.color"] : undefined;
-  }
+  // `onSaved` runs inside the hook, which must not depend on state that changes
+  // on every keystroke; the latest API key is read through a ref instead.
+  const aiValueApiKeyRef = useRef("");
 
-  useEffect(() => {
-    if (ref.current) return;
-    loadSettingsConfigState()
-      .then((state) => {
-        setDraft(state.draft);
-        setInitialDraft(state.draft);
-        initialDraftRef.current = state.draft;
-        setHasStoredAiApiKey(state.hasStoredAiApiKey);
-        mergeSessionConfig(state.draft.clientConfig);
-        applyThemeColor(getDraftThemeColor(state.draft));
-      })
-      .catch((err: any) => {
-        showAlert(t("settings.get_config_failed$message", { message: err.message }));
-      })
-      .finally(() => {
-        setLoading(false);
-      });
-    ref.current = true;
+  const {
+    loading,
+    saving,
+    draft,
+    clientConfig,
+    serverConfig,
+    hasUnsavedChanges,
+    setConfigValue,
+    handleReset,
+    handleSave,
+    showAlert,
+    AlertUI,
+  } = useSettingsDraft({
+    successMessage: "settings.ai_summary.save_success",
+    liveThemeColor: true,
+    onLoaded: (state) => setHasStoredAiApiKey(state.hasStoredAiApiKey),
+    onSaved: (state) => setHasStoredAiApiKey(state.hasStoredAiApiKey || aiValueApiKeyRef.current.trim().length > 0),
+  });
 
-    return () => {
-      applyThemeColor(getDraftThemeColor(initialDraftRef.current));
-    };
-  }, [showAlert, t]);
-
-  const { clientConfig, serverConfig } = useMemo(() => createSettingsConfigWrappers(draft), [draft]);
   const aiValue = useMemo(() => buildAIConfigDraftValue(draft, hasStoredAiApiKey), [draft, hasStoredAiApiKey]);
-  const hasUnsavedChanges = !areSettingsDraftsEqual(draft, initialDraft);
-
-  function setConfigValue(type: "client" | "server", key: string, value: unknown) {
-    setDraft((current) => updateDraftConfig(current, type, key, value));
-  }
-
-  function handleReset() {
-    setDraft(initialDraft);
-    applyThemeColor(getDraftThemeColor(initialDraft));
-  }
-
-  async function handleSave() {
-    setSaving(true);
-    try {
-      const state = await saveSettingsConfigState(draft);
-      setDraft(state.draft);
-      setInitialDraft(state.draft);
-      initialDraftRef.current = state.draft;
-      setHasStoredAiApiKey(state.hasStoredAiApiKey || aiValue.apiKey.trim().length > 0);
-      mergeSessionConfig(state.draft.clientConfig);
-      window.dispatchEvent(new Event("storage"));
-      showAlert(t("settings.ai_summary.save_success"));
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      showAlert(t("settings.update_failed$message", { message }));
-    } finally {
-      setSaving(false);
-    }
-  }
+  aiValueApiKeyRef.current = aiValue.apiKey;
 
   async function handleFaviconChange(e: ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];

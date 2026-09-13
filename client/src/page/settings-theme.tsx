@@ -1,9 +1,8 @@
 import { SearchableSelect, SettingsCard, SettingsCardBody, SettingsCardHeader, SettingsCardRow } from "@rin/ui";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 import { Helmet } from "react-helmet";
 import { useTranslation } from "react-i18next";
 import ReactLoading from "react-loading";
-import { useAlert } from "../components/dialog.tsx";
 import { HeaderLayoutPreview } from "../components/site-header/layout-preview";
 import {
   HEADER_BEHAVIOR_OPTIONS,
@@ -15,17 +14,9 @@ import { FEED_CARD_VARIANTS, normalizeFeedCardVariant } from "../components/feed
 import { FeedCardPreview } from "../components/feed-card-preview";
 import { FEED_LAYOUT_OPTIONS, normalizeFeedLayout } from "../components/feed-layout-options";
 import { useSiteConfig } from "../hooks/useSiteConfig";
+import { useSettingsDraft } from "../hooks/use-settings-draft";
 import { applyThemeColor, normalizeThemeColor } from "../utils/theme-color";
 import { ItemInput, ItemSwitch, ItemTitle, SaveBar } from "./settings-items";
-import {
-  areSettingsDraftsEqual,
-  createSettingsConfigWrappers,
-  loadSettingsConfigState,
-  mergeSessionConfig,
-  saveSettingsConfigState,
-  type SettingsDraft,
-  updateDraftConfig,
-} from "./settings-helpers";
 
 const THEME_COLOR_OPTIONS = [
   { label: "Furina", value: "#5ab0d8" },
@@ -90,47 +81,24 @@ function CursorPicker({
 export function SettingsTheme() {
   const { t } = useTranslation();
   const siteConfig = useSiteConfig();
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [draft, setDraft] = useState<SettingsDraft>({ clientConfig: {}, serverConfig: {} });
-  const [initialDraft, setInitialDraft] = useState<SettingsDraft>({ clientConfig: {}, serverConfig: {} });
-  const ref = useRef(false);
-  const initialDraftRef = useRef<SettingsDraft>({ clientConfig: {}, serverConfig: {} });
-  const { showAlert, AlertUI } = useAlert();
+  const {
+    loading,
+    saving,
+    clientConfig,
+    hasUnsavedChanges,
+    setClientConfigValue: setConfigValue,
+    handleReset,
+    handleSave,
+    showAlert,
+    AlertUI,
+  } = useSettingsDraft({
+    successMessage: "theme.save_success",
+    liveThemeColor: true,
+  });
   // 设置页"添加自定义模型"表单
   const [newModelName, setNewModelName] = useState("");
   const [newModelUrl, setNewModelUrl] = useState("");
 
-  function getDraftThemeColor(nextDraft: SettingsDraft) {
-    return typeof nextDraft.clientConfig["theme.color"] === "string" ? nextDraft.clientConfig["theme.color"] : undefined;
-  }
-
-  useEffect(() => {
-    if (ref.current) return;
-    loadSettingsConfigState()
-      .then((state) => {
-        setDraft(state.draft);
-        setInitialDraft(state.draft);
-        initialDraftRef.current = state.draft;
-        mergeSessionConfig(state.draft.clientConfig);
-        applyThemeColor(getDraftThemeColor(state.draft));
-      })
-      .catch((err: unknown) => {
-        const message = err instanceof Error ? err.message : String(err);
-        showAlert(t("settings.get_config_failed$message", { message }));
-      })
-      .finally(() => {
-        setLoading(false);
-      });
-    ref.current = true;
-
-    return () => {
-      applyThemeColor(getDraftThemeColor(initialDraftRef.current));
-    };
-  }, [showAlert, t]);
-
-  const { clientConfig } = useMemo(() => createSettingsConfigWrappers(draft), [draft]);
-  const hasUnsavedChanges = !areSettingsDraftsEqual(draft, initialDraft);
   const themeColorValue = normalizeThemeColor(String(clientConfig.get("theme.color") ?? "#5ab0d8"));
   const feedLayoutValue = normalizeFeedLayout(String(clientConfig.get("feed.layout") ?? "list"));
   const feedCardVariantValue = normalizeFeedCardVariant(String(clientConfig.get("feed.card_variant") ?? "default"));
@@ -174,10 +142,6 @@ export function SettingsTheme() {
   const anchorAuto = clientConfig.getBoolean("widget.anchor.auto");
   const anchorLength = String(clientConfig.get("widget.anchor.length") ?? "60");
 
-  function setConfigValue(key: string, value: unknown) {
-    setDraft((current) => updateDraftConfig(current, "client", key, value));
-  }
-
   // 写入自定义模型列表（JSON）
   function saveCustomModels(list: { id: string; name: string; url: string }[]) {
     setConfigValue("widget.live2d.customModels", JSON.stringify(list));
@@ -212,29 +176,6 @@ export function SettingsTheme() {
     saveCustomModels(next);
     if (live2dDefaultModel === id) {
       setConfigValue("widget.live2d.defaultModel", "furina");
-    }
-  }
-
-  function handleReset() {
-    setDraft(initialDraft);
-    applyThemeColor(getDraftThemeColor(initialDraft));
-  }
-
-  async function handleSave() {
-    setSaving(true);
-    try {
-      const state = await saveSettingsConfigState(draft);
-      setDraft(state.draft);
-      setInitialDraft(state.draft);
-      initialDraftRef.current = state.draft;
-      mergeSessionConfig(state.draft.clientConfig);
-      window.dispatchEvent(new Event("storage"));
-      showAlert(t("theme.save_success"));
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      showAlert(t("settings.update_failed$message", { message }));
-    } finally {
-      setSaving(false);
     }
   }
 

@@ -1,75 +1,32 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo } from "react";
 import { Helmet } from "react-helmet";
 import { useTranslation } from "react-i18next";
 import ReactLoading from "react-loading";
-import { useAlert } from "../components/dialog";
 import { useSiteConfig } from "../hooks/useSiteConfig";
+import { useSettingsDraft } from "../hooks/use-settings-draft";
 import { parseToolsConfig, serializeToolsConfig } from "../utils/tools";
-import {
-  areSettingsDraftsEqual,
-  createSettingsConfigWrappers,
-  loadSettingsConfigState,
-  mergeSessionConfig,
-  saveSettingsConfigState,
-  type SettingsDraft,
-  updateDraftConfig,
-} from "./settings-helpers";
 import { SaveBar } from "./settings-items";
 import { ToolsSettings } from "./settings-tools";
 
 export function ToolsAdminPage() {
   const { t } = useTranslation();
   const siteConfig = useSiteConfig();
-  const { showAlert, AlertUI } = useAlert();
-  const [draft, setDraft] = useState<SettingsDraft>({ clientConfig: {}, serverConfig: {} });
-  const [initialDraft, setInitialDraft] = useState<SettingsDraft>({ clientConfig: {}, serverConfig: {} });
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const ref = useRef(false);
 
-  useEffect(() => {
-    if (ref.current) return;
-    loadSettingsConfigState()
-      .then((state) => {
-        setDraft(state.draft);
-        setInitialDraft(state.draft);
-      })
-      .catch((err: any) => {
-        showAlert(t("settings.get_config_failed$message", { message: err.message }));
-      })
-      .finally(() => {
-        setLoading(false);
-      });
-    ref.current = true;
-  }, [showAlert, t]);
+  const {
+    loading,
+    saving,
+    clientConfig,
+    hasUnsavedChanges,
+    setClientConfigValue,
+    handleReset,
+    handleSave,
+    AlertUI,
+  } = useSettingsDraft({ successMessage: "settings.tools.save_success" });
 
-  const { clientConfig } = useMemo(() => createSettingsConfigWrappers(draft), [draft]);
   const toolsValue = useMemo(() => parseToolsConfig(clientConfig.get("tools")), [clientConfig]);
-  const hasUnsavedChanges = !areSettingsDraftsEqual(draft, initialDraft);
 
   function handleToolsChange(tools: ReturnType<typeof parseToolsConfig>) {
-    setDraft((current) => updateDraftConfig(current, "client", "tools", serializeToolsConfig(tools)));
-  }
-
-  function handleReset() {
-    setDraft(initialDraft);
-  }
-
-  async function handleSave() {
-    setSaving(true);
-    try {
-      const state = await saveSettingsConfigState(draft);
-      setDraft(state.draft);
-      setInitialDraft(state.draft);
-      mergeSessionConfig(state.draft.clientConfig);
-      window.dispatchEvent(new Event("storage"));
-      showAlert(t("settings.tools.save_success"));
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      showAlert(t("settings.update_failed$message", { message }));
-    } finally {
-      setSaving(false);
-    }
+    setClientConfigValue("tools", serializeToolsConfig(tools));
   }
 
   return (

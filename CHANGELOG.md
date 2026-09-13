@@ -22,6 +22,7 @@ which automatically generates release notes from commit messages.
 - **Shared page metadata**: Public pages now render their Open Graph tags through a single `SiteMeta` component instead of repeating the same `<Helmet>` block in every page.
 - **CORS**: The API no longer echoes arbitrary origins while allowing credentials. Cross-site access requires the new `CORS_ORIGIN` allow list; without it only same-origin browser requests are answered.
 - **Executable request schemas**: `@rin/api` schemas were documentation only, so every service re-implemented its own `if (!field)` checks. `parseSchema` now validates them at runtime for the moments, feeds (create/update/top), comments, friends, profile and login endpoints.
+- **Shared settings lifecycle**: `settings`, `settings-theme` and `tools-admin` each carried their own copy of the load / edit / dirty / save state machine, and the copies had drifted (only two restored the theme colour on unmount). They now share the `useSettingsDraft` hook, so a fix applies to all three.
 
 ### Deprecated
 
