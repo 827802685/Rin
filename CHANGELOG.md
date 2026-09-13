@@ -45,6 +45,9 @@ which automatically generates release notes from commit messages.
 - Rate limiting data is stored in a new `rate_limits` table (migration `0012`) and reclaimed by the scheduled job.
 - Credentialed CORS responses are no longer readable by any website; see the CORS change above.
 
+- **Unlisted articles no longer appear in visitor search**: `listed = 0` means "published but not shown in any public listing" — the article list, timeline, RSS feed and sitemap all hide it, but search only filtered drafts, making it a public back door. Visitors now only match `listed = 1`; admins still get full results because the admin UI has its own unlisted filter.
+- **Search result cache is scoped per audience**: search results were cached under a single key shared by admins and visitors, so an admin search could populate the entry a visitor then read. The key now includes the audience.
+
 ### Fixed (second pass)
 - **Favicon error handling**: Three handlers returned `undefined` when a thrown value was not an `Error` instance, producing an empty response instead of a 500.
 - **Schema/migration drift guard**: Added a test asserting every column declared in `src/db/schema.ts` is actually created by a migration file, so a repeat of the `feeds.top` incident fails CI instead of production.

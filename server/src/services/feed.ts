@@ -557,7 +557,9 @@ export function SearchService(): Hono<{
             return c.json({ size: 0, data: [], hasNext: false });
         }
 
-        const cacheKey = `search_${keyword}`;
+        // The scope has to be part of the key: admins see drafts and unlisted
+        // articles, so sharing one cache entry would leak them to visitors.
+        const cacheKey = `search_${admin ? "admin" : "public"}_${keyword}`;
         const searchKeyword = containsLikePattern(keyword);
         const matchesKeyword = (column: AnySQLiteColumn) => sql`${column} LIKE ${searchKeyword} ESCAPE '\\'`;
         const whereClause = or(
@@ -567,8 +569,15 @@ export function SearchService(): Hono<{
             matchesKeyword(feeds.alias)
         );
 
+        // `listed = 0` means "published but not shown in any public listing"
+        // (the article list, the timeline, RSS and the sitemap all hide it).
+        // Search has to respect the same rule or it becomes a public back door
+        // to a half-private article. Admins still get full results because the
+        // admin UI has its own "unlisted" filter.
+        const publicVisibility = and(eq(feeds.draft, 0), eq(feeds.listed, 1));
+
         const feed_list = (await profileAsync(c, 'feed_search_cache_db', () => cache.getOrSet(cacheKey, () => db.query.feeds.findMany({
-            where: admin ? whereClause : and(whereClause, eq(feeds.draft, 0)),
+            where: admin ? whereClause : and(whereClause, publicVisibility),
             columns: admin ? undefined : { draft: false, listed: false },
             with: {
                 hashtags: {

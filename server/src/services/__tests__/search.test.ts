@@ -3,7 +3,7 @@ import type { Database } from "bun:sqlite";
 import { Hono } from "hono";
 import { SearchService } from "../feed";
 import type { Variables } from "../../core/hono-types";
-import { cleanupTestDB, createTestUser, setupTestApp } from "../../../tests/fixtures";
+import { cleanupTestDB, createTestUser, setupTestApp, type TestCacheImpl } from "../../../tests/fixtures";
 
 interface SearchResponse {
     size: number;
@@ -11,10 +11,10 @@ interface SearchResponse {
     hasNext: boolean;
 }
 
-function insertFeed(sqlite: Database, id: number, title: string, content: string, draft = 0) {
+function insertFeed(sqlite: Database, id: number, title: string, content: string, draft = 0, listed = 1) {
     sqlite.exec(
         `INSERT INTO feeds (id, title, content, summary, uid, draft, listed, created_at, updated_at)
-         VALUES (${id}, '${title}', '${content}', '', 1, ${draft}, 1, unixepoch(), unixepoch())`,
+         VALUES (${id}, '${title}', '${content}', '', 1, ${draft}, ${listed}, unixepoch(), unixepoch())`,
     );
 }
 
@@ -22,12 +22,14 @@ describe("SearchService", () => {
     let sqlite: Database;
     let env: Env;
     let app: Hono<{ Bindings: Env; Variables: Variables }>;
+    let clientConfig: TestCacheImpl;
 
     beforeEach(async () => {
         const ctx = await setupTestApp(SearchService);
         sqlite = ctx.sqlite;
         env = ctx.env;
         app = ctx.app;
+        clientConfig = ctx.clientConfig;
         await createTestUser(sqlite);
     });
 
@@ -37,6 +39,15 @@ describe("SearchService", () => {
 
     async function search(keyword: string, query = ""): Promise<SearchResponse> {
         const res = await app.request(`/${encodeURIComponent(keyword)}${query}`, { method: "GET" }, env);
+        expect(res.status).toBe(200);
+        return (await res.json()) as SearchResponse;
+    }
+
+    async function searchAsAdmin(keyword: string, query = ""): Promise<SearchResponse> {
+        const res = await app.request(`/${encodeURIComponent(keyword)}${query}`, {
+            method: "GET",
+            headers: { Authorization: "Bearer mock_token_1" },
+        }, env);
         expect(res.status).toBe(200);
         return (await res.json()) as SearchResponse;
     }
@@ -56,6 +67,38 @@ describe("SearchService", () => {
 
         const result = await search("body");
         expect(result.data.map((feed) => feed.id)).toEqual([1]);
+    });
+
+    it("hides unlisted articles from visitors, matching the list, RSS and sitemap", async () => {
+        insertFeed(sqlite, 1, "Public one", "shared body", 0, 1);
+        insertFeed(sqlite, 2, "Unlisted one", "shared body", 0, 0);
+
+        const result = await search("shared");
+        expect(result.data.map((feed) => feed.id)).toEqual([1]);
+    });
+
+    it("still lets admins find unlisted articles", async () => {
+        insertFeed(sqlite, 1, "Public one", "shared body", 0, 1);
+        insertFeed(sqlite, 2, "Unlisted one", "shared body", 0, 0);
+
+        const result = await searchAsAdmin("shared");
+        expect(result.data.map((feed) => feed.id).sort()).toEqual([1, 2]);
+    });
+
+    it("does not leak admin results to visitors through the cache", async () => {
+        // Caching is off by default in tests, so it has to be switched on for
+        // the cross-scope cache key to matter at all.
+        await clientConfig.set("cache.enabled", true);
+
+        insertFeed(sqlite, 1, "Public one", "shared body", 0, 1);
+        insertFeed(sqlite, 2, "Unlisted one", "shared body", 0, 0);
+
+        // Warm the cache with the admin view first.
+        expect((await searchAsAdmin("shared")).size).toBe(2);
+
+        // A visitor must not get the admin's cached result back.
+        const visitorResult = await search("shared");
+        expect(visitorResult.data.map((feed) => feed.id)).toEqual([1]);
     });
 
     it("returns an empty result for a blank keyword", async () => {
