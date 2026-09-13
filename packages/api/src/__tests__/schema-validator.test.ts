@@ -3,6 +3,10 @@ import { describeIssues, parseSchema, t } from "../schema-validator";
 import {
     commentCreateSchema,
     feedCreateSchema,
+    feedSetTopSchema,
+    friendCreateSchema,
+    friendUpdateSchema,
+    loginSchema,
     momentCreateSchema,
 } from "../schemas";
 
@@ -85,6 +89,47 @@ describe("parseSchema", () => {
     it("skips file fields, which the multipart handler validates", () => {
         const schema = t.Object({ data: t.File() });
         expect(parseSchema(schema, { data: new Blob(["x"]) }).success).toBe(true);
+    });
+
+    it("rejects a blank feed title or content", () => {
+        const base = { draft: false, listed: true, tags: [] };
+        expect(parseSchema(feedCreateSchema, { ...base, title: "", content: "c" }).success).toBe(false);
+        expect(parseSchema(feedCreateSchema, { ...base, title: "t", content: "" }).success).toBe(false);
+        expect(parseSchema(feedCreateSchema, { ...base, title: "t", content: "c" }).success).toBe(true);
+    });
+
+    it("requires a numeric top value", () => {
+        expect(parseSchema(feedSetTopSchema, { top: 0 }).success).toBe(true);
+        expect(parseSchema(feedSetTopSchema, { top: 3 }).success).toBe(true);
+        expect(parseSchema(feedSetTopSchema, {}).success).toBe(false);
+        expect(parseSchema(feedSetTopSchema, { top: "1" }).success).toBe(false);
+    });
+
+    it("enforces the friend link length limits", () => {
+        const valid = {
+            name: "a".repeat(20),
+            desc: "d".repeat(100),
+            avatar: "https://example.com/a.png",
+            url: "https://example.com",
+        };
+        expect(parseSchema(friendCreateSchema, valid).success).toBe(true);
+        expect(parseSchema(friendCreateSchema, { ...valid, name: "a".repeat(21) }).success).toBe(false);
+        expect(parseSchema(friendCreateSchema, { ...valid, desc: "d".repeat(101) }).success).toBe(false);
+        expect(parseSchema(friendCreateSchema, { ...valid, url: "u".repeat(101) }).success).toBe(false);
+        expect(parseSchema(friendCreateSchema, { ...valid, avatar: "" }).success).toBe(false);
+    });
+
+    it("treats every friend update field as optional", () => {
+        expect(parseSchema(friendUpdateSchema, {}).success).toBe(true);
+        expect(parseSchema(friendUpdateSchema, { accepted: 1 }).success).toBe(true);
+        expect(parseSchema(friendUpdateSchema, { accepted: "1" }).success).toBe(false);
+        expect(parseSchema(friendUpdateSchema, { name: null }).success).toBe(true);
+    });
+
+    it("requires a non-empty username and password", () => {
+        expect(parseSchema(loginSchema, { username: "u", password: "p" }).success).toBe(true);
+        expect(parseSchema(loginSchema, { username: "", password: "p" }).success).toBe(false);
+        expect(parseSchema(loginSchema, { username: "u" }).success).toBe(false);
     });
 
     it("leaves unknown keys untouched", () => {

@@ -1,5 +1,11 @@
 import { eq } from "drizzle-orm";
 import { Hono } from "hono";
+import {
+    describeIssues,
+    friendCreateSchema,
+    friendUpdateSchema,
+    parseSchema,
+} from "@rin/api";
 import type { AppContext, CacheImpl, DB } from "../core/hono-types";
 import { profileAsync } from "../core/server-timing";
 import * as schema from "../db/schema";
@@ -45,21 +51,22 @@ export function FriendService(): Hono {
         const clientConfig = c.get('clientConfig');
         const serverConfig = c.get('serverConfig');
         const body = await profileAsync(c, 'friend_create_parse', () => c.req.json());
-        const { name, desc, avatar, url } = body;
-        
+
         const enable = await profileAsync(c, 'friend_create_config', () => clientConfig.getOrDefault('friend_apply_enable', true));
         if (!enable && !admin) {
             return c.text('Friend Link Apply Disabled', 403);
         }
-        
-        if (name.length > 20 || desc.length > 100 || avatar.length > 100 || url.length > 100) {
-            return c.text('Invalid input', 400);
+
+        const parsed = parseSchema<{ name: string; desc: string; avatar: string; url: string }>(
+            friendCreateSchema,
+            body,
+        );
+        if (!parsed.success) {
+            return c.text(describeIssues(parsed.issues), 400);
         }
-        
-        if (name.length === 0 || desc.length === 0 || avatar.length === 0 || url.length === 0) {
-            return c.text('Invalid input', 400);
-        }
-        
+
+        const { name, desc, avatar, url } = parsed.data;
+
         if (!uid) {
             return c.text('Unauthorized', 401);
         }
@@ -119,7 +126,6 @@ export function FriendService(): Hono {
         const serverConfig = c.get('serverConfig');
         const id = c.req.param('id');
         const body = await profileAsync(c, 'friend_update_parse', () => c.req.json());
-        const { name, desc, avatar, url, accepted, sort_order } = body;
         
         const enable = await profileAsync(c, 'friend_update_config', () => clientConfig.getOrDefault('friend_apply_enable', true));
         if (!enable && !admin) {
@@ -138,7 +144,21 @@ export function FriendService(): Hono {
         if (!admin && exist.uid !== uid) {
             return c.text('Permission denied', 403);
         }
-        
+
+        const parsed = parseSchema<{
+            name?: string;
+            desc?: string;
+            avatar?: string;
+            url?: string;
+            accepted?: number;
+            sort_order?: number;
+        }>(friendUpdateSchema, body);
+        if (!parsed.success) {
+            return c.text(describeIssues(parsed.issues), 400);
+        }
+
+        const { name, desc, avatar, url, accepted, sort_order } = parsed.data;
+
         let finalAccepted = accepted;
         let finalSortOrder = sort_order;
         

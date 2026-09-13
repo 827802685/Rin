@@ -275,6 +275,37 @@ describe('UserService', () => {
             
             expect(res.status).toBe(400);
         });
+
+        it('should reject a non-string username', async () => {
+            const res = await app.request('/profile', {
+                method: 'PUT',
+                headers: {
+                    'Authorization': 'Bearer mock_token_1',
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ username: 42 }),
+            }, env);
+
+            expect(res.status).toBe(400);
+            const data = await res.json() as any;
+            expect(data.error.message).toContain('$.username');
+        });
+
+        it('should ignore a null avatar instead of storing it', async () => {
+            const res = await app.request('/profile', {
+                method: 'PUT',
+                headers: {
+                    'Authorization': 'Bearer mock_token_1',
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ username: 'keptname', avatar: null }),
+            }, env);
+
+            expect(res.status).toBe(200);
+            const row = sqlite.prepare('SELECT username, avatar FROM users WHERE id = 1').get() as any;
+            expect(row.username).toBe('keptname');
+            expect(row.avatar).toBe('avatar1.png');
+        });
     });
 
     describe('POST /logout - Logout', () => {

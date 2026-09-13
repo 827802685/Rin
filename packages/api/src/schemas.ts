@@ -12,8 +12,8 @@ export const feedListSchema = t.Object({
 });
 
 export const feedCreateSchema = t.Object({
-  title: t.String(),
-  content: t.String(),
+  title: t.String({ minLength: 1 }),
+  content: t.String({ minLength: 1 }),
   summary: t.String({ optional: true }),
   alias: t.String({ optional: true }),
   draft: t.Boolean(),
@@ -43,8 +43,8 @@ export const feedSetTopSchema = t.Object({
 // ============================================================================
 
 export const loginSchema = t.Object({
-  username: t.String(),
-  password: t.String(),
+  username: t.String({ minLength: 1 }),
+  password: t.String({ minLength: 1 }),
 });
 
 // ============================================================================
@@ -61,7 +61,7 @@ export const updateProfileSchema = t.Object({
 // ============================================================================
 
 export const commentCreateSchema = t.Object({
-  content: t.String(),
+  content: t.String({ minLength: 1 }),
   guestName: t.String({ optional: true }),
   guestEmail: t.String({ optional: true }),
   guestWebsite: t.String({ optional: true }),
@@ -72,17 +72,19 @@ export const commentCreateSchema = t.Object({
 // ============================================================================
 
 export const friendCreateSchema = t.Object({
-  name: t.String(),
-  desc: t.String(),
-  avatar: t.String(),
-  url: t.String(),
+  name: t.String({ minLength: 1, maxLength: 20 }),
+  desc: t.String({ minLength: 1, maxLength: 100 }),
+  avatar: t.String({ minLength: 1, maxLength: 100 }),
+  url: t.String({ minLength: 1, maxLength: 100 }),
 });
 
+// Every field is optional: the handler treats an empty string as "keep the
+// stored value", so a friend link can be updated one field at a time.
 export const friendUpdateSchema = t.Object({
-  name: t.String(),
-  desc: t.String(),
+  name: t.String({ optional: true }),
+  desc: t.String({ optional: true }),
   avatar: t.String({ optional: true }),
-  url: t.String(),
+  url: t.String({ optional: true }),
   accepted: t.Numeric({ optional: true }),
   sort_order: t.Numeric({ optional: true }),
 });

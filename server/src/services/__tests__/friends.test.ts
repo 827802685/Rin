@@ -149,6 +149,43 @@ describe('FriendService', () => {
 
             expect(res.status).toBe(400);
         });
+
+        it('should reject a non-string url', async () => {
+            const res = await app.request('/', {
+                method: 'POST',
+                headers: {
+                    'Authorization': 'Bearer mock_token_1',
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    name: 'New Friend',
+                    desc: 'Description',
+                    avatar: 'avatar.png',
+                    url: { href: 'https://example.com' }
+                }),
+            }, env);
+
+            expect(res.status).toBe(400);
+            expect(await res.text()).toContain('$.url');
+        });
+
+        it('should accept fields at the documented length limits', async () => {
+            const res = await app.request('/', {
+                method: 'POST',
+                headers: {
+                    'Authorization': 'Bearer mock_token_1',
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    name: 'a'.repeat(20),
+                    desc: 'd'.repeat(100),
+                    avatar: 'avatar.png',
+                    url: 'https://example.com'
+                }),
+            }, env);
+
+            expect(res.status).toBe(200);
+        });
     });
 
     describe('PUT /:id - Update friend', () => {
@@ -206,6 +243,38 @@ describe('FriendService', () => {
             }, env);
 
             expect(res.status).toBe(404);
+        });
+
+        it('should update a single field without touching the others', async () => {
+            const res = await app.request('/1', {
+                method: 'PUT',
+                headers: {
+                    'Authorization': 'Bearer mock_token_1',
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ accepted: 1 }),
+            }, env);
+
+            expect(res.status).toBe(200);
+            const friend = sqlite.prepare('SELECT * FROM friends WHERE id = 1').get() as any;
+            expect(friend.accepted).toBe(1);
+            expect(friend.name).toBe('Original Name');
+            expect(friend.desc).toBe('Original Desc');
+            expect(friend.url).toBe('https://example.com');
+        });
+
+        it('should reject a non-numeric accepted flag', async () => {
+            const res = await app.request('/1', {
+                method: 'PUT',
+                headers: {
+                    'Authorization': 'Bearer mock_token_1',
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ accepted: 'yes' }),
+            }, env);
+
+            expect(res.status).toBe(400);
+            expect(await res.text()).toContain('$.accepted');
         });
     });
 

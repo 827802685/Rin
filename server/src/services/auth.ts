@@ -3,6 +3,7 @@ import { hashPassword, needsRehash, timingSafeEqual, verifyPassword } from "../u
 import { consumeRateLimit } from "../utils/rate-limit";
 import { eq } from "drizzle-orm";
 import { Hono } from "hono";
+import { loginSchema, parseSchema } from "@rin/api";
 import type { AppContext, Variables } from "../core/hono-types";
 import { profileAsync } from "../core/server-timing";
 import { setJWTCookie } from "../core/hono-middleware";
@@ -65,11 +66,14 @@ export function PasswordAuthService(): Hono<{
             throw new BadRequestError('Admin credentials not configured');
         }
 
-        const { username, password } = await profileAsync(c, 'auth_login_parse', () => c.req.json()) as { username: string; password: string };
+        const body = await profileAsync(c, 'auth_login_parse', () => c.req.json());
 
-        if (!username || !password) {
+        const parsed = parseSchema<{ username: string; password: string }>(loginSchema, body);
+        if (!parsed.success) {
             throw new BadRequestError('Username and password are required');
         }
+
+        const { username, password } = parsed.data;
 
         // Check if this is the admin login
         if (username === adminUsername) {

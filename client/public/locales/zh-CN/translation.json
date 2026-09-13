@@ -104,6 +104,9 @@
   "avatar": {
     "url": "头像 URL"
   },
+  "callback": {
+    "waiting": "正在跳转..."
+  },
   "cancel": "取消",
   "clear": "清除",
   "close": "关闭",

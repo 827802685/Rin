@@ -20,6 +20,8 @@ which automatically generates release notes from commit messages.
 ### Changed
 - **Password storage**: Passwords are hashed with PBKDF2-HMAC-SHA256 using a random per-password salt instead of unsalted SHA-256. Legacy digests still verify and are transparently upgraded on the next successful login.
 - **Shared page metadata**: Public pages now render their Open Graph tags through a single `SiteMeta` component instead of repeating the same `<Helmet>` block in every page.
+- **CORS**: The API no longer echoes arbitrary origins while allowing credentials. Cross-site access requires the new `CORS_ORIGIN` allow list; without it only same-origin browser requests are answered.
+- **Executable request schemas**: `@rin/api` schemas were documentation only, so every service re-implemented its own `if (!field)` checks. `parseSchema` now validates them at runtime for the moments, feeds (create/update/top), comments, friends, profile and login endpoints.
 
 ### Deprecated
 
@@ -40,6 +42,17 @@ which automatically generates release notes from commit messages.
 ### Security
 - Password comparison now uses a constant-time comparison instead of `!==` on digests.
 - Rate limiting data is stored in a new `rate_limits` table (migration `0012`) and reclaimed by the scheduled job.
+- Credentialed CORS responses are no longer readable by any website; see the CORS change above.
+
+### Fixed (second pass)
+- **Favicon error handling**: Three handlers returned `undefined` when a thrown value was not an `Error` instance, producing an empty response instead of a 500.
+- **Schema/migration drift guard**: Added a test asserting every column declared in `src/db/schema.ts` is actually created by a migration file, so a repeat of the `feeds.top` incident fails CI instead of production.
+- **drizzle-kit output directory**: `drizzle.config.ts` pointed at `drizzle/` while the real migrations live in `server/sql/`; it now points at `sql/`, with a note that a journal and snapshots are required before `db:gen` can produce incremental migrations.
+
+### Fixed (third pass)
+- **Friend link update contract**: `friendUpdateSchema` and `UpdateFriendRequest` declared `name`, `desc` and `url` as required, but the handler has always treated them as optional partial-update fields. The contract now matches the implementation, so a single-field update (for example approving a link) is valid.
+- **Unvalidated request bodies**: Feed create/update, `POST /feed/top/:id`, comment create, friend create/update, `PUT /user/profile` and `POST /auth/login` accepted any JSON shape. They now share the `@rin/api` schemas, so a wrong type (a string `tags`, a non-boolean `listed`, a non-numeric `top`) returns 400 instead of reaching the database.
+- **Hard-coded callback label**: The OAuth callback page rendered a hard-coded English `Waiting...`; it now uses the `callback.waiting` translation key present in all four locales.
 
 ## [v0.3.0] - 2026-03-12
 

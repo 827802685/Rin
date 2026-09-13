@@ -589,4 +589,157 @@ describe('FeedService', () => {
             expect(res.status).toBe(404);
         });
     });
+
+    describe('Request schema validation', () => {
+        async function createFeed(title = 'Schema Feed') {
+            const res = await app.request('/', {
+                method: 'POST',
+                headers: {
+                    'Authorization': 'Bearer mock_token_1',
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    title,
+                    content: 'Schema Content',
+                    listed: true,
+                    draft: false,
+                    tags: [],
+                }),
+            }, env);
+            expect(res.status).toBe(200);
+            const data = await res.json() as any;
+            return data.insertedId as number;
+        }
+
+        it('should reject a feed without a title', async () => {
+            const res = await app.request('/', {
+                method: 'POST',
+                headers: {
+                    'Authorization': 'Bearer mock_token_1',
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ content: 'Only content', listed: true, draft: false, tags: [] }),
+            }, env);
+
+            expect(res.status).toBe(400);
+            expect(await res.text()).toContain('$.title');
+        });
+
+        it('should reject an empty feed title or content', async () => {
+            const res = await app.request('/', {
+                method: 'POST',
+                headers: {
+                    'Authorization': 'Bearer mock_token_1',
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ title: '', content: '', listed: true, draft: false, tags: [] }),
+            }, env);
+
+            expect(res.status).toBe(400);
+            const message = await res.text();
+            expect(message).toContain('$.title');
+            expect(message).toContain('$.content');
+        });
+
+        it('should reject a tag list containing non-strings', async () => {
+            const res = await app.request('/', {
+                method: 'POST',
+                headers: {
+                    'Authorization': 'Bearer mock_token_1',
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    title: 'Tag Feed',
+                    content: 'Content',
+                    listed: true,
+                    draft: false,
+                    tags: ['ok', 7],
+                }),
+            }, env);
+
+            expect(res.status).toBe(400);
+            expect(await res.text()).toContain('$.tags[1]');
+        });
+
+        it('should reject an update with a non-boolean listed flag', async () => {
+            const feedId = await createFeed('Update Schema Feed');
+
+            const res = await app.request(`/${feedId}`, {
+                method: 'POST',
+                headers: {
+                    'Authorization': 'Bearer mock_token_1',
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ title: 'Whatever', listed: 'yes' }),
+            }, env);
+
+            expect(res.status).toBe(400);
+            expect(await res.text()).toContain('$.listed');
+        });
+
+        it('should reject an update whose tags are not an array', async () => {
+            const feedId = await createFeed('Update Tags Feed');
+
+            const res = await app.request(`/${feedId}`, {
+                method: 'POST',
+                headers: {
+                    'Authorization': 'Bearer mock_token_1',
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ title: 'Whatever', listed: true, tags: 'react' }),
+            }, env);
+
+            expect(res.status).toBe(400);
+            expect(await res.text()).toContain('$.tags');
+        });
+
+        it('should reject a non-numeric top value', async () => {
+            const feedId = await createFeed('Top Schema Feed');
+
+            const res = await app.request(`/top/${feedId}`, {
+                method: 'POST',
+                headers: {
+                    'Authorization': 'Bearer mock_token_1',
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ top: 'first' }),
+            }, env);
+
+            expect(res.status).toBe(400);
+            expect(await res.text()).toContain('$.top');
+        });
+
+        it('should reject a top request without a value', async () => {
+            const feedId = await createFeed('Top Missing Feed');
+
+            const res = await app.request(`/top/${feedId}`, {
+                method: 'POST',
+                headers: {
+                    'Authorization': 'Bearer mock_token_1',
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({}),
+            }, env);
+
+            expect(res.status).toBe(400);
+            expect(await res.text()).toContain('$.top');
+        });
+
+        it('should accept zero as a valid top value', async () => {
+            const feedId = await createFeed('Top Zero Feed');
+
+            const res = await app.request(`/top/${feedId}`, {
+                method: 'POST',
+                headers: {
+                    'Authorization': 'Bearer mock_token_1',
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ top: 0 }),
+            }, env);
+
+            expect(res.status).toBe(200);
+            const row = sqlite.prepare('SELECT top FROM feeds WHERE id = ?').get(feedId) as any;
+            expect(row.top).toBe(0);
+        });
+    });
 });

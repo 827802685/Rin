@@ -104,6 +104,9 @@
   "avatar": {
     "url": "Avatar URL"
   },
+  "callback": {
+    "waiting": "Waiting..."
+  },
   "cancel": "Cancel",
   "clear": "Clear",
   "close": "Close",

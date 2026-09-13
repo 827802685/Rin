@@ -1,6 +1,13 @@
 import { and, asc, count, desc, eq, gt, lt, or, sql } from "drizzle-orm";
 import type { AnySQLiteColumn } from "drizzle-orm/sqlite-core";
 import { Hono } from "hono";
+import {
+    describeIssues,
+    feedCreateSchema,
+    feedSetTopSchema,
+    feedUpdateSchema,
+    parseSchema,
+} from "@rin/api";
 import type { Variables } from "../core/hono-types";
 import { profileAsync } from "../core/server-timing";
 import { feeds, visits, visitStats } from "../db/schema";
@@ -142,18 +149,26 @@ export function FeedService(): Hono<{
         const admin = c.get('admin');
         const uid = c.get('uid');
         const body = await profileAsync(c, 'feed_create_parse', () => c.req.json());
-        const { title, alias, listed, content, summary, draft, tags, createdAt } = body;
 
         if (!admin) {
             return c.text('Permission denied', 403);
         }
 
-        if (!title) {
-            return c.text('Title is required', 400);
+        const parsed = parseSchema<{
+            title: string;
+            content: string;
+            summary?: string;
+            alias?: string;
+            draft: boolean;
+            listed: boolean;
+            createdAt?: string;
+            tags: string[];
+        }>(feedCreateSchema, body);
+        if (!parsed.success) {
+            return c.text(describeIssues(parsed.issues), 400);
         }
-        if (!content) {
-            return c.text('Content is required', 400);
-        }
+
+        const { title, alias, listed, content, summary, draft, tags, createdAt } = parsed.data;
 
         const exist = await profileAsync(c, 'feed_create_existing', () => db.query.feeds.findFirst({
             where: or(eq(feeds.title, title), eq(feeds.content, content))
@@ -386,7 +401,6 @@ export function FeedService(): Hono<{
         const uid = c.get('uid');
         const id = c.req.param('id');
         const body = await profileAsync(c, 'feed_update_parse', () => c.req.json());
-        const { title, listed, content, summary, alias, draft, top, tags, createdAt } = body;
 
         const id_num = parseInt(id);
         const feed = await profileAsync(c, 'feed_update_lookup', () => db.query.feeds.findFirst({ where: eq(feeds.id, id_num) }));
@@ -398,6 +412,23 @@ export function FeedService(): Hono<{
         if (feed.uid !== uid && !admin) {
             return c.text('Permission denied', 403);
         }
+
+        const parsed = parseSchema<{
+            title?: string;
+            alias?: string;
+            content?: string;
+            summary?: string;
+            listed: boolean;
+            draft?: boolean;
+            createdAt?: string;
+            tags?: string[];
+            top?: number;
+        }>(feedUpdateSchema, body);
+        if (!parsed.success) {
+            return c.text(describeIssues(parsed.issues), 400);
+        }
+
+        const { title, listed, content, summary, alias, draft, top, tags, createdAt } = parsed.data;
 
         const contentChanged = content && content !== feed.content;
         const isDraft = draft !== undefined ? draft : (feed.draft === 1);
@@ -443,7 +474,6 @@ export function FeedService(): Hono<{
         const uid = c.get('uid');
         const id = c.req.param('id');
         const body = await profileAsync(c, 'feed_top_parse', () => c.req.json());
-        const { top } = body;
 
         const id_num = parseInt(id);
         const feed = await profileAsync(c, 'feed_top_lookup', () => db.query.feeds.findFirst({ where: eq(feeds.id, id_num) }));
@@ -455,6 +485,13 @@ export function FeedService(): Hono<{
         if (feed.uid !== uid && !admin) {
             return c.text('Permission denied', 403);
         }
+
+        const parsed = parseSchema<{ top: number }>(feedSetTopSchema, body);
+        if (!parsed.success) {
+            return c.text(describeIssues(parsed.issues), 400);
+        }
+
+        const { top } = parsed.data;
 
         await profileAsync(c, 'feed_top_db', () => db.update(feeds).set({ top }).where(eq(feeds.id, feed.id)));
         await profileAsync(c, 'feed_top_cache_invalidate', () => clearFeedCache(cache, feed.id, feed.alias, feed.alias));

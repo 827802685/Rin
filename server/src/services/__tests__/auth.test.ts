@@ -166,6 +166,16 @@ describe("PasswordAuthService", () => {
       expect(errorData.error.message).toBe("Username and password are required");
     });
 
+    it("should reject a non-string username", async () => {
+      const result = await api.auth.login({
+        username: 42 as unknown as string,
+        password: "admin123",
+      });
+
+      expect(result.error).toBeDefined();
+      expect(result.error?.status).toBe(400);
+    });
+
     it("should return 400 if admin credentials not configured", async () => {
       const envNoCreds = createMockEnv({
         ADMIN_USERNAME: "",

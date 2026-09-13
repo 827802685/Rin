@@ -223,10 +223,10 @@ export interface CreateFriendRequest {
 }
 
 export interface UpdateFriendRequest {
-  name: string;
-  desc: string;
+  name?: string;
+  desc?: string;
   avatar?: string;
-  url: string;
+  url?: string;
   accepted?: number;
   sort_order?: number;
 }

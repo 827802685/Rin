@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import { eq } from "drizzle-orm";
+import { describeIssues, parseSchema, updateProfileSchema } from "@rin/api";
 import { getCookie, setCookie, deleteCookie } from "hono/cookie";
 import type { AppContext } from "../core/hono-types";
 import { profileAsync } from "../core/server-timing";
@@ -199,7 +200,12 @@ export function UserService(): Hono {
             throw new ForbiddenError('Authentication required');
         }
 
-        const { username, avatar } = body as { username?: string; avatar?: string };
+        const parsed = parseSchema<{ username?: string; avatar?: string }>(updateProfileSchema, body);
+        if (!parsed.success) {
+            throw new BadRequestError(describeIssues(parsed.issues));
+        }
+
+        const { username, avatar } = parsed.data;
 
         if (!username && !avatar) {
             throw new BadRequestError('At least one field (username or avatar) is required');

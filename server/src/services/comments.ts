@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import { commentCreateSchema, describeIssues, parseSchema } from "@rin/api";
 import type { AppContext } from "../core/hono-types";
 import { desc, eq } from "drizzle-orm";
 import { comments, feeds, users } from "../db/schema";
@@ -51,12 +52,19 @@ export function CommentService(): Hono {
         const uid = c.get('uid');
         const feedId = parseInt(c.req.param('feed'));
         const body = await profileAsync(c, 'comment_create_parse', () => c.req.json());
-        const { content, guestName, guestEmail, guestWebsite } = body;
-        
-        if (!content) {
-            return c.text('Content is required', 400);
+
+        const parsed = parseSchema<{
+            content: string;
+            guestName?: string;
+            guestEmail?: string;
+            guestWebsite?: string;
+        }>(commentCreateSchema, body);
+        if (!parsed.success) {
+            return c.text(describeIssues(parsed.issues), 400);
         }
-        
+
+        const { content, guestName, guestEmail, guestWebsite } = parsed.data;
+
         const exist = await profileAsync(c, 'comment_create_feed', () => db.query.feeds.findFirst({ where: eq(feeds.id, feedId) }));
         if (!exist) {
             return c.text('Feed not found', 400);

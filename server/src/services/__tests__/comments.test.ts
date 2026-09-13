@@ -198,6 +198,31 @@ describe('CommentService', () => {
             expect(res.status).toBe(400);
         });
 
+        it('should reject a non-string content', async () => {
+            const res = await app.request('/1', {
+                method: 'POST',
+                headers: {
+                    'Authorization': 'Bearer mock_token_1',
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ content: { text: 'nested' } }),
+            }, env);
+
+            expect(res.status).toBe(400);
+            expect(await res.text()).toContain('$.content');
+        });
+
+        it('should reject a non-string guest name', async () => {
+            const res = await app.request('/1', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ content: 'Guest comment', guestName: 42 }),
+            }, env);
+
+            expect(res.status).toBe(400);
+            expect(await res.text()).toContain('$.guestName');
+        });
+
         it('should return 401 for non-existent user token', async () => {
             const res = await app.request('/1', {
                 method: 'POST',
