@@ -1,7 +1,8 @@
 import type { ReactNode } from "react";
-import { useContext } from "react";
+import { lazy, Suspense, useContext } from "react";
 import type { DefaultParams, PathPattern } from "wouter";
 import { Route, Switch } from "wouter";
+import ReactLoading from "react-loading";
 import { AdminLayout } from "../components/admin-layout";
 import Footer from "../components/footer";
 import { Header } from "../components/header";
@@ -10,27 +11,27 @@ import { getHeaderLayoutDefinition } from "../components/site-header/layout-regi
 import { Tips, TipsPage } from "../components/tips";
 import useTableOfContents from "../hooks/useTableOfContents";
 import { useSiteConfig } from "../hooks/useSiteConfig";
-import { AIPage } from "../page/ai";
-import { CallbackPage } from "../page/callback";
-import { CompatTasksPage } from "../page/compat-tasks";
+const AIPage = lazy(() => import("../page/ai").then((m) => ({ default: m.AIPage })));
+const CallbackPage = lazy(() => import("../page/callback").then((m) => ({ default: m.CallbackPage })));
+const CompatTasksPage = lazy(() => import("../page/compat-tasks").then((m) => ({ default: m.CompatTasksPage })));
 import { ErrorPage } from "../page/error";
 import { FeedPage, TOCHeader } from "../page/feed";
 import { FeedsPage } from "../page/feeds";
 import { FriendsPage } from "../page/friends";
-import { HealthPage } from "../page/health";
+const HealthPage = lazy(() => import("../page/health").then((m) => ({ default: m.HealthPage })));
 import { HashtagPage } from "../page/hashtag";
 import { HashtagsPage } from "../page/hashtags";
-import { LoginPage } from "../page/login";
+const LoginPage = lazy(() => import("../page/login").then((m) => ({ default: m.LoginPage })));
 import { MomentsPage } from "../page/moments";
-import { ProfilePage } from "../page/profile";
-import { QueueStatusPage } from "../page/queue-status";
+const ProfilePage = lazy(() => import("../page/profile").then((m) => ({ default: m.ProfilePage })));
+const QueueStatusPage = lazy(() => import("../page/queue-status").then((m) => ({ default: m.QueueStatusPage })));
 import { SearchPage } from "../page/search";
-import { Settings } from "../page/settings";
-import { SettingsTheme } from "../page/settings-theme";
+const Settings = lazy(() => import("../page/settings").then((m) => ({ default: m.Settings })));
+const SettingsTheme = lazy(() => import("../page/settings-theme").then((m) => ({ default: m.SettingsTheme })));
 import { TimelinePage } from "../page/timeline";
 import { ToolsPage } from "../page/tools";
-import { ToolsAdminPage } from "../page/tools-admin";
-import { WritingPage } from "../page/writing";
+const ToolsAdminPage = lazy(() => import("../page/tools-admin").then((m) => ({ default: m.ToolsAdminPage })));
+const WritingPage = lazy(() => import("../page/writing").then((m) => ({ default: m.WritingPage })));
 import { ProfileContext } from "../state/profile";
 import { tryInt } from "../utils/int";
 import { useTranslation } from "react-i18next";
@@ -39,6 +40,7 @@ export function AppRoutes() {
   const { t } = useTranslation();
 
   return (
+    <Suspense fallback={<RouteFallback />}>
     <Switch>
       <AppRoute path="/">
         <FeedsPage />
@@ -158,6 +160,18 @@ export function AppRoutes() {
         <ErrorPage error={t("error.not_found")} />
       </AppRoute>
     </Switch>
+    </Suspense>
+  );
+}
+
+/** Shown while a lazily loaded route chunk is being fetched. */
+function RouteFallback() {
+  return (
+    <Padding>
+      <div className="flex min-h-[40vh] w-full items-center justify-center">
+        <ReactLoading width="2em" height="2em" type="spin" color="#FC466B" />
+      </div>
+    </Padding>
   );
 }
 

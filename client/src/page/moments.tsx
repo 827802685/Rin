@@ -1,4 +1,4 @@
-import { useContext, useEffect, useRef, useState } from "react"
+import { lazy, Suspense, useContext, useEffect, useRef, useState } from "react"
 import { SiteMeta } from "../components/site-meta";
 import { client } from "../app/runtime"
 
@@ -9,7 +9,12 @@ import { tryInt } from "../utils/int"
 import { useSearch } from "wouter"
 import { useAlert, useConfirm } from "../components/dialog"
 import Modal from "react-modal"
-import { MarkdownEditor } from "../components/markdown_editor"
+import ReactLoading from "react-loading";
+// Monaco is heavy and only needed once the publish dialog is opened, so it must
+// not ride along in the first-load bundle of this frequently visited page.
+const MarkdownEditor = lazy(() =>
+    import("../components/markdown_editor").then((m) => ({ default: m.MarkdownEditor })),
+);
 import { Waiting } from "../components/loading"
 import { MomentItem } from "../components/moment_item"
 
@@ -251,11 +256,19 @@ export function MomentsPage() {
                     </h2>
                     
                     <div className="bg-w rounded-2xl t-primary">
-                        <MarkdownEditor 
-                            content={content}
-                            setContent={setContent}
-                            height="300px"
-                        />
+                        <Suspense
+                            fallback={
+                                <div className="flex h-[300px] w-full items-center justify-center">
+                                    <ReactLoading width="1.5em" height="1.5em" type="spin" color="#FC466B" />
+                                </div>
+                            }
+                        >
+                            <MarkdownEditor 
+                                content={content}
+                                setContent={setContent}
+                                height="300px"
+                            />
+                        </Suspense>
                     </div>
                     
                     <div className="flex justify-end mt-4 space-x-2">
