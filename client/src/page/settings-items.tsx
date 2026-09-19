@@ -11,6 +11,7 @@ import {
   SettingsCardHeader,
   SettingsCardRow,
   SettingsSectionTitle,
+  TextArea,
 } from "@rin/ui";
 
 export function ItemTitle({ title }: { title: string }) {
@@ -91,13 +92,13 @@ export function ItemInput({
         </button>
         {isOpen ? (
           <SettingsCardBody>
-            <textarea
+            <TextArea
               placeholder={placeholder || configKeyTitle}
               value={value}
               onChange={(event) => {
                 onChange(event.target.value);
               }}
-              className="min-h-36 w-full rounded-xl border border-black/10 bg-w px-4 py-3 text-sm t-primary outline-none transition-colors placeholder:text-neutral-400 focus:border-black/20 focus:ring-2 focus:ring-theme/10 dark:border-white/10 dark:placeholder:text-neutral-500 dark:focus:border-white/20"
+              className="min-h-36"
             />
             <button
               type="button"

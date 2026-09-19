@@ -7,3 +7,4 @@ export * from "./loading";
 export * from "./padding";
 export * from "./searchable-select";
 export * from "./settings-panel";
+export * from "./textarea";

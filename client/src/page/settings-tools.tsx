@@ -7,7 +7,7 @@ import { ImageUploadInput } from "../components/image-upload-input";
 import { Input } from "../components/input";
 import { ItemTitle } from "./settings-items";
 import { createToolId, toolHostname, type ToolItem } from "../utils/tools";
-import { SettingsCard, SettingsCardHeader, SettingsCardRow } from "@rin/ui";
+import { SettingsCard, SettingsCardHeader, SettingsCardRow, TextArea } from "@rin/ui";
 
 export function ToolsSettings({
   value,
@@ -246,11 +246,11 @@ function ToolEditModal({
 
           <div className="space-y-2">
             <label className="text-sm font-medium t-secondary">{t("settings.tools.description")}</label>
-            <textarea
+            <TextArea
               value={description}
               onChange={(event) => setDescription(event.target.value)}
               placeholder={t("settings.tools.description_placeholder")}
-              className="min-h-20 w-full rounded-xl border border-black/10 bg-w px-4 py-3 text-sm t-primary outline-none transition-colors placeholder:text-neutral-400 focus:border-black/20 focus:ring-2 focus:ring-theme/10 dark:border-white/10 dark:placeholder:text-neutral-500 dark:focus:border-white/20"
+              className="min-h-20"
             />
           </div>
 

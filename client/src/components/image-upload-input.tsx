@@ -1,4 +1,5 @@
 import { useRef, useState } from "react";
+import { fieldClassName } from "@rin/ui";
 import { useTranslation } from "react-i18next";
 import ReactLoading from "react-loading";
 import {
@@ -89,7 +90,7 @@ export function ImageUploadInput({
             onChange={(event) => {
               onChange(event.target.value);
             }}
-            className="w-full rounded-xl border border-black/10 bg-w px-4 py-3 text-sm t-primary outline-none transition-colors placeholder:text-neutral-400 focus:border-black/20 focus:ring-2 focus:ring-theme/10 disabled:cursor-not-allowed disabled:opacity-60 dark:border-white/10 dark:placeholder:text-neutral-500 dark:focus:border-white/20"
+            className={fieldClassName}
           />
 
           <div className="flex flex-wrap items-center gap-2">

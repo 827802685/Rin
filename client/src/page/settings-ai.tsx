@@ -5,6 +5,7 @@ import {
   SettingsCardBody,
   SettingsCardHeader,
   SettingsCardRow,
+  fieldClassName,
 } from "@rin/ui";
 import * as Switch from "@radix-ui/react-switch";
 import { useState } from "react";
@@ -180,7 +181,7 @@ export function AISummarySettings({
                         onChange({ apiKey: event.target.value });
                       }}
                       placeholder={value.apiKeySet ? t("settings.ai_summary.api_key.placeholder_set") : "sk-..."}
-                      className="w-full rounded-xl border border-black/10 bg-w px-4 py-3 text-sm t-primary outline-none transition-colors placeholder:text-neutral-400 focus:border-black/20 focus:ring-2 focus:ring-theme/10 dark:border-white/10 dark:placeholder:text-neutral-500 dark:focus:border-white/20"
+                      className={fieldClassName}
                     />
                   </div>
                 ) : null}
@@ -194,7 +195,7 @@ export function AISummarySettings({
                         onChange({ apiUrl: event.target.value });
                       }}
                       placeholder="https://api.openai.com/v1"
-                      className="w-full rounded-xl border border-black/10 bg-w px-4 py-3 text-sm t-primary outline-none transition-colors placeholder:text-neutral-400 focus:border-black/20 focus:ring-2 focus:ring-theme/10 dark:border-white/10 dark:placeholder:text-neutral-500 dark:focus:border-white/20"
+                      className={fieldClassName}
                     />
                   </div>
                 ) : null}

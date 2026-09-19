@@ -1,4 +1,4 @@
-import { SearchableSelect, SettingsCard, SettingsCardBody, SettingsCardHeader, SettingsCardRow } from "@rin/ui";
+import { SearchableSelect, SettingsCard, SettingsCardBody, SettingsCardHeader, SettingsCardRow, TextArea } from "@rin/ui";
 import { type ChangeEvent, useMemo, useRef, useState } from "react";
 import { Helmet } from "react-helmet";
 import { useTranslation } from "react-i18next";
@@ -290,13 +290,13 @@ export function Settings() {
                 }
               />
               <SettingsCardBody>
-                <textarea
+                <TextArea
                   value={webhookTestMessage}
                   placeholder={t("settings.webhook.test.placeholder")}
                   onChange={(event) => {
                     setWebhookTestMessage(event.target.value);
                   }}
-                  className="min-h-28 w-full rounded-xl border border-black/10 bg-w px-4 py-3 text-sm t-primary outline-none transition-colors placeholder:text-neutral-400 focus:border-black/20 focus:ring-2 focus:ring-theme/10 dark:border-white/10 dark:placeholder:text-neutral-500 dark:focus:border-white/20"
+                  className="min-h-28"
                 />
               </SettingsCardBody>
             </SettingsCard>
