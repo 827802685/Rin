@@ -1,4 +1,12 @@
-import { SearchableSelect, SettingsCard, SettingsCardBody, SettingsCardHeader, SettingsCardRow } from "@rin/ui";
+import {
+  fieldBaseClassName,
+  fieldCompactClassName,
+  SearchableSelect,
+  SettingsCard,
+  SettingsCardBody,
+  SettingsCardHeader,
+  SettingsCardRow,
+} from "@rin/ui";
 import { useMemo, useState } from "react";
 import { Helmet } from "react-helmet";
 import { useTranslation } from "react-i18next";
@@ -458,7 +466,7 @@ export function SettingsTheme() {
                     onChange={(event) => {
                       setConfigValue("widget.live2d.defaultModel", event.target.value);
                     }}
-                    className="w-full rounded-xl border border-black/10 bg-w px-4 py-2.5 text-sm t-primary outline-none transition-colors focus:border-black/20 focus:ring-2 focus:ring-theme/10 dark:border-white/10 dark:focus:border-white/20"
+                    className={fieldCompactClassName}
                   >
                     <option value="furina">{t("theme.live2d.switch.furina")}</option>
                     <option value="BCSZ1.1">{t("theme.live2d.switch.BCSZ1.1")}</option>
@@ -521,13 +529,13 @@ export function SettingsTheme() {
                       value={newModelName}
                       onChange={(event) => setNewModelName(event.target.value)}
                       placeholder={t("theme.live2d.custom.namePlaceholder")}
-                      className="w-full rounded-xl border border-black/10 bg-w px-4 py-2.5 text-sm t-primary outline-none transition-colors placeholder:text-neutral-400 focus:border-black/20 focus:ring-2 focus:ring-theme/10 dark:border-white/10 dark:focus:border-white/20"
+                      className={`${fieldCompactClassName} placeholder:text-neutral-400`}
                     />
                     <input
                       value={newModelUrl}
                       onChange={(event) => setNewModelUrl(event.target.value)}
                       placeholder={t("theme.live2d.custom.urlPlaceholder")}
-                      className="w-full rounded-xl border border-black/10 bg-w px-4 py-2.5 text-sm t-primary outline-none transition-colors placeholder:text-neutral-400 focus:border-black/20 focus:ring-2 focus:ring-theme/10 dark:border-white/10 dark:focus:border-white/20"
+                      className={`${fieldCompactClassName} placeholder:text-neutral-400`}
                     />
                     <button
                       type="button"
@@ -698,7 +706,7 @@ export function SettingsTheme() {
                       onChange={(event) => {
                         setConfigValue("widget.player.audio", event.target.value);
                       }}
-                      className="min-h-40 w-full rounded-xl border border-black/10 bg-w px-4 py-3 font-mono text-xs t-primary outline-none transition-colors placeholder:text-neutral-400 focus:border-black/20 focus:ring-2 focus:ring-theme/10 dark:border-white/10 dark:placeholder:text-neutral-500 dark:focus:border-white/20"
+                      className={`${fieldBaseClassName} min-h-40 px-4 py-3 font-mono text-xs placeholder:text-neutral-400 dark:placeholder:text-neutral-500`}
                       placeholder='[{"name":"Song","artist":"Artist","url":"https://...","cover":"/avatar.png"}]'
                     />
                   </SettingsCardBody>

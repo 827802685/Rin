@@ -156,5 +156,49 @@ describe("SearchService", () => {
             expect(result.data).toEqual([]);
             expect(result.hasNext).toBe(false);
         });
+
+        it("reports an empty result the same way the feed list does", async () => {
+            const result = await search("nothing-matches-this", "?limit=20");
+            expect(result).toEqual({ size: 0, data: [], hasNext: false });
+        });
+
+        it.each([
+            ["0", 20, true],
+            ["-5", 20, true],
+            ["abc", 20, true],
+            ["20px", 20, true],
+            ["100", 25, false],
+        ])("uses a sane page size for limit=%s instead of an empty page with hasNext", async (limit, expectedCount, expectedHasNext) => {
+            const result = await search("shared", `?limit=${limit}`);
+            expect(result.size).toBe(25);
+            expect(result.data.length).toBe(expectedCount);
+            expect(result.hasNext).toBe(expectedHasNext);
+        });
+
+        it.each([
+            ["0"],
+            ["-5"],
+            ["abc"],
+        ])("ignores a non-positive page=%s", async (page) => {
+            const result = await search("shared", `?page=${page}&limit=20`);
+            expect(result.data.length).toBe(20);
+            expect(result.hasNext).toBe(true);
+        });
+    });
+
+    it("does not reuse one page's cache entry for another page", async () => {
+        await clientConfig.set("cache.enabled", true);
+        for (let id = 1; id <= 25; id += 1) {
+            insertFeed(sqlite, id, `Common ${id}`, "shared body");
+        }
+
+        const first = await search("shared", "?limit=20");
+        const second = await search("shared", "?page=2&limit=20");
+
+        expect(first.data.length).toBe(20);
+        expect(second.data.length).toBe(5);
+
+        const firstIds = new Set(first.data.map((feed) => feed.id));
+        expect(second.data.every((feed) => !firstIds.has(feed.id))).toBe(true);
     });
 });

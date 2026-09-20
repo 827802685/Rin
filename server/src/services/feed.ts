@@ -15,6 +15,7 @@ import { HyperLogLog } from "../utils/hyperloglog";
 import { extractImageWithMetadata } from "../utils/image";
 import { containsLikePattern } from "../utils/like";
 import { stripMarkdown } from "../utils/markdown";
+import { parsePagination, toPage } from "../utils/pagination";
 import { syncFeedAISummaryQueueState } from "./feed-ai-summary";
 import { bindTagToPost } from "./tag";
 import { clearFeedCache } from "./clear-feed-cache";
@@ -66,8 +67,7 @@ export function FeedService(): Hono<{
             return c.text('Permission denied', 403);
         }
 
-        const page_num = (page ? parseInt(page) > 0 ? parseInt(page) : 1 : 1) - 1;
-        const limit_num = limit ? parseInt(limit) > 50 ? 50 : parseInt(limit) : 20;
+        const { page: page_num, limit: limit_num } = parsePagination(page, limit);
         const cacheKey = `feeds_${type}_${page_num}_${limit_num}`;
         const cached = await profileAsync(c, 'feed_list_cache_get', () => cache.get(cacheKey));
 
@@ -113,13 +113,8 @@ export function FeedService(): Hono<{
             };
         });
 
-        let hasNext = false;
-        if (feed_list.length === limit_num + 1) {
-            feed_list.pop();
-            hasNext = true;
-        }
-
-        const data = { size: size[0].count, data: feed_list, hasNext };
+        const { data: page_data, hasNext } = toPage(feed_list, limit_num);
+        const data = { size: size[0].count, data: page_data, hasNext };
 
         if (type === undefined || type === 'normal' || type === '') {
             await profileAsync(c, 'feed_list_cache_set', () => cache.set(cacheKey, data));
@@ -550,16 +545,15 @@ export function SearchService(): Hono<{
         } catch {
             // keep the already decoded value
         }
-        const page_num = (page ? parseInt(page) > 0 ? parseInt(page) : 1 : 1) - 1;
-        const limit_num = limit ? parseInt(limit) > 50 ? 50 : parseInt(limit) : 20;
+        const { page: page_num, limit: limit_num } = parsePagination(page, limit);
 
-        if (keyword === undefined || keyword.trim().length === 0) {
+        if (keyword.trim().length === 0) {
             return c.json({ size: 0, data: [], hasNext: false });
         }
 
         // The scope has to be part of the key: admins see drafts and unlisted
         // articles, so sharing one cache entry would leak them to visitors.
-        const cacheKey = `search_${admin ? "admin" : "public"}_${keyword}`;
+        const cacheKey = `search_${admin ? "admin" : "public"}_${keyword}_${page_num}_${limit_num}`;
         const searchKeyword = containsLikePattern(keyword);
         const matchesKeyword = (column: AnySQLiteColumn) => sql`${column} LIKE ${searchKeyword} ESCAPE '\\'`;
         const whereClause = or(
@@ -575,42 +569,49 @@ export function SearchService(): Hono<{
         // to a half-private article. Admins still get full results because the
         // admin UI has its own "unlisted" filter.
         const publicVisibility = and(eq(feeds.draft, 0), eq(feeds.listed, 1));
+        const where = admin ? whereClause : and(whereClause, publicVisibility);
 
-        const feed_list = (await profileAsync(c, 'feed_search_cache_db', () => cache.getOrSet(cacheKey, () => db.query.feeds.findMany({
-            where: admin ? whereClause : and(whereClause, publicVisibility),
-            columns: admin ? undefined : { draft: false, listed: false },
-            with: {
-                hashtags: {
-                    columns: {},
-                    with: { hashtag: { columns: { id: true, name: true } } }
+        const result = await profileAsync(c, 'feed_search_cache_db', () => cache.getOrSet(cacheKey, async () => {
+            const size = await db.select({ count: count() }).from(feeds).where(where);
+
+            if (size[0].count === 0) {
+                return { size: 0, data: [], hasNext: false };
+            }
+
+            const feed_list = (await db.query.feeds.findMany({
+                where,
+                columns: admin ? undefined : { draft: false, listed: false },
+                with: {
+                    hashtags: {
+                        columns: {},
+                        with: { hashtag: { columns: { id: true, name: true } } }
+                    },
+                    user: { columns: { id: true, username: true, avatar: true } }
                 },
-                user: { columns: { id: true, username: true, avatar: true } }
-            },
-            orderBy: [desc(feeds.createdAt), desc(feeds.updatedAt)],
-        })))).map(({ content, hashtags, summary, ...other }: any) => {
-            const plainText = stripMarkdown(content);
-            // Feed cards render `avatar`, so search results must expose it just
-            // like the feed list does, otherwise cards lose their cover image.
-            const avatar = extractImageWithMetadata(content);
-            return {
-                summary: summary.length > 0 ? summary : plainText.length > 100 ? plainText.slice(0, 100) : plainText,
-                hashtags: hashtags.map(({ hashtag }: any) => hashtag),
-                avatar,
-                ...other
-            };
-        });
-
-        if (feed_list.length <= page_num * limit_num) {
-            return c.json({ size: feed_list.length, data: [], hasNext: false });
-        } else if (feed_list.length <= page_num * limit_num + limit_num) {
-            return c.json({ size: feed_list.length, data: feed_list.slice(page_num * limit_num), hasNext: false });
-        } else {
-            return c.json({
-                size: feed_list.length,
-                data: feed_list.slice(page_num * limit_num, page_num * limit_num + limit_num),
-                hasNext: true
+                orderBy: [desc(feeds.createdAt), desc(feeds.updatedAt)],
+                offset: page_num * limit_num,
+                limit: limit_num + 1,
+            })).map(({ content, hashtags, summary, ...other }: any) => {
+                const plainText = stripMarkdown(content);
+                // Feed cards render `avatar`, so search results must expose it
+                // just like the feed list does, otherwise cards lose their
+                // cover image.
+                const avatar = extractImageWithMetadata(content);
+                return {
+                    summary: summary.length > 0 ? summary : plainText.length > 100 ? plainText.slice(0, 100) : plainText,
+                    hashtags: hashtags.map(({ hashtag }: any) => hashtag),
+                    avatar,
+                    ...other
+                };
             });
-        }
+
+            // Same `count + limit + 1` strategy as the feed list, so a search
+            // page and a list page answer identically at the boundaries.
+            const { data, hasNext } = toPage(feed_list, limit_num);
+            return { size: size[0].count, data, hasNext };
+        }));
+
+        return c.json(result);
     });
     return app;
 }

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { fieldTightClassName } from "./field-styles";
 
 const WEEKDAYS = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -214,7 +215,7 @@ export function DateTimeInput({
               onChange={(event) => {
                 applyTime(event.target.value, minutes);
               }}
-              className="w-full rounded-xl border border-black/10 bg-w px-3 py-2 text-sm t-primary outline-none transition-colors focus:border-black/20 focus:ring-2 focus:ring-theme/10 dark:border-white/10 dark:focus:border-white/20"
+              className={fieldTightClassName}
             />
             <span className="text-neutral-400">:</span>
             <input
@@ -225,7 +226,7 @@ export function DateTimeInput({
               onChange={(event) => {
                 applyTime(hours, event.target.value);
               }}
-              className="w-full rounded-xl border border-black/10 bg-w px-3 py-2 text-sm t-primary outline-none transition-colors focus:border-black/20 focus:ring-2 focus:ring-theme/10 dark:border-white/10 dark:focus:border-white/20"
+              className={fieldTightClassName}
             />
           </div>
 
