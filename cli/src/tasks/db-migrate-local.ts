@@ -1,7 +1,17 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { execSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import { fixTopField, getMigrationFileVersion, getMigrationVersion, isInfoExist, shouldSkipMigration, updateMigrationVersion } from "../lib/db-migration";
+
+// 用当前 bun 可执行文件走 `x wrangler`，而不是依赖 PATH 上的 `bunx`：
+// 精简安装的 bun（如官方 baseline 包）只带 bun.exe，没有 bunx 垫片，
+// 直接调 `bunx` 会让本地迁移整条链路报 "不是内部或外部命令"。
+export function buildLocalMigrateCommand(bunExec: string, dbName: string, filePath: string) {
+  return {
+    command: bunExec,
+    args: ["x", "wrangler", "d1", "execute", dbName, "--local", "--file", filePath],
+  };
+}
 
 export async function runLocalDbMigrate(dbName = "rin") {
   const sqlDir = path.join(process.cwd(), "server", "sql");
@@ -37,7 +47,8 @@ export async function runLocalDbMigrate(dbName = "rin") {
     }
 
     try {
-      execSync(`bunx wrangler d1 execute ${dbName} --local --file "${filePath}"`, { stdio: "inherit" });
+      const { command, args } = buildLocalMigrateCommand(process.execPath, dbName, filePath);
+      execFileSync(command, args, { stdio: "inherit" });
       console.log(`Executed ${file}`);
       appliedLastVersion = getMigrationFileVersion(file);
     } catch (error) {

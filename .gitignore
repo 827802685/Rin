@@ -9,6 +9,8 @@ test.ts
 *.log
 .env.production
 .wrangler
+# written by deploy secret sync, removed on success; never commit it
+.wrangler-secrets.json
 wrangler.toml
 .vite
 # Logs
