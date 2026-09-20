@@ -43,10 +43,12 @@ function createMockEnv(storageMode: CacheStorageMode = 'database'): Env {
         S3_FOLDER: 'images/',
         S3_CACHE_FOLDER: 'cache/',
         S3_REGION: 'auto',
-        S3_ENDPOINT: 'https://test.r2.cloudflarestorage.com',
+        // Unroutable on purpose: keeps unstubbed S3 calls from hitting the network
+        // (see the same note in tests/fixtures/index.ts).
+        S3_ENDPOINT: 'http://127.0.0.1:9',
         S3_ACCESS_HOST: 'https://test-image-domain.com',
         S3_BUCKET: 'test-bucket',
-        S3_FORCE_PATH_STYLE: 'false',
+        S3_FORCE_PATH_STYLE: 'true',
         WEBHOOK_URL: '',
         RSS_TITLE: 'Test',
         RSS_DESCRIPTION: 'Test Environment',

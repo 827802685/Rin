@@ -1,5 +1,12 @@
 import { getApp } from "./app-instance";
 
+type AppInstance = ReturnType<typeof getApp>;
+
+// Injectable so tests can supply a stub app. Stubbing `./app-instance` with
+// `mock.module` is not an option: Bun's mock.module leaks across test files and
+// mock.restore() cannot undo it (see scheduled-handler.ts for the same reasoning).
+export type AppResolver = () => AppInstance;
+
 // Documents crawlers expect at the site root: syndication feeds plus SEO files.
 const ROOT_ROUTE_PATTERN = /^\/(rss\.xml|atom\.xml|rss\.json|feed\.json|feed\.xml|sitemap\.xml|robots\.txt)$/;
 const APP_PUBLIC_ROUTE_PATTERN = /^\/(favicon|favicon\.ico)(?:\/|$)/;
@@ -58,20 +65,24 @@ async function serveSpaEntry(request: Request, env: Env) {
   return null;
 }
 
-export async function handleFetch(request: Request, env: Env): Promise<Response> {
+export async function handleFetch(
+  request: Request,
+  env: Env,
+  resolveApp: AppResolver = getApp,
+): Promise<Response> {
   const url = new URL(request.url);
   const pathname = url.pathname;
 
   if (isRootRoute(pathname)) {
-    return getApp().fetch(request, env);
+    return resolveApp().fetch(request, env);
   }
 
   if (isApiRequest(pathname)) {
-    return getApp().fetch(rewriteApiRequest(request), env);
+    return resolveApp().fetch(rewriteApiRequest(request), env);
   }
 
   if (isAppPublicRoute(pathname)) {
-    return getApp().fetch(request, env);
+    return resolveApp().fetch(request, env);
   }
 
   if (isStaticAssetRequest(pathname)) {

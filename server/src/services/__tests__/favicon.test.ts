@@ -163,6 +163,9 @@ describe('FaviconService', () => {
             app.route('/', FaviconService());
 
             const originalFetch = globalThis.fetch;
+            // Derived from the mock env instead of hardcoded, so the intercept keeps
+            // matching when the fixture endpoint changes.
+            const faviconObjectUrl = `${env.S3_ENDPOINT}/${env.S3_BUCKET}/${env.S3_FOLDER}favicon.webp`;
             globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
                 const url = typeof input === 'string'
                     ? input
@@ -178,11 +181,11 @@ describe('FaviconService', () => {
                     });
                 }
 
-                if (url.split('?')[0] === 'https://test-bucket.test.r2.cloudflarestorage.com/images/favicon.webp' && method === 'PUT') {
+                if (url.split('?')[0] === faviconObjectUrl && method === 'PUT') {
                     return new Response(null, { status: 200 });
                 }
 
-                if (url.split('?')[0] === 'https://test-bucket.test.r2.cloudflarestorage.com/images/favicon.webp') {
+                if (url.split('?')[0] === faviconObjectUrl) {
                     return new Response('missing', { status: 404 });
                 }
 

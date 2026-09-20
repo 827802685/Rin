@@ -183,10 +183,17 @@ export function createMockEnv(overrides: Partial<Env> = {}): Env {
         S3_FOLDER: 'images/',
         S3_CACHE_FOLDER: 'cache/',
         S3_REGION: 'auto',
-        S3_ENDPOINT: 'https://test.r2.cloudflarestorage.com',
+        // Deliberately unroutable. Tests that do not stub fetch still reach the S3
+        // client, so a real-looking host such as test.r2.cloudflarestorage.com made
+        // every one of them wait out a live network failure (~2.7s each, enough to
+        // time out the slowest cases). 127.0.0.1:9 refuses the connection in ~90ms
+        // and needs no DNS at all -- do not "fix" this back to a real R2 host.
+        S3_ENDPOINT: 'http://127.0.0.1:9',
         S3_ACCESS_HOST: 'https://test-image-domain.com',
         S3_BUCKET: 'test-bucket',
-        S3_FORCE_PATH_STYLE: 'false',
+        // Path style keeps the bucket out of the hostname, so the request target
+        // stays a bare 127.0.0.1 and never depends on DNS resolution timing.
+        S3_FORCE_PATH_STYLE: 'true',
         WEBHOOK_URL: '',
         RSS_TITLE: 'Test Blog',
         RSS_DESCRIPTION: 'Test Environment',
