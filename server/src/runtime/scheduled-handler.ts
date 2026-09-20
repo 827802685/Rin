@@ -16,10 +16,32 @@ async function runScheduledTask(name: string, task: () => Promise<unknown>) {
     }
 }
 
+/**
+ * The tasks the cron entrypoint drives, resolved lazily so a cold start does not pay
+ * for modules the request path never touches.
+ *
+ * They are injectable because `mock.module` leaks across test files in Bun: a stubbed
+ * task would silently replace the real one for every test file loaded afterwards.
+ */
+export type ScheduledTaskModules = {
+    friendCrontab: (typeof import("../services/friends"))["friendCrontab"];
+    rssCrontab: (typeof import("../services/rss"))["rssCrontab"];
+    cleanupRateLimits: (typeof import("../utils/rate-limit"))["cleanupRateLimits"];
+};
+
+async function loadScheduledTaskModules(): Promise<ScheduledTaskModules> {
+    const { friendCrontab } = await import("../services/friends");
+    const { rssCrontab } = await import("../services/rss");
+    const { cleanupRateLimits } = await import("../utils/rate-limit");
+
+    return { friendCrontab, rssCrontab, cleanupRateLimits };
+}
+
 export async function handleScheduled(
   _controller: ScheduledController | null,
   env: Env,
   ctx: ExecutionContext,
+  modules?: ScheduledTaskModules,
 ) {
   const schema = await import("../db/schema");
   const db = drizzle(env.DB, { schema });
@@ -28,9 +50,7 @@ export async function handleScheduled(
   const clientConfig = new CacheImpl(db, env, "client.config");
   const cache = new CacheImpl(db, env, "cache", undefined, clientConfig);
 
-  const { friendCrontab } = await import("../services/friends");
-  const { rssCrontab } = await import("../services/rss");
-  const { cleanupRateLimits } = await import("../utils/rate-limit");
+  const { friendCrontab, rssCrontab, cleanupRateLimits } = modules ?? await loadScheduledTaskModules();
 
   await runScheduledTask("friendCrontab", () => friendCrontab(env, ctx, db, cache, serverConfig, clientConfig));
   await runScheduledTask("rssCrontab", () => rssCrontab(env, db));

@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { BlobService, StorageService } from '../storage';
+import { isObjectStorageConfigured } from '../../utils/storage';
 import { Hono } from "hono";
 import { createMiddleware } from "hono/factory";
 import type { Variables, JWTUtils, CacheImpl } from "../../core/hono-types";
@@ -319,5 +320,42 @@ describe('StorageService', () => {
             expect(res.headers.get('content-type')).toBe('text/plain');
             expect(await res.text()).toBe('test');
         });
+    });
+});
+
+describe('isObjectStorageConfigured', () => {
+    const withoutS3 = {
+        S3_ENDPOINT: '' as any,
+        S3_BUCKET: '' as any,
+        S3_ACCESS_KEY_ID: '',
+        S3_SECRET_ACCESS_KEY: '',
+    };
+
+    it('is true when the R2 binding is present', () => {
+        const env = createMockEnv({
+            ...withoutS3,
+            R2_BUCKET: { put: async () => ({}) } as unknown as R2Bucket,
+        });
+
+        expect(isObjectStorageConfigured(env)).toBe(true);
+    });
+
+    it('is true when the S3 configuration is complete', () => {
+        expect(isObjectStorageConfigured(createMockEnv({ R2_BUCKET: undefined } as any))).toBe(true);
+    });
+
+    it('is false when no backend is configured at all', () => {
+        const env = createMockEnv({ ...withoutS3, R2_BUCKET: undefined } as any);
+
+        expect(isObjectStorageConfigured(env)).toBe(false);
+    });
+
+    it('is false when the S3 configuration is only half filled in', () => {
+        // resolveStorageTarget throws on each of these, so none may count as usable.
+        for (const missing of ['S3_ENDPOINT', 'S3_BUCKET', 'S3_ACCESS_KEY_ID', 'S3_SECRET_ACCESS_KEY'] as const) {
+            const env = createMockEnv({ ...withoutS3, R2_BUCKET: undefined, [missing]: '' } as any);
+
+            expect(isObjectStorageConfigured(env)).toBe(false);
+        }
     });
 });

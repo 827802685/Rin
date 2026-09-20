@@ -1,68 +1,76 @@
-import { afterEach, beforeEach, describe, expect, it, mock } from "bun:test";
+import { beforeEach, describe, expect, it, mock } from "bun:test";
 
-const friendCrontab = mock(async () => {});
-const rssCrontab = mock(async () => {});
-const cleanupRateLimits = mock(async () => {});
-
-// The handler imports these lazily at run time, so stubbing them here is enough.
-mock.module("../../services/friends", () => ({ friendCrontab }));
-mock.module("../../services/rss", () => ({ rssCrontab }));
-mock.module("../../utils/rate-limit", () => ({ cleanupRateLimits }));
-
-const { handleScheduled } = await import("../scheduled-handler");
-const { createMockEnv } = await import("../../../tests/fixtures");
+import { handleScheduled, type ScheduledTaskModules } from "../scheduled-handler";
+import { createMockEnv } from "../../../tests/fixtures";
 
 const ctx = {
     waitUntil: () => {},
     passThroughOnException: () => {},
 } as unknown as ExecutionContext;
 
+type TaskMocks = {
+    friendCrontab: ReturnType<typeof mock>;
+    rssCrontab: ReturnType<typeof mock>;
+    cleanupRateLimits: ReturnType<typeof mock>;
+};
+
+// The tasks are injected rather than module-mocked: Bun keeps `mock.module`
+// overrides for the rest of the process, so stubbing these modules here would
+// silently replace the real implementations for every later test file.
+function createTaskMocks(): TaskMocks {
+    return {
+        friendCrontab: mock(async () => {}),
+        rssCrontab: mock(async () => {}),
+        cleanupRateLimits: mock(async () => {}),
+    };
+}
+
 describe("handleScheduled", () => {
+    let tasks: TaskMocks;
+
     beforeEach(() => {
-        friendCrontab.mockClear();
-        rssCrontab.mockClear();
-        cleanupRateLimits.mockClear();
+        tasks = createTaskMocks();
     });
 
-    afterEach(() => {
-        friendCrontab.mockImplementation(async () => {});
-    });
+    async function run() {
+        return handleScheduled(null, createMockEnv(), ctx, tasks as unknown as ScheduledTaskModules);
+    }
 
     it("runs every scheduled task", async () => {
-        await handleScheduled(null, createMockEnv(), ctx);
+        await run();
 
-        expect(friendCrontab).toHaveBeenCalled();
-        expect(rssCrontab).toHaveBeenCalled();
-        expect(cleanupRateLimits).toHaveBeenCalled();
+        expect(tasks.friendCrontab).toHaveBeenCalled();
+        expect(tasks.rssCrontab).toHaveBeenCalled();
+        expect(tasks.cleanupRateLimits).toHaveBeenCalled();
     });
 
     it("passes the 24h retention window to the rate limit cleanup", async () => {
-        await handleScheduled(null, createMockEnv(), ctx);
+        await run();
 
-        expect(cleanupRateLimits).toHaveBeenCalledWith(expect.anything(), 60 * 60 * 24);
+        expect(tasks.cleanupRateLimits).toHaveBeenCalledWith(expect.anything(), 60 * 60 * 24);
     });
 
     it("keeps running the remaining tasks when the friend check fails", async () => {
         // Friend links are third party sites, so this is the task most likely to
         // throw — it must not take the RSS build down with it.
-        friendCrontab.mockImplementation(async () => {
+        tasks.friendCrontab.mockImplementation(async () => {
             throw new Error("friend unreachable");
         });
 
-        await expect(handleScheduled(null, createMockEnv(), ctx)).resolves.toBeUndefined();
+        await expect(run()).resolves.toBeUndefined();
 
-        expect(rssCrontab).toHaveBeenCalled();
-        expect(cleanupRateLimits).toHaveBeenCalled();
+        expect(tasks.rssCrontab).toHaveBeenCalled();
+        expect(tasks.cleanupRateLimits).toHaveBeenCalled();
     });
 
     it("still runs the cleanup when the RSS build fails", async () => {
-        rssCrontab.mockImplementation(async () => {
+        tasks.rssCrontab.mockImplementation(async () => {
             throw new Error("storage offline");
         });
 
-        await expect(handleScheduled(null, createMockEnv(), ctx)).resolves.toBeUndefined();
+        await expect(run()).resolves.toBeUndefined();
 
-        expect(friendCrontab).toHaveBeenCalled();
-        expect(cleanupRateLimits).toHaveBeenCalled();
+        expect(tasks.friendCrontab).toHaveBeenCalled();
+        expect(tasks.cleanupRateLimits).toHaveBeenCalled();
     });
 });

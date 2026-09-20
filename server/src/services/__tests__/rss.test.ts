@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import { describe, it, expect, beforeEach, afterEach, mock } from 'bun:test';
 import { RSSService, rssCrontab } from '../rss';
 import { Hono } from "hono";
 import type { Variables } from "../../core/hono-types";
@@ -179,13 +179,11 @@ describe('RSSService', () => {
 describe('rssCrontab', () => {
     let db: any;
     let sqlite: Database;
-    let env: Env;
 
     beforeEach(async () => {
         const mockDB = createMockDB();
         db = mockDB.db;
         sqlite = mockDB.sqlite;
-        env = createMockEnv();
         
         sqlite.exec(`INSERT INTO users (id, username, openid) VALUES (1, 'testuser', 'gh_test')`);
         sqlite.exec(`
@@ -199,21 +197,45 @@ describe('rssCrontab', () => {
         cleanupTestDB(sqlite);
     });
 
-    it('should generate and save RSS feeds to S3', async () => {
+    it('skips persistence when no object storage is configured', async () => {
+        // A deployment with neither R2 nor S3 can still serve feeds on demand, so the
+        // cron has to stay quiet here instead of logging a credential error every tick.
+        const bareEnv = createMockEnv({
+            R2_BUCKET: undefined,
+            S3_ENDPOINT: '',
+            S3_BUCKET: '',
+            S3_ACCESS_KEY_ID: '',
+            S3_SECRET_ACCESS_KEY: '',
+        } as any);
+
+        const errorSpy = mock(() => {});
+        const infoSpy = mock(() => {});
+        const originalError = console.error;
+        const originalInfo = console.info;
+        console.error = errorSpy as unknown as typeof console.error;
+        console.info = infoSpy as unknown as typeof console.info;
+
         try {
-            await rssCrontab(env, db);
-        } catch (e) {
-            // Expected to fail since S3 is not configured in test env
+            await expect(rssCrontab(bareEnv, db)).resolves.toBeUndefined();
+        } finally {
+            console.error = originalError;
+            console.info = originalInfo;
         }
+
+        expect(errorSpy).not.toHaveBeenCalled();
+        expect(infoSpy).toHaveBeenCalled();
     });
 
-    it('should handle missing feeds gracefully', async () => {
+    it('writes every feed variant when object storage is configured', async () => {
         sqlite.exec('DELETE FROM feeds');
         
-        try {
-            await rssCrontab(env, db);
-        } catch (e) {
-            // Should not throw
-        }
+        const put = mock(async () => ({}));
+        const env = createMockEnv({ R2_BUCKET: { put } as any });
+
+        await expect(rssCrontab(env, db)).resolves.toBeUndefined();
+
+        const calls = put.mock.calls as unknown as Array<[string, string, unknown]>;
+        expect(calls.map(([key]) => key)).toEqual(['cache/rss.xml', 'cache/atom.xml', 'cache/rss.json']);
+        expect(calls.every(([, body]) => typeof body === 'string' && body.length > 0)).toBe(true);
     });
 });

@@ -53,6 +53,21 @@ export function resolveStorageTarget(env: Env): StorageTarget {
   };
 }
 
+/**
+ * Whether an object storage backend is actually usable.
+ *
+ * `resolveStorageTarget` throws when the S3 variables are incomplete, so callers
+ * that can degrade gracefully (RSS falls back to on-demand rendering) should ask
+ * this first instead of reporting a failure on every run.
+ */
+export function isObjectStorageConfigured(env: Env): boolean {
+  if (env.R2_BUCKET) {
+    return true;
+  }
+
+  return Boolean(env.S3_ENDPOINT && env.S3_BUCKET && env.S3_ACCESS_KEY_ID && env.S3_SECRET_ACCESS_KEY);
+}
+
 function encodeStorageKey(key: string) {
   return key
     .split("/")
