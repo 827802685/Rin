@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'bun:test';
-import { path_join, getFirstPathSegment } from '../path';
+import { path_join, getFirstPathSegment, decodePathParam } from '../path';
 
 describe('path_join', () => {
     it('should join simple paths', () => {
@@ -78,5 +78,20 @@ describe('getFirstPathSegment', () => {
 
     it('should return empty string for domain only', () => {
         expect(getFirstPathSegment('https://example.com')).toBe('');
+    });
+});
+
+describe('decodePathParam', () => {
+    it('should decode an encoded value', () => {
+        expect(decodePathParam('web%20dev')).toBe('web dev');
+        expect(decodePathParam('%E4%B8%AD%E6%96%87')).toBe('中文');
+    });
+
+    it('should return the raw value when it cannot be decoded', () => {
+        // Hono hands already-decoded params to the handler, so a tag named
+        // "100%" reaches us as a bare "%" that decodeURI rejects.
+        expect(decodePathParam('100%')).toBe('100%');
+        expect(decodePathParam('%')).toBe('%');
+        expect(decodePathParam('%E0%A4%A')).toBe('%E0%A4%A');
     });
 });

@@ -16,6 +16,7 @@ import { extractImageWithMetadata } from "../utils/image";
 import { containsLikePattern } from "../utils/like";
 import { stripMarkdown } from "../utils/markdown";
 import { parsePagination, toPage } from "../utils/pagination";
+import { decodePathParam } from "../utils/path";
 import { syncFeedAISummaryQueueState } from "./feed-ai-summary";
 import { bindTagToPost } from "./tag";
 import { clearFeedCache } from "./clear-feed-cache";
@@ -535,16 +536,7 @@ export function SearchService(): Hono<{
         const admin = c.get('admin');
         const page = c.req.query('page');
         const limit = c.req.query('limit');
-        let keyword = c.req.param('keyword');
-
-        // Hono already decodes path params, so a literal `%` arrives here as-is
-        // and decoding it again throws `URIError`. Fall back to the raw value
-        // instead of turning a legitimate search into a 500.
-        try {
-            keyword = decodeURI(keyword);
-        } catch {
-            // keep the already decoded value
-        }
+        const keyword = decodePathParam(c.req.param('keyword'));
         const { page: page_num, limit: limit_num } = parsePagination(page, limit);
 
         if (keyword.trim().length === 0) {

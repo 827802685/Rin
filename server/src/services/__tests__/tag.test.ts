@@ -84,6 +84,26 @@ describe('TagService', () => {
             expect(res.status).toBe(404);
         });
 
+        it('should not turn a literal percent sign into a 500', async () => {
+            // Hono already decodes path params, so `%25` arrives as a bare `%`
+            // and decoding it again throws URIError. The handler must fall back
+            // to the raw value instead of crashing.
+            const res = await app.request('/100%25', { method: 'GET' }, env);
+
+            expect(res.status).toBe(404);
+        });
+
+        it('should still find a tag whose name contains a percent sign', async () => {
+            sqlite.exec(`INSERT INTO hashtags (id, name) VALUES (4, '100%')`);
+            sqlite.exec(`INSERT INTO feed_hashtags (feed_id, hashtag_id) VALUES (1, 4)`);
+
+            const res = await app.request('/100%25', { method: 'GET' }, env);
+
+            expect(res.status).toBe(200);
+            const data = await res.json() as any;
+            expect(data.name).toBe('100%');
+        });
+
         it('should exclude draft feeds for non-admin users', async () => {
             sqlite.exec(`INSERT INTO feeds (id, title, content, uid, draft, listed) VALUES (3, 'Draft', 'Content', 1, 1, 1)`);
             sqlite.exec(`INSERT INTO feed_hashtags (feed_id, hashtag_id) VALUES (3, 1)`);

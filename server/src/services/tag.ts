@@ -3,6 +3,7 @@ import { Hono } from "hono";
 import type { DB } from "../core/hono-types";
 import { profileAsync } from "../core/server-timing";
 import { feedHashtags, hashtags } from "../db/schema";
+import { decodePathParam } from "../utils/path";
 import type { AppContext } from "../core/hono-types";
 
 export function TagService(): Hono {
@@ -30,7 +31,7 @@ export function TagService(): Hono {
     app.get('/:name', async (c: AppContext) => {
         const db = c.get('db');
         const admin = c.get('admin');
-        const nameDecoded = decodeURI(c.req.param('name'));
+        const nameDecoded = decodePathParam(c.req.param('name'));
         
         const tag = await profileAsync(c, 'tag_detail_db', () => db.query.hashtags.findFirst({
             where: eq(hashtags.name, nameDecoded),

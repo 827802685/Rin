@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
-import { BlobService, StorageService } from '../storage';
+import { BlobService, StorageService, MAX_IMAGE_UPLOAD_SIZE } from '../storage';
 import { isObjectStorageConfigured } from '../../utils/storage';
 import { Hono } from "hono";
 import { createMiddleware } from "hono/factory";
@@ -177,8 +177,8 @@ describe('StorageService', () => {
 
             const r2App = createAppWithEnv(r2Env, 1);
             const formData = new FormData();
-            formData.append('key', 'test.txt');
-            formData.append('file', new File(['test content'], 'test.txt', { type: 'text/plain' }));
+            formData.append('key', 'test.png');
+            formData.append('file', new File(['test content'], 'test.png', { type: 'image/png' }));
 
             const res = await r2App.request('/', {
                 method: 'POST',
@@ -187,10 +187,10 @@ describe('StorageService', () => {
 
             expect(res.status).toBe(200);
             expect(putCalls).toHaveLength(1);
-            expect(putCalls[0]?.key).toMatch(/^images\/[a-f0-9]+\.txt$/);
-            expect(putCalls[0]?.type).toBe('text/plain;charset=utf-8');
+            expect(putCalls[0]?.key).toMatch(/^images\/[a-f0-9]+\.png$/);
+            expect(putCalls[0]?.type).toContain('image/png');
             const payload = await res.json() as { url: string };
-            expect(payload.url).toMatch(/^https:\/\/images\.example\.com\/images\/[a-f0-9]+\.txt$/);
+            expect(payload.url).toMatch(/^https:\/\/images\.example\.com\/images\/[a-f0-9]+\.png$/);
         });
 
         it('should return an /api/blob URL when R2 is configured without S3_ACCESS_HOST', async () => {
@@ -221,8 +221,8 @@ describe('StorageService', () => {
 
             const r2App = createAppWithEnv(r2Env, 1);
             const formData = new FormData();
-            formData.append('key', 'test.txt');
-            formData.append('file', new File(['test'], 'test.txt', { type: 'text/plain' }));
+            formData.append('key', 'test.png');
+            formData.append('file', new File(['test'], 'test.png', { type: 'image/png' }));
 
             const res = await r2App.request('/', {
                 method: 'POST',
@@ -233,7 +233,7 @@ describe('StorageService', () => {
             expect(putCalls).toHaveLength(1);
 
             const payload = await res.json() as { url: string };
-            expect(payload.url).toMatch(/^http:\/\/localhost\/api\/blob\/images\/[a-f0-9]+\.txt$/);
+            expect(payload.url).toMatch(/^http:\/\/localhost\/api\/blob\/images\/[a-f0-9]+\.png$/);
         });
 
         it('should return 500 when S3_ENDPOINT is not defined without R2 binding', async () => {
@@ -243,8 +243,8 @@ describe('StorageService', () => {
             const appNoS3 = createAppWithEnv(envNoS3, 1);
 
             const formData = new FormData();
-            formData.append('key', 'test.txt');
-            formData.append('file', new File(['test content'], 'test.txt', { type: 'text/plain' }));
+            formData.append('key', 'test.png');
+            formData.append('file', new File(['test content'], 'test.png', { type: 'image/png' }));
             
             const res = await appNoS3.request('/', {
                 method: 'POST',
@@ -262,8 +262,8 @@ describe('StorageService', () => {
             const appNoKey = createAppWithEnv(envNoKey, 1);
 
             const formData = new FormData();
-            formData.append('key', 'test.txt');
-            formData.append('file', new File(['test content'], 'test.txt', { type: 'text/plain' }));
+            formData.append('key', 'test.png');
+            formData.append('file', new File(['test content'], 'test.png', { type: 'image/png' }));
             
             const res = await appNoKey.request('/', {
                 method: 'POST',
@@ -272,6 +272,94 @@ describe('StorageService', () => {
 
             expect(res.status).toBe(500);
             expect(await res.text()).toBe('S3_ACCESS_KEY_ID is not defined');
+        });
+
+        it('should reject a request without a file instead of crashing', async () => {
+            const r2Env = createMockEnv({
+                R2_BUCKET: { put: async () => ({}) } as unknown as R2Bucket,
+            });
+            const r2App = createAppWithEnv(r2Env, 1);
+
+            const formData = new FormData();
+            formData.append('key', 'test.png');
+
+            const res = await r2App.request('/', {
+                method: 'POST',
+                body: formData,
+            }, r2Env);
+
+            expect(res.status).toBe(400);
+            expect(await res.text()).toBe('No file uploaded');
+        });
+
+        it('should reject non-image uploads', async () => {
+            const r2Env = createMockEnv({
+                R2_BUCKET: { put: async () => ({}) } as unknown as R2Bucket,
+            });
+            const r2App = createAppWithEnv(r2Env, 1);
+
+            const formData = new FormData();
+            formData.append('key', 'payload.html');
+            // The stored content type is replayed verbatim by the blob route, so
+            // accepting HTML here would turn object storage into a same-origin
+            // XSS sink.
+            formData.append('file', new File(['<script>alert(1)</script>'], 'payload.html', { type: 'text/html' }));
+
+            const res = await r2App.request('/', {
+                method: 'POST',
+                body: formData,
+            }, r2Env);
+
+            expect(res.status).toBe(400);
+            expect(await res.text()).toBe('Disallowed file type');
+        });
+
+        it('should reject files larger than the client upload limit', async () => {
+            const r2Env = createMockEnv({
+                R2_BUCKET: { put: async () => ({}) } as unknown as R2Bucket,
+            });
+            const r2App = createAppWithEnv(r2Env, 1);
+
+            const formData = new FormData();
+            formData.append('key', 'huge.png');
+            formData.append('file', new File([new Uint8Array(MAX_IMAGE_UPLOAD_SIZE + 1)], 'huge.png', { type: 'image/png' }));
+
+            const res = await r2App.request('/', {
+                method: 'POST',
+                body: formData,
+            }, r2Env);
+
+            expect(res.status).toBe(400);
+            expect(await res.text()).toBe(`File size exceeds limit (${MAX_IMAGE_UPLOAD_SIZE / 1024 / 1024}MB)`);
+        });
+
+        it('should fall back to the file name when the key is missing', async () => {
+            const putCalls: string[] = [];
+            const r2Env = createMockEnv({
+                R2_BUCKET: {
+                    put: async (key: string) => {
+                        putCalls.push(key);
+                        return { key } as unknown as R2Object;
+                    },
+                } as unknown as R2Bucket,
+                S3_ACCESS_HOST: 'https://images.example.com' as any,
+                S3_ENDPOINT: '' as any,
+                S3_BUCKET: '' as any,
+                S3_ACCESS_KEY_ID: '',
+                S3_SECRET_ACCESS_KEY: '',
+            });
+            const r2App = createAppWithEnv(r2Env, 1);
+
+            const formData = new FormData();
+            formData.append('file', new File(['test'], 'fallback.png', { type: 'image/png' }));
+
+            const res = await r2App.request('/', {
+                method: 'POST',
+                body: formData,
+            }, r2Env);
+
+            expect(res.status).toBe(200);
+            expect(putCalls[0]).toMatch(/\.png$/);
         });
     });
 
@@ -317,8 +405,41 @@ describe('StorageService', () => {
             const res = await r2App.request('/blob/images/test.txt', { method: 'GET' }, r2Env);
 
             expect(res.status).toBe(200);
-            expect(res.headers.get('content-type')).toBe('text/plain');
+            expect(res.headers.get('content-type')).toContain('text/plain');
             expect(await res.text()).toBe('test');
+        });
+
+        it('should serve blobs with headers that stop them from executing', async () => {
+            const r2Env = createMockEnv({
+                R2_BUCKET: {
+                    get: async (key: string) => ({
+                        key,
+                        size: 4,
+                        etag: 'etag',
+                        httpEtag: 'etag',
+                        uploaded: new Date('2025-01-01T00:00:00Z'),
+                        storageClass: 'Standard',
+                        checksums: {} as R2Checksums,
+                        writeHttpMetadata: () => {},
+                        body: new Blob(['test']).stream(),
+                    } as unknown as R2ObjectBody),
+                } as unknown as R2Bucket,
+                S3_ACCESS_HOST: '' as any,
+                S3_ENDPOINT: '' as any,
+                S3_BUCKET: '' as any,
+                S3_ACCESS_KEY_ID: '',
+                S3_SECRET_ACCESS_KEY: '',
+            });
+
+            const r2App = createAppWithEnv(r2Env, 1);
+            const res = await r2App.request('/blob/images/test.txt', { method: 'GET' }, r2Env);
+
+            // Objects are served from the same origin as the admin UI, so an
+            // executable content type (SVG or a legacy non-image upload) must
+            // never be allowed to run.
+            expect(res.headers.get('x-content-type-options')).toBe('nosniff');
+            expect(res.headers.get('content-security-policy')).toContain("default-src 'none'");
+            expect(res.headers.get('content-security-policy')).toContain('sandbox');
         });
     });
 });

@@ -48,6 +48,23 @@ export function path_join(...paths: string[]): string {
 }
 
 /**
+ * Decode a Hono path parameter without risking a 500.
+ *
+ * Hono already decodes path params, so a literal percent sign (sent as `%25`)
+ * arrives as a bare `%` and decoding it a second time throws `URIError`.
+ * Every route that re-decodes a param has to go through this helper, otherwise
+ * a legitimate-looking request such as `/tag/100%25` crashes the handler.
+ */
+export function decodePathParam(value: string): string {
+    try {
+        return decodeURI(value);
+    } catch {
+        // keep the already decoded value
+        return value;
+    }
+}
+
+/**
  * 提取URL中第一段路径（path segment）
  * 纯TypeScript实现，不依赖Node.js和浏览器环境
  * 
