@@ -140,3 +140,20 @@ packages/ui tsc 干净；反向验证（换回旧 parseInt 解析）3 例精确�
   本轮 F: 有 pnpm 残留 `hono@4.13.2`（顶层 4.12.2）⇒ `c.req.param()` 被推导成
   `string | undefined`；C: 只有 4.12.2 所以全绿。判定手法：diff tsconfig + 对比
   `node_modules/<pkg>/package.json` 版本 + `find node_modules -name <pkg>` 找重复副本。
+
+## 2026-09-21 分支收敛（用户要求，【务必遵守】）
+
+**用户明确要求：不要再按日期开 `iter/YYYY-MM-DD` 分支，全部收敛成一个分支。**
+
+现已执行：
+- 从 `main` 创建长期工作分支 **`dev`**，C: worktree 已切到 `dev`。
+- 已合并并**删除** `iter/2026-09-20`、`iter/2026-09-21`、`workbuddy/main-f7c3f4a1`
+  （三者均已 0 提交未并入 dev，删除安全）。
+- 保留 `main`（主干）、`release/v0.3.0` 与 `agent/developer/1254500b`（upstream 跟踪分支，不动）。
+
+**以后所有迭代直接在 `dev` 上提交，禁止新建分支。**
+
+关键发现（易踩坑）：两个同为 "test" 的提交只差 33 秒，但内容完全不同 ——
+`e4bfd50`（iter/2026-09-21）**只提交了 .workbuddy 记忆文件、零代码**；真正的 live2d
+模块化重构在 `bc38458`（main）。所以**判断哪条分支最新不能只看提交时间**，
+必须 `git show --stat` 看实际改动内容，否则会把代码丢掉。
