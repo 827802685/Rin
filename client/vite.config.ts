@@ -7,6 +7,8 @@ import { fileURLToPath } from 'node:url'
 import { dirname, join, normalize } from 'node:path'
 import react from '@vitejs/plugin-react-swc'
 import { visualizer } from "rollup-plugin-visualizer";
+// 前端模型清单唯一来源（避免与 live2d-widget.tsx 各自硬编码一份顺序）
+import { BUILTIN_MODELS } from './src/components/theme/live2d/models'
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -30,11 +32,10 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
  */
 function rinLive2dLocalCdn(): Plugin {
   const modelsDir = join(__dirname, "../models");
-  // 漫游模型顺序：必须与前端 live2d-widget.tsx 的 AVATAR_MODELS 完全一致
+  // 本地模型漫游顺序：与前端 live2d/models.ts 的 BUILTIN_MODELS 完全一致
   // （["furina","BCSZ1.1"]），不要用目录字典序（会排成 ["BCSZ1.1","furina"]），
   // 否则插件用 modelId 下标解析模型名会取错。
-  const AVATAR_MODEL_ORDER = ["furina", "BCSZ1.1"];
-  const existsSorted = () => {
+  const listModelDirs = () => {
     try {
       return readdirSync(modelsDir, { withFileTypes: true })
         .filter((d) => d.isDirectory())
@@ -45,7 +46,7 @@ function rinLive2dLocalCdn(): Plugin {
   };
   // 收集本地模型名：按前端固定顺序返回，仅保留实际存在的目录
   const modelNames = () =>
-    AVATAR_MODEL_ORDER.filter((n) => existsSorted().includes(n));
+    BUILTIN_MODELS.filter((n) => listModelDirs().includes(n));
   return {
     name: "rin:live2d-local-cdn",
     apply: "serve",
@@ -107,9 +108,11 @@ function rinLive2dLocalCdn(): Plugin {
             ? "application/json"
             : file.endsWith(".png")
               ? "image/png"
-              : file.endsWith(".wav") || file.endsWith(".mp3")
+              : file.endsWith(".wav")
                 ? "audio/wav"
-                : "application/octet-stream";
+                : file.endsWith(".mp3")
+                  ? "audio/mpeg"
+                  : "application/octet-stream";
         res.setHeader("content-type", mime);
         res.setHeader("cache-control", "no-store");
         res.setHeader("content-length", String(statSync(file).size));

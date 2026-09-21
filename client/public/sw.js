@@ -34,11 +34,8 @@ function isLive2dAsset(url) {
   if (u.origin === self.location.origin && u.pathname.includes("/live2d-bundled/")) {
     return true;
   }
-  // 同源开发/其它 Live2D 资源的兜底（仅当路径明显是模型文件）
-  if (!u.pathname.includes("/live2d-bundled/") && !u.pathname.includes("/rin-live2d-cdn/")) {
-    return false;
-  }
-  return true;
+  // 同源开发/其它 Live2D 资源的兜底（仅当路径明显是模型目录）
+  return u.pathname.includes("/rin-live2d-cdn/");
 }
 
 self.addEventListener("install", (event) => {
@@ -79,8 +76,8 @@ self.addEventListener("fetch", (event) => {
         }
         return resp;
       } catch (e) {
-        // 网络失败且有旧缓存则回退
-        return cached || new Response("network error", { status: 503 });
+        // 网络失败：此前已确认无缓存，直接返回网络错误
+        return new Response("network error", { status: 503 });
       }
     })(),
   );

@@ -21,6 +21,7 @@ import {
 import { FEED_CARD_VARIANTS, normalizeFeedCardVariant } from "../components/feed-card-options";
 import { FeedCardPreview } from "../components/feed-card-preview";
 import { FEED_LAYOUT_OPTIONS, normalizeFeedLayout } from "../components/feed-layout-options";
+import { BUILTIN_MODELS, newCustomModelId, parseCustomModels } from "../components/theme/live2d/models";
 import { useSiteConfig } from "../hooks/useSiteConfig";
 import { useSettingsDraft } from "../hooks/use-settings-draft";
 import { applyThemeColor, normalizeThemeColor } from "../utils/theme-color";
@@ -118,21 +119,23 @@ export function SettingsTheme() {
   const live2dScale = String(clientConfig.get("widget.live2d.scale") ?? "1");
   // 默认模型 id（furina / BCSZ1.1 / 自定义模型 id）
   const live2dDefaultModel = String(clientConfig.get("widget.live2d.defaultModel") ?? "furina");
-  // 自定义模型列表配置（JSON 数组 [{ id, name, url }]，由设置里"添加模型"生成）
-  const live2dCustomModelsRaw = String(clientConfig.get("widget.live2d.customModels") ?? "[]");
-  // 解析后的自定义模型列表（失效返回空数组）
-  const live2dCustomModels = useMemo<{ id: string; name: string; url: string }[]>(() => {
-    try {
-      const arr = JSON.parse(live2dCustomModelsRaw);
-      if (!Array.isArray(arr)) return [];
-      return arr.filter(
-        (x): x is { id: string; name: string; url: string } =>
-          !!x && typeof x.id === "string" && typeof x.name === "string" && typeof x.url === "string",
-      );
-    } catch {
-      return [];
-    }
-  }, [live2dCustomModelsRaw]);
+  // 自定义模型列表配置（JSON 数组 [{ id, name, url }]，解析逻辑统一在 live2d/models.ts）
+  const live2dCustomModelsRaw = clientConfig.get("widget.live2d.customModels");
+  const live2dCustomModels = useMemo(
+    () => parseCustomModels(live2dCustomModelsRaw),
+    [live2dCustomModelsRaw],
+  );
+  // 设置页模型列表展示项：内置模型在前（展示名走 i18n），自定义模型在后
+  const live2dModelEntries = useMemo(() => {
+    const builtin = BUILTIN_MODELS.map((id) => ({
+      id,
+      name: t(`theme.live2d.switch.${id}`),
+      url: "",
+      builtin: true,
+    }));
+    return [...builtin, ...live2dCustomModels.map((c) => ({ ...c, builtin: false }))];
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [live2dCustomModels, t]);
   const cursorEnabled = clientConfig.getBoolean("widget.cursor.enabled");
   const cursorDefault = String(clientConfig.get("widget.cursor.default") ?? "/cursors/furina/normal.png");
   const cursorPointer = String(clientConfig.get("widget.cursor.pointer") ?? "/cursors/furina/link.png");
@@ -142,6 +145,15 @@ export function SettingsTheme() {
   const playerEnabled = clientConfig.getBoolean("widget.player.enabled");
   const playerAutoplay = clientConfig.getBoolean("widget.player.autoplay");
   const playerAudio = String(clientConfig.get("widget.player.audio") ?? "[]");
+  // 播放列表 JSON 失校验：非法 JSON 时行内提示（保存的仍是原字符串，不阻塞其它设置）
+  const playerAudioInvalid = useMemo(() => {
+    try {
+      JSON.parse(playerAudio);
+      return false;
+    } catch {
+      return true;
+    }
+  }, [playerAudio]);
   const playerMetingApi = String(clientConfig.get("widget.player.meting_api") ?? "");
   const playerMeting = String(clientConfig.get("widget.player.meting") ?? "");
   const shareEnabled = clientConfig.getBoolean("widget.share.enabled");
@@ -171,8 +183,7 @@ export function SettingsTheme() {
       showAlert(t("theme.live2d.custom.dup_name"));
       return;
     }
-    const id = `custom-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
-    const next = [...live2dCustomModels, { id, name, url }];
+    const next = [...live2dCustomModels, { id: newCustomModelId(), name, url }];
     saveCustomModels(next);
     setNewModelName("");
     setNewModelUrl("");
@@ -415,14 +426,12 @@ export function SettingsTheme() {
                   setConfigValue("widget.live2d.position", checked ? "left" : "right");
                 }}
               />
-              <ItemInput
-                title={t("theme.live2d.model.title")}
-                description={t("theme.live2d.model.desc")}
-                configKeyTitle={t("theme.live2d.model.label")}
-                value={String(clientConfig.get("widget.live2d.model") ?? "")}
-                placeholder="https://raw-githubusercontent-com-gh.zjkl0330.dpdns.org/827802685/Live2D/refs/heads/master/model/furina/furina.model3.json"
-                onChange={(value) => {
-                  setConfigValue("widget.live2d.model", value);
+              <ItemSwitch
+                title={t("theme.live2d.edge.title")}
+                description={t("theme.live2d.edge.desc")}
+                checked={String(clientConfig.get("widget.live2d.edge") ?? "").trim().toLowerCase() === "true"}
+                onChange={(checked) => {
+                  setConfigValue("widget.live2d.edge", checked);
                 }}
               />
               <ItemInput
@@ -450,34 +459,7 @@ export function SettingsTheme() {
                   setConfigValue("widget.live2d.layout", value);
                 }}
               />
-              <SettingsCard>
-                <SettingsCardRow
-                  header={
-                    <SettingsCardHeader
-                      title={t("theme.live2d.defaultModel.title")}
-                      description={t("theme.live2d.defaultModel.desc")}
-                    />
-                  }
-                  action={<span />}
-                />
-                <SettingsCardBody>
-                  <select
-                    value={live2dDefaultModel}
-                    onChange={(event) => {
-                      setConfigValue("widget.live2d.defaultModel", event.target.value);
-                    }}
-                    className={fieldCompactClassName}
-                  >
-                    <option value="furina">{t("theme.live2d.switch.furina")}</option>
-                    <option value="BCSZ1.1">{t("theme.live2d.switch.BCSZ1.1")}</option>
-                    {live2dCustomModels.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.name}
-                      </option>
-                    ))}
-                  </select>
-                </SettingsCardBody>
-              </SettingsCard>
+              {/* 模型管理：内置 + 自定义统一列出，点"设为默认"切换默认模型，添加表单在底部 */}
               <SettingsCard>
                 <SettingsCardRow
                   header={
@@ -489,58 +471,80 @@ export function SettingsTheme() {
                   action={<span />}
                 />
                 <SettingsCardBody>
-                  {/* 已有自定义模型列表 */}
-                  {live2dCustomModels.length === 0 ? (
-                    <p className="mb-2 text-xs t-muted">{t("theme.live2d.custom.empty")}</p>
-                  ) : (
-                    <ul className="mb-2 flex flex-col gap-1">
-                      {live2dCustomModels.map((c) => (
-                        <li
-                          key={c.id}
-                          className="flex items-center justify-between gap-2 rounded-lg border border-black/10 bg-neutral-50 px-3 py-1.5 text-sm dark:border-white/10 dark:bg-neutral-800"
-                        >
-                          <div className="flex min-w-0 flex-col">
-                            <span className="truncate font-medium t-primary">
-                              {c.name}
-                              {c.id === live2dDefaultModel ? (
-                                <span className="ml-1 text-xs text-theme">
-                                  {t("theme.live2d.custom.defaultFlag")}
-                                </span>
-                              ) : null}
-                            </span>
-                            <span className="truncate text-xs t-muted">{c.url}</span>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => handleRemoveCustomModel(c.id)}
-                            className="shrink-0 rounded-full px-1 text-neutral-400 transition hover:text-red-500"
-                            aria-label={t("theme.live2d.custom.remove")}
-                            title={t("theme.live2d.custom.remove")}
-                          >
-                            <i className="ri-delete-bin-line" />
-                          </button>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
+                  <ul className="mb-3 flex flex-col gap-1.5">
+                    {live2dModelEntries.map((m) => (
+                      <li
+                        key={m.id}
+                        className={`flex items-center justify-between gap-2 rounded-lg border px-3 py-1.5 text-sm ${
+                          m.id === live2dDefaultModel
+                            ? "border-theme/40 bg-theme/5"
+                            : "border-black/10 bg-neutral-50 dark:border-white/10 dark:bg-neutral-800"
+                        }`}
+                      >
+                        <div className="flex min-w-0 flex-col">
+                          <span className="truncate font-medium t-primary">
+                            {m.name}
+                            {m.builtin ? (
+                              <span className="ml-1.5 rounded bg-neutral-200/70 px-1 py-0.5 align-middle text-[10px] t-muted dark:bg-neutral-700">
+                                {t("theme.live2d.custom.builtin")}
+                              </span>
+                            ) : null}
+                            {m.id === live2dDefaultModel ? (
+                              <span className="ml-1 text-xs text-theme">
+                                {t("theme.live2d.custom.defaultFlag")}
+                              </span>
+                            ) : null}
+                          </span>
+                          {m.url ? <span className="truncate text-xs t-muted">{m.url}</span> : null}
+                        </div>
+                        <div className="flex shrink-0 items-center gap-1">
+                          {m.id !== live2dDefaultModel ? (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setConfigValue("widget.live2d.defaultModel", m.id);
+                              }}
+                              className="rounded-full px-2 py-1 text-xs text-theme transition hover:bg-theme/10"
+                              title={t("theme.live2d.custom.set_default")}
+                            >
+                              {t("theme.live2d.custom.set_default")}
+                            </button>
+                          ) : null}
+                          {!m.builtin ? (
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveCustomModel(m.id)}
+                              className="rounded-full px-1 text-neutral-400 transition hover:text-red-500"
+                              aria-label={t("theme.live2d.custom.remove")}
+                              title={t("theme.live2d.custom.remove")}
+                            >
+                              <i className="ri-delete-bin-line" />
+                            </button>
+                          ) : null}
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
                   {/* 添加自定义模型表单 */}
                   <div className="flex flex-col gap-2">
-                    <input
-                      value={newModelName}
-                      onChange={(event) => setNewModelName(event.target.value)}
-                      placeholder={t("theme.live2d.custom.namePlaceholder")}
-                      className={`${fieldCompactClassName} placeholder:text-neutral-400`}
-                    />
-                    <input
-                      value={newModelUrl}
-                      onChange={(event) => setNewModelUrl(event.target.value)}
-                      placeholder={t("theme.live2d.custom.urlPlaceholder")}
-                      className={`${fieldCompactClassName} placeholder:text-neutral-400`}
-                    />
+                    <div className="grid gap-2 md:grid-cols-2">
+                      <input
+                        value={newModelName}
+                        onChange={(event) => setNewModelName(event.target.value)}
+                        placeholder={t("theme.live2d.custom.namePlaceholder")}
+                        className={`${fieldCompactClassName} placeholder:text-neutral-400`}
+                      />
+                      <input
+                        value={newModelUrl}
+                        onChange={(event) => setNewModelUrl(event.target.value)}
+                        placeholder={t("theme.live2d.custom.urlPlaceholder")}
+                        className={`${fieldCompactClassName} placeholder:text-neutral-400`}
+                      />
+                    </div>
                     <button
                       type="button"
                       onClick={handleAddCustomModel}
-                      className="inline-flex items-center justify-center gap-1 rounded-full bg-theme px-4 py-2 text-sm font-medium text-white transition hover:bg-theme-hover"
+                      className="inline-flex items-center justify-center gap-1 self-start rounded-full bg-theme px-4 py-2 text-sm font-medium text-white transition hover:bg-theme-hover"
                     >
                       <i className="ri-add-line" />
                       {t("theme.live2d.custom.add")}
@@ -709,6 +713,9 @@ export function SettingsTheme() {
                       className={`${fieldBaseClassName} min-h-40 px-4 py-3 font-mono text-xs placeholder:text-neutral-400 dark:placeholder:text-neutral-500`}
                       placeholder='[{"name":"Song","artist":"Artist","url":"https://...","cover":"/avatar.png"}]'
                     />
+                    {playerAudioInvalid ? (
+                      <p className="mt-2 text-xs text-red-500">{t("theme.player.audio.invalid_json")}</p>
+                    ) : null}
                   </SettingsCardBody>
                 </SettingsCard>
               </div>

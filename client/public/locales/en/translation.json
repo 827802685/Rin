@@ -854,14 +854,9 @@
         "title": "Mascot on the left",
         "desc": "Place the mascot on the left edge instead of the right"
       },
-      "model": {
-        "title": "Model file",
-        "desc": "Remote URL of the .model3.json model file. The Furina model is about 99MB (95MB moc3 + 8MB 4K texture) and exceeds the site's static-asset limit, so it must be referenced remotely (GitHub mirror proxy or Pages), not bundled into the frontend assets. The Chinese-named model under the repo models/ folder is not deployed; using /models/... will 404 and the mascot will not show.",
-        "label": "Model path"
-      },
       "scale": {
         "title": "Mascot scale",
-        "desc": "Display scale of the Live2D model",
+        "desc": "Display scale of the Live2D model. Large models (e.g. Furina) are heavy; if it lags, switch to the bundled lightweight model or reduce the scale",
         "label": "Scale"
       },
       "layout": {
@@ -869,14 +864,9 @@
         "desc": "JSON injected into the model's Layout to fine-tune its position/scale on the canvas, e.g. to fix neck misalignment. Example: {\"Center Y\": 0.05}",
         "label": "Layout JSON"
       },
-      "defaultModel": {
-        "title": "Default model",
-        "desc": "Which mascot model to show when the page loads"
-      },
       "custom": {
-        "title": "Custom models",
-        "desc": "Add your own Live2D models. Enter a character name and the manifest URL (.model3.json or index.json), then switch to it on the mascot.",
-        "empty": "No custom models yet",
+        "title": "Model Management",
+        "desc": "Manage built-in and custom models together: click \"Set as default\" to switch, or add your own model (a .model3.json or index.json URL).",
         "add": "Add model",
         "remove": "Remove",
         "defaultFlag": "Default",
@@ -884,7 +874,9 @@
         "urlPlaceholder": "https://…/index.json or .model3.json",
         "need_both": "Please fill in both a name and a URL",
         "invalid_url": "URL must start with http/https, or a site path starting with /",
-        "dup_name": "A custom model with this name already exists"
+        "dup_name": "A custom model with this name already exists",
+        "builtin": "Built-in",
+        "set_default": "Set as default"
       },
       "show": "Show mascot",
       "hide": "Hide mascot",
@@ -903,15 +895,13 @@
       },
       "chat": {
         "button": "Chat",
-        "title": "Chat with Furina",
-        "hint": "I'm Furina~ Anything you want to talk about?",
-        "placeholder": "Say something to Furina...",
+        "title": "Chat with {{name}}",
+        "hint": "I'm {{name}}! What would you like to chat about?",
+        "placeholder": "Say something to {{name}}…",
         "send": "Send",
         "error": "Chat failed, please try again later"
       },
       "talk": {
-        "idle1": "Hi there, I am Furina!",
-        "idle2": "Let's work hard together today!",
         "poke1": "Hey! Don't poke me like that~",
         "poke2": "That tickles... what are you doing?",
         "poke3": "Keep patting and I'll start charging~"
@@ -923,13 +913,17 @@
         "BCSZ1.1": "Yae Miko"
       },
       "error": {
-        "webgl": "WebGL is not supported in this browser, so the Live2D model cannot be rendered",
-        "load_failed": "Failed to load the Live2D model. Check the model URL or try again later"
+        "manifest_unavailable": "Model manifest unavailable: {{url}}",
+        "model_missing": "Model {{name}} is not in the model_list of {{root}}. Make sure the model is bundled with the site."
       },
       "loading": {
         "connecting": "Connecting to the model...",
         "downloading": "Downloading model",
         "stalled": "Model download stalled. Check your network and refresh."
+      },
+      "edge": {
+        "title": "Rest at screen edge",
+        "desc": "Enlarge the model and let it rest on the bottom edge of the screen, showing only the upper body"
       }
     },
     "cursor": {
@@ -973,7 +967,8 @@
         "title": "Playlist",
         "desc": "JSON array of tracks with name, artist, url and cover",
         "example": "Insert example",
-        "clear": "Clear"
+        "clear": "Clear",
+        "invalid_json": "Invalid JSON, please fix it before saving"
       },
       "play": "Play",
       "pause": "Pause",

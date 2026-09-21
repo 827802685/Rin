@@ -4,12 +4,38 @@ import { useLocation } from "wouter";
 import type { AIChatMessage } from "@rin/api";
 import { client } from "../../app/runtime";
 import { ClientConfigContext } from "../../state/config";
+import {
+  type ActionName,
+  IDLE_EXPRESSIONS,
+  clamp,
+  getLive2dModel,
+  isActionPlaying,
+  patchModelForActions,
+  playAction,
+  stopAllMotions,
+} from "./live2d/actions";
+import { bundledRootFor, pickCdnRoot, precacheAllModels, prefetchModel } from "./live2d/cache";
+import {
+  BUILTIN_MODELS,
+  type CustomModel,
+  EXPECTED_TOTAL_BY_NAME,
+  allModelIds,
+  chatPromptFor,
+  parseCustomModels,
+  resolveDefaultName,
+} from "./live2d/models";
 
 /**
  * Live2D 看板娘组件 —— live2d-widget 插件接入版（复刻 Demo autoload.js）
  *
  * 渲染引擎：stevenjoezhang/live2d-widget（827802685 的 fork，暴露 window.initWidget），
  * 与 Demo（https://827802685.github.io/Live2D/）完全同源。
+ *
+ * 模块划分：
+ *   - live2d/models.ts   模型清单唯一来源（内置 + 自定义模型、聊天人设）；
+ *   - live2d/actions.ts  动作引擎（JS 参数动画）与模型实例捕获；
+ *   - live2d/cache.ts    模型源探测与 Service Worker 预缓存；
+ *   - 本文件             插件加载/挂载、拖拽、聊天面板、覆盖样式。
  *
  * 交互（联动性）说明：
  *   - 鼠标移动：渲染器让模型眼睛/头部跟随光标（onDrag）；
@@ -23,28 +49,9 @@ import { ClientConfigContext } from "../../state/config";
  *   - 隐藏插件自带的 #waifu-tool（工具列）与 #waifu-toggle（开关），交互交给 React 按钮；
  *   - 气泡复用插件的 #waifu-tips，仅重写样式贴合博客主题（蓝色气泡）；
  *   - 不加载 config-panel.js（参数面板），保持博客干净；
+ *   - 渲染分辨率按 MAX_RENDER_DPR 封顶（HiDPI 屏上大模型卡顿的主要来源）；
  *   - 保留 React 外壳：文件夹拖拽、换模型/摸一摸/隐藏按钮、加载进度、错误提示。
- *
- * 本版本针对用户反馈做的优化：
- *   1. 衣服重力飘动：拖动时用真实指针速度驱动模型拖拽参数（替代原假正弦波），
- *      让模型自带的 physics3（重力 Y=-1）自然带动衣服摆动，松手后惯性回弹；
- *   2. 流畅度：进度追踪改为流式计数（TransformStream），不再把 91MB moc3 整块读进内存；
- *   3. 更早请求最大模型：探测到 CDN 根地址后立即并行预取 moc3/贴图，不等插件脚本；
- *   4. 透明区域点击穿透：点击画布时读取该点像素 alpha，透明则把点击透传给后面的元素；
- *   5. 新增动作：摸摸/挥手/摇头/跳舞（JS 驱动参数动画），并修复点击/悬停/表情轮播
- *      （原模型配置缺少 HitAreas 导致原生命中检测永远失败，动作从未真正触发）；
- *   6. 换模型按钮：支持在 furina / BCSZ1.1 之间切换（复用插件 modelId 机制）；
- *   7. 对话框改为蓝色；
- *   8. 渲染门控：模型完整加载（CompleteSetup）前不显示模型，避免露出半成品；
- *   9. 颈部错位：支持通过 widget.live2d.layout 注入 Layout 微调模型位置/缩放。
  */
-
-// 保存模块加载时的"原生 fetch"引用。组件挂载/切换时 installProgressTracker 会短暂
-// 替换 window.fetch（为模型文件做流式进度统计 + Layout 注入）。后台预下载模型缓存时
-// 若走被替换的 window.fetch，会把预下载字节也计进页面进度，导致进度虚高到 100%+
-// 且预下载与当前绘制模型抢带宽（表现为"卡在100%但不渲染"）。因此预缓存一律走原生
-// fetch，完全旁路进度统计与 Layout 注入。
-const nativeFetch: typeof fetch = window.fetch;
 
 // 插件资源根目录（相对 waifu-tips.js 所在处）
 const DIST = "https://827802685.github.io/Live2D/dist/";
@@ -56,29 +63,18 @@ const CUBISM5_PATH = `${DIST}live2dcubismcore.min.js`;
 // 渲染器 chunk（AppDelegate 所在模块），用于捕获模型实例以驱动衣服/头发物理
 const CHUNK_URL = `${DIST}chunk/index2.js`;
 
-// 模型根地址候选（按模型区分）。生产环境：
-//  - BCSZ1.1 已随博客打包成静态资源（见 vite.config.ts rinLive2dBundledModel），
-//    优先本域本地根，毫秒级、摆脱远端 CDN；
-//  - furina 的 moc3 单文件约 95MB 超 Cloudflare Pages 25MiB 限制，无法打包，只能走
-//    远端模型源。优先 dpdns 加速镜像（国内直连更快、更稳），失败回退 github.io 直连。
-// dev 环境统一由 vite.config.ts 的 rinLive2dLocalCdn 中间件提供本地模型文件。
-const REMOTE_CDN_CANDIDATES = [
-  "https://raw-githubusercontent-com-gh.zjkl0330.dpdns.org/827802685/Live2D/refs/heads/master/",
-  "https://827802685.github.io/Live2D/",
-] as const;
-
-// 各模型优先使用的本地/打包根（非远端 CDN）。BCSZ1.1 生产走随博客分发的打包根。
-// 仅对内置模型生效；自定义模型不看根，直接用其配置 url（在 switchModel/prefetch 中另行处理）。
-function bundledRootFor(name: string): string {
-  if (name === "furina") return "";
-  if (import.meta.env.DEV) return `${location.origin}/rin-live2d-cdn/`;
-  return `${location.origin}/live2d-bundled/`;
-}
-
 // 透明像素判定阈值：alpha 低于该值视为"透明区域"，点击透传给后面的元素
 const CLICK_ALPHA_THRESHOLD = 16;
 // 点击 vs 拖拽的判定阈值（像素）
 const DRAG_START_THRESHOLD = 6;
+
+// ---- 渲染分辨率封顶（性能） ----
+// 渲染器画布物理分辨率 = clientWidth * devicePixelRatio，触摸坐标也统一乘
+// devicePixelRatio（见 chunk/index2.js 的 resizeCanvas/onTouches*）。高分屏（dpr=2/3）
+// 下片元开销成倍增长，是大模型卡顿的主要来源之一。对所有内部用到 devicePixelRatio
+// 的渲染器方法，在调用期间把 window.devicePixelRatio 临时封顶为该值（画布尺寸与
+// 坐标映射同步生效，模型视角/点击命中保持一致），调用结束立即还原，不影响页面其它部分。
+const MAX_RENDER_DPR = 1.5;
 
 // ---- 趴在屏幕边缘（edgeRest）模式参数 ----
 // 实现思路：模型整体放大并锚定在底部中心，再用 clip-path 把下半身"裁到屏幕外"，
@@ -94,7 +90,6 @@ type InitWidgetConfig = {
   cdnPath?: string;
   cubism2Path?: string;
   cubism5Path?: string;
-  tools?: string[];
   modelId?: number;
   logLevel?: string;
   drag?: boolean;
@@ -106,222 +101,7 @@ const CSS_MARK = "rin-live2d-widget--css";
 const SCRIPT_MARK = "rin-live2d-widget--script";
 const OVERRIDE_STYLE_ID = "rin-live2d-widget--override";
 
-// 内置模型 id（furina 走远端 github.io；BCSZ1.1 走随博客打包的本域根）。
-// showcase 展示名用 i18n（theme.live2d.switch.<name>）。
-const BASE_MODELS = ["furina", "BCSZ1.1"] as const;
-type AvatarModel = (typeof BASE_MODELS)[number];
-
-// 一个自定义模型的配置（设置里"添加模型"生成）
-type CustomModel = {
-  // 唯一 id（用于默认模型、localStorage 持久化、本地存储键），如 "my-model-abc"
-  id: string;
-  // 展示名（角色名），如 "新角色"
-  name: string;
-  // 模型清单文件地址（.model3.json 或 index.json），渲染器直接由图它加载
-  url: string;
-};
-
-// 读设置里的自定义模型列表（widget.live2d.customModels，JSON 数组）。失效返回空数组。
-function readCustomModels(config: { get: (k: string) => unknown }): CustomModel[] {
-  const raw = config.get("widget.live2d.customModels");
-  if (typeof raw !== "string" || !raw) return [];
-  try {
-    const parsed = JSON.parse(raw);
-    const arr = Array.isArray(parsed) ? parsed : [];
-    if (!Array.isArray(arr)) return [];
-    return arr.filter(
-      (x): x is CustomModel =>
-        !!x &&
-        typeof x === "object" &&
-        typeof (x as CustomModel).id === "string" &&
-        typeof (x as CustomModel).name === "string" &&
-        typeof (x as CustomModel).url === "string",
-    );
-  } catch {
-    return [];
-  }
-}
-
-// 默认模型 id：优先读取设置 widget.live2d.defaultModel；不合法则回退 furina。
-function resolveDefaultName(
-  configured: unknown,
-  custom: CustomModel[] = [],
-): string {
-  const s = typeof configured === "string" ? configured.trim() : "";
-  if (BASE_MODELS.includes(s as AvatarModel)) return s as AvatarModel;
-  if (custom.some((c) => c.id === s)) return s;
-  return "furina";
-}
-
-// 各模型的核心大文件（用于预取，加速首次加载）。自定义模型无常量表，走 index.json 全量预缓存。
-const MODEL_FILES_BY_NAME: Record<string, string[]> = {
-  furina: ["furina.moc3", "furina.8192/texture_00.png"],
-  "BCSZ1.1": ["BCSZ1.1.moc3", "textures/texture_00.png"],
-};
-
-// 各模型进度分母（moc3 + 贴图 + 其它核心文件）。仅内置模型有精确值；
-// 自定义模型以 0 作为"总字节未知"，进度仅显示已下载量（见 installProgressTracker 处理）。
-const EXPECTED_TOTAL_BY_NAME: Record<string, number> = {
-  furina: 103740290,
-  "BCSZ1.1": 22639505,
-};
-
-// 芙宁娜聊天人设：注入给设置里绑定的 AI，让它以芙宁娜的口吻回复
-const FURINA_SYSTEM_PROMPT =
-  "你是芙宁娜，这个博客的 Live2D 看板娘。你性格活泼可爱、略带傲娇，说话简短俏皮，" +
-  "喜欢用语气词（～、哦、嘛、啦）。请用中文回复，每次回复不超过 80 字，不要使用 Markdown 格式。";
-
-// 复刻 Demo 的工具集。工具列本身会被覆盖样式隐藏（#waifu-tool{display:none}），
-// 交互交给 React 外壳；去掉 "quit"（与 React 的 Hide 逻辑冲突）。
-const TOOLS = ["hitokoto", "photo", "info"];
-
-// ---------------------------------------------------------------------------
-// 动作引擎：JS 驱动参数动画（不依赖模型 motion3 文件，避免改远程 CDN）
-// ---------------------------------------------------------------------------
-
-type ActionName = "pet" | "wave" | "shake" | "dance";
-
-type ParamCurve = { id: string; fn: (t: number) => number };
-
-type ActionDef = {
-  duration: number;
-  expression?: string;
-  params: ParamCurve[];
-};
-
-// 参数动画曲线：t 为归一化时间 [0,1]。
-// 参数范围参考 Live2D 标准：ParamAngle* ±30，ParamBodyAngle* ±30，
-// ParamEye*Open/Smile 0~1，ParamMouthForm -1~1，Param85 为手臂摆动角（-30~30），
-// Param92/87/94/3/93 为手臂位置开关（0~1）。
-const ACTIONS: Record<ActionName, ActionDef> = {
-  pet: {
-    duration: 2.2,
-    expression: "blush",
-    params: [
-      // 低头蹭蹭 + 轻微左右摆
-      { id: "ParamAngleX", fn: (t) => Math.sin(t * Math.PI * 2) * 6 },
-      { id: "ParamAngleZ", fn: (t) => Math.sin(t * Math.PI * 2) * 4 },
-      { id: "ParamBodyAngleX", fn: (t) => Math.sin(t * Math.PI * 2) * 3 },
-      // 开心眯眼
-      { id: "ParamEyeROpen", fn: () => -0.25 },
-      { id: "ParamEyeLOpen", fn: () => -0.25 },
-      { id: "ParamEyeRSmile", fn: () => 0.8 },
-      { id: "ParamEyeLSmile", fn: () => 0.8 },
-      // 微笑
-      { id: "ParamMouthForm", fn: () => 0.6 },
-    ],
-  },
-  wave: {
-    duration: 2.6,
-    expression: "cat_mouth",
-    params: [
-      // 手臂上下挥动（Param85 大幅摆臂）
-      { id: "Param85", fn: (t) => Math.sin(t * Math.PI * 4) * 18 },
-      { id: "Param92", fn: (t) => (t < 0.15 ? 0 : 1) },
-      // 头轻微侧倾
-      { id: "ParamAngleZ", fn: (t) => Math.sin(t * Math.PI * 2) * 5 },
-      { id: "ParamAngleX", fn: () => 4 },
-    ],
-  },
-  shake: {
-    duration: 1.6,
-    params: [
-      // 左右摇头，幅度逐渐衰减
-      { id: "ParamAngleZ", fn: (t) => Math.sin(t * Math.PI * 6) * 11 * (1 - t) },
-      { id: "ParamAngleX", fn: (t) => Math.sin(t * Math.PI * 3) * 3 * (1 - t) },
-    ],
-  },
-  dance: {
-    duration: 4,
-    expression: "stars",
-    params: [
-      // 身体左右摇摆 + 头点动 + 手臂舞动
-      { id: "ParamBodyAngleX", fn: (t) => Math.sin(t * Math.PI * 2) * 8 },
-      { id: "ParamBodyAngleZ", fn: (t) => Math.sin(t * Math.PI * 2) * 5 },
-      { id: "ParamAngleY", fn: (t) => Math.sin(t * Math.PI * 4) * 6 },
-      { id: "ParamAngleX", fn: (t) => Math.sin(t * Math.PI * 2) * 5 },
-      { id: "Param85", fn: (t) => Math.sin(t * Math.PI * 2) * 15 },
-      { id: "Param92", fn: (t) => (Math.sin(t * Math.PI * 2) > 0 ? 1 : 0) },
-      { id: "ParamBreath", fn: (t) => Math.sin(t * Math.PI * 2) * 0.4 },
-    ],
-  },
-};
-
-// 空闲时轮播的安全表情（对应 CDN 模型配置里的 Expression Name）
-const IDLE_EXPRESSIONS = [
-  "blush",
-  "cat_mouth",
-  "stars",
-  "sweat",
-  "cheek_rest",
-  "smart",
-  "cover_mouth",
-  "antenna_fan",
-];
-
-// 当前正在播放的动作（模块级单例，供 update 钩子读取）
-const actionStateRef: {
-  current: { name: ActionName; startTime: number; def: ActionDef } | null;
-} = { current: null };
-
-function clamp(v: number, min: number, max: number): number {
-  return Math.min(Math.max(v, min), max);
-}
-
-function playAction(name: ActionName) {
-  const model = getLive2dModel();
-  if (!model) return;
-  const def = ACTIONS[name];
-  if (!def) return;
-  actionStateRef.current = { name, startTime: performance.now(), def };
-  if (def.expression) {
-    try {
-      model.setExpression?.(def.expression);
-    } catch {
-      // ignore
-    }
-  }
-}
-
-// 每帧把动作参数写入模型（在渲染器 update 之后执行，覆盖该帧的最终参数）
-function applyActionFrame(model: Live2dModelLike) {
-  const action = actionStateRef.current;
-  if (!action) return;
-  const cubism = model.getModel?.();
-  if (!cubism || typeof cubism.setParameterValueById !== "function") return;
-  const elapsed = (performance.now() - action.startTime) / 1000;
-  const t = Math.min(1, elapsed / action.def.duration);
-  for (const curve of action.def.params) {
-    try {
-      cubism.setParameterValueById(curve.id, curve.fn(t));
-    } catch {
-      // ignore
-    }
-  }
-  if (t >= 1) {
-    actionStateRef.current = null;
-    if (action.def.expression) {
-      try {
-        model._expressionManager?.stopAllMotions?.();
-      } catch {
-        // ignore
-      }
-    }
-  }
-}
-
-// 在模型实例上包一层 update：渲染器每帧调用 s.update()，我们在其后注入动作参数
-function patchModelForActions(model: Live2dModelLike) {
-  if ((model as { __rinActionPatched?: boolean }).__rinActionPatched) return;
-  (model as { __rinActionPatched?: boolean }).__rinActionPatched = true;
-  const origUpdate = (model as { update?: unknown }).update;
-  if (typeof origUpdate !== "function") return;
-  (model as { update: unknown }).update = function (this: unknown, ...args: unknown[]) {
-    const result = (origUpdate as (...a: unknown[]) => unknown).apply(this, args);
-    applyActionFrame(this as Live2dModelLike);
-    return result;
-  };
-}
+type ProgressState = { loaded: number; total: number };
 
 // ---------------------------------------------------------------------------
 // 基础工具函数
@@ -400,6 +180,40 @@ function restoreGlobalImage() {
 }
 
 /**
+ * 给渲染器做渲染分辨率封顶：遍历 AppDelegate 原型上源码含 devicePixelRatio 的方法，
+ * 在其执行期间把 window.devicePixelRatio 临时替换为 min(真实值, MAX_RENDER_DPR)。
+ * 画布尺寸（resizeCanvas）与触摸/点击坐标（onTouches 系列与 getPointAsView）用同一个封顶值，
+ * 视角矩阵、点击命中全部保持一致；调用结束立即还原，不影响页面其它部分。
+ */
+function capRendererDpr(proto: Record<string, unknown>): void {
+  // devicePixelRatio 是 Window.prototype 上的访问器；在 window 实例上定义同名
+  // own property 即可临时遮蔽，finally 里 delete 还原到原型 getter。
+  const patch = (orig: (...args: unknown[]) => unknown) => {
+    return function (this: unknown, ...args: unknown[]) {
+      const realDpr = window.devicePixelRatio;
+      if (realDpr <= MAX_RENDER_DPR) {
+        return orig.apply(this, args);
+      }
+      try {
+        Object.defineProperty(window, "devicePixelRatio", {
+          configurable: true,
+          get: () => MAX_RENDER_DPR,
+        });
+        return orig.apply(this, args);
+      } finally {
+        delete (window as unknown as { devicePixelRatio?: number }).devicePixelRatio;
+      }
+    };
+  };
+  for (const key of Object.getOwnPropertyNames(proto)) {
+    const value = proto[key];
+    if (typeof value !== "function") continue;
+    if (!value.toString().includes("devicePixelRatio")) continue;
+    proto[key] = patch(value as (...args: unknown[]) => unknown);
+  }
+}
+
+/**
  * 预加载渲染器 chunk 并打补丁：把 AppDelegate 实例暴露到 window，
  * 以便直接调用 model.setDragging 驱动物理（衣服/头发飘动）。
  *
@@ -410,14 +224,16 @@ function restoreGlobalImage() {
 async function patchLive2dApp(): Promise<boolean> {
   try {
     const mod = (await import(/* @vite-ignore */ CHUNK_URL)) as {
-      AppDelegate?: { prototype: { run?: (...args: unknown[]) => unknown } };
+      AppDelegate?: { prototype: Record<string, unknown> & { run?: (...args: unknown[]) => unknown } };
     };
-    const AppDelegate = mod.AppDelegate;
-    if (!AppDelegate) {
+    const proto = mod.AppDelegate?.prototype;
+    if (!proto) {
       return false;
     }
-    const origRun = AppDelegate.prototype.run;
-    AppDelegate.prototype.run = function (this: unknown, ...args: unknown[]) {
+    // 渲染分辨率封顶（HiDPI 性能），必须先于其它补丁，覆盖全部含 devicePixelRatio 的方法
+    capRendererDpr(proto);
+    const origRun = proto.run as (...args: unknown[]) => unknown;
+    proto.run = function (this: unknown, ...args: unknown[]) {
       (window as unknown as { __rinLive2dApp?: unknown }).__rinLive2dApp = this;
       // 兜底：监听 WebGL context lost，阻止默认行为（默认会导致上下文永久丢失），
       // 让浏览器有机会自动恢复。正常场景下隐藏用的是 visibility 方案不会触发，
@@ -448,33 +264,6 @@ async function patchLive2dApp(): Promise<boolean> {
     return false;
   }
 }
-
-// 从捕获的 AppDelegate 实例中取出 Live2D 模型（CubismUserModel），用于喂拖拽/物理/动作
-type Live2dModelLike = {
-  setDragging?: (x: number, y: number) => void;
-  startRandomMotion?: (group: string, priority: number) => void;
-  setRandomExpression?: () => void;
-  setExpression?: (name: string) => void;
-  getModel?: () => {
-    setParameterValueById?: (id: string, value: number) => void;
-  };
-  _expressionManager?: { stopAllMotions?: () => void };
-  _motionManager?: { stopAllMotions?: () => void };
-  _state?: number;
-  update?: unknown;
-};
-function getLive2dModel(): Live2dModelLike | undefined {
-  const app = (window as unknown as { __rinLive2dApp?: unknown }).__rinLive2dApp;
-  const sub = (app as { _subdelegates?: { at?: (i: number) => unknown } } | undefined)?._subdelegates?.at?.(
-    0,
-  );
-  const manager = (sub as { getLive2DManager?: () => unknown } | undefined)?.getLive2DManager?.();
-  return (manager as { _models?: { at?: (i: number) => Live2dModelLike } } | undefined)?._models?.at?.(
-    0,
-  );
-}
-
-type ProgressState = { loaded: number; total: number };
 
 /**
  * 全局 fetch 包装：统计 /model/ 请求的下载字节数（流式计数，不缓冲整个文件）。
@@ -583,129 +372,6 @@ function installProgressTracker(
   };
 }
 
-// 探测可用的模型源：按目标模型组装候选根（本地/打包根优先），
-// 依次请求该根下的 model_list.json，返回第一个能正常返回模型清单的根地址。
-async function pickCdnRoot(name: string): Promise<string> {
-  const localRoot = bundledRootFor(name);
-  const candidates = [
-    ...(localRoot ? [localRoot] : []),
-    ...REMOTE_CDN_CANDIDATES,
-  ];
-  for (const root of candidates) {
-    try {
-      const res = await fetch(`${root}model_list.json`, { mode: "cors" });
-      if (res.ok) {
-        // 根可达即可（切换按 name 直接拼 index.json，不依赖 model_list 的下标/content）
-        return root;
-      }
-    } catch {
-      // 尝试下一个候选
-    }
-  }
-  return candidates[0];
-}
-
-// 探测到模型根地址后立即并行预取当前模型的核心文件（moc3/贴图），
-// 不等插件脚本加载；插件稍后请求同一 URL 时命中浏览器/SW 缓存。
-function prefetchModel(cdnRoot: string, name: string) {
-  const base = `${cdnRoot}model/${name}/`;
-  const files = MODEL_FILES_BY_NAME[name] ?? [];
-  for (const file of files) {
-    fetch(`${base}${file}`, { mode: "cors" }).catch(() => {
-      // 预取失败不阻塞主流程
-    });
-  }
-}
-
-// ---- 全量预缓存：让两个模型首次进入就一次性下载并写入本地缓存，之后切换不再重下 ----
-
-// 从模型的 index.json（FileReferences）递归收集全部资源文件的相对路径。
-function collectModelFiles(manifest: unknown, out: Set<string>): void {
-  if (Array.isArray(manifest)) {
-    for (const item of manifest) collectModelFiles(item, out);
-    return;
-  }
-  if (manifest && typeof manifest === "object") {
-    for (const value of Object.values(manifest as Record<string, unknown>)) {
-      collectModelFiles(value, out);
-    }
-    return;
-  }
-  if (typeof manifest === "string" && /\.(moc3|model3\.json|png|jpe?g|webp|motion3\.json|physics3\.json|cdi3\.json|exp3\.json|wav|mp3)$/i.test(manifest)) {
-    out.add(manifest);
-  }
-}
-
-// 通过 Service Worker 的 CACHE_LIVE2D 消息，把一批 URL 下载并写入本地 Cache Storage。
-// 若 SW 尚未控制页面，则回退为普通 fetch（SW 的 fetch 拦截兜底也会把模型写入缓存）。
-function sendCacheMessage(urls: string[]): void {
-  try {
-    const controller = navigator.serviceWorker?.controller;
-    if (controller) {
-      controller.postMessage({ type: "CACHE_LIVE2D", urls });
-    }
-  } catch {
-    // SW 不可用则不强制
-  }
-}
-
-// 指示 SW 立即激活（register 后的新 SW 需要 controller 接管才有 fetch 拦截）。
-// 但首次访问时 SW 尚未控制页面，此时用普通 fetch 补一次，让模型请求落进缓存。
-function ensureSwControl(): Promise<void> {
-  return new Promise((resolve) => {
-    const reg = navigator.serviceWorker?.getRegistration();
-    if (!reg) return resolve();
-    reg.then((r) => {
-      if (!r) return resolve();
-      if (r.active && !navigator.serviceWorker?.controller) {
-        // 页面已被当前 SW 控制（claim 已执行）则无需再取控制权
-        resolve();
-      } else {
-        resolve();
-      }
-    }).catch(() => resolve());
-  });
-}
-
-// 对给定模型整目录预缓存：拉取 index.json → 收集全部文件 → 写入本地缓存。
-// 不依赖固定文件表，能覆盖贴图/动作/物理/口型等所有资源，真正做到"下载一次不再重下"。
-// 一律走 nativeFetch：旁路进度统计与 Layout 注入，避免干扰当前模型的下载进度。
-async function precacheModel(cdnRoot: string, name: string): Promise<void> {
-  try {
-    const index = await nativeFetch(`${cdnRoot}model/${name}/index.json`, { mode: "cors" });
-    if (!index.ok) return;
-    const manifest = (await index.json()) as { FileReferences?: unknown };
-    const files = new Set<string>();
-    collectModelFiles(manifest, files);
-    if (files.size === 0) return;
-    const base = `${cdnRoot}model/${name}/`;
-    const urls = [...files].map((f) => `${base}${f}`);
-    if (navigator.serviceWorker?.controller) {
-      sendCacheMessage(urls);
-    } else {
-      // SW 未控制：普通 fetch 预取（生产环境 SW 的 fetch 拦截会把这些响应回写缓存）
-      await Promise.allSettled(urls.map((u) => nativeFetch(u, { mode: "cors" })));
-    }
-  } catch {
-    // 预缓存失败不影响主流程
-  }
-}
-
-// 首次进入后，后台并行预缓存两个模型（furina 远端 + BCSZ1.1 本地）。
-// 每个模型用各自最优根（BCSZ→打包根，furina→远端 CDN）。
-function precacheAllModels(): void {
-  const jobs = (["furina", "BCSZ1.1"] as const).map(async (name) => {
-    try {
-      const root = await pickCdnRoot(name);
-      await ensureSwControl();
-      await precacheModel(root, name);
-    } catch {
-      // ignore
-    }
-  });
-  void Promise.allSettled(jobs);
-}
-
 // 读取画布上某点的像素 alpha（用于透明区域点击穿透）。
 // 渲染器创建 WebGL 时开了 preserveDrawingBuffer:true，可直接读像素。
 function readPixelAlpha(clientX: number, clientY: number): number {
@@ -757,7 +423,7 @@ function passClickThrough(clientX: number, clientY: number, widget: HTMLElement 
 
 // 拖动位置持久化 key
 const POS_KEY = "rin.live2d.pos";
-// 记忆的拖动偏移 {leftPercent, topPx}：水平按百分比锚定，垂直按像素
+// 记忆的拖动偏移 {left, top}：均为像素
 type SavedPos = { left: number; top: number } | null;
 
 function loadSavedPos(): SavedPos {
@@ -806,10 +472,13 @@ export function Live2DWidget() {
   // 默认模型引用：供 useEffect 初始化读取。缺省 furina；可被设置项 widget.live2d.defaultModel 覆盖
   // （"furina" / "BCSZ1.1" / 自定义模型 id）。仅在挂载时读取一次，后续切换不受影响。
   const defaultModelRef = useRef<string>(
-    resolveDefaultName(config.get("widget.live2d.defaultModel"), readCustomModels(config)),
+    resolveDefaultName(
+      config.get("widget.live2d.defaultModel"),
+      parseCustomModels(config.get("widget.live2d.customModels")),
+    ),
   );
   // 自定义模型列表的 ref 镜像（渲染期间稳定引用；设置修改后经关键重载生效）
-  const customModelsRef = useRef<CustomModel[]>(readCustomModels(config));
+  const customModelsRef = useRef<CustomModel[]>(parseCustomModels(config.get("widget.live2d.customModels")));
   // 上一次"模型配置签名"，用于检测默认/自定义模型设置变化并触发重载
   const prevModelsSigRef = useRef<string | undefined>(undefined);
   // 回退用的模型版本号（仅当渲染器实例不可用时才重挂载组件）：
@@ -853,24 +522,27 @@ export function Live2DWidget() {
   const [pos, setPos] = useState<{ left: number; top: number } | null>(() => loadSavedPos());
 
   const position = String(config.get("widget.live2d.position") ?? "right");
-  // modelUrl 保留读取，兼容既有配置；插件模式下改为 cdnPath + modelId，
-  // 因此该 URL 不再被直接使用，为空也不影响渲染
-  const modelUrl = String(config.get("widget.live2d.model") ?? "");
-  // 显式引用一次，示意这是"按需保留"；插件模式实际用 cdnPath+modelId，此值仅供扩展
-  void modelUrl;
   const rawScale = Number(config.get("widget.live2d.scale") ?? 1);
   // 防止配置被误调成超大值导致模型挡住整个页面：限制在安全范围内
   const scaleValue = Number.isFinite(rawScale) ? Math.min(Math.max(rawScale, 0.1), 2) : 1;
   // 趴在屏幕边缘模式：仅显示模型上半身，双手像趴在桌面一样搭在屏幕底部边缘
-  const edgeRest =
-    config.get<boolean>("widget.live2d.edge") === true ||
-    config.get<string>("widget.live2d.edge")?.toString().trim().toLowerCase() === "true";
+  const edgeRest = String(config.get("widget.live2d.edge") ?? "").trim().toLowerCase() === "true";
   // 颈部/位置微调：widget.live2d.layout（JSON），注入模型配置的 Layout 段
   const layoutConfig = parseLayoutConfig(String(config.get("widget.live2d.layout") ?? ""));
 
   // 模型容器尺寸：与插件 #waifu-canvas 的 300x300 一致，随配置缩放
   const boxW = Math.round(300 * scaleValue);
   const boxH = Math.round(300 * scaleValue);
+
+  // 当前模型的展示名（内置模型用 i18n，自定义模型用其配置的角色名），
+  // 供聊天面板标题/提示文案使用，保证人设与显示的模型一致。
+  const activeDisplayName = (() => {
+    const custom = customModelsRef.current.find((c) => c.id === activeModel);
+    if (custom) return custom.name;
+    const key = `theme.live2d.switch.${activeModel}`;
+    const translated = t(key);
+    return translated === key ? activeModel : translated;
+  })();
 
   /**
    * 在插件的 #waifu-tips 气泡里显示一条消息（复刻插件内部 i() 的行为）。
@@ -881,7 +553,8 @@ export function Live2DWidget() {
     if (!el) {
       return;
     }
-    el.innerHTML = text;
+    // i18n 文案均为纯文本，用 textContent 注入，避免 HTML 注入隐患
+    el.textContent = text;
     el.classList.add("waifu-tips-active");
     if (tipsTimerRef.current) {
       window.clearTimeout(tipsTimerRef.current);
@@ -892,17 +565,10 @@ export function Live2DWidget() {
     }, duration);
   }
 
-  // 全部可选模型的 id（内置 + 自定义，用于换模型循环）。顺序即循环顺序。
-  function allModelIds() {
-    const custom = customModelsRef.current;
-    const ids: string[] = [...BASE_MODELS, ...custom.map((c) => c.id)];
-    return ids;
-  }
-
   // 在当前模型之间循环切换：点一下换模型按钮即在所有模型间循环（内置 furina/BCSZ1.1 +
   // 自定义模型），不做二级菜单。
   function switchToNextModel() {
-    const ids = allModelIds();
+    const ids = allModelIds(customModelsRef.current);
     const idx = ids.indexOf(activeModel);
     const next = ids[(idx + 1) % ids.length] ?? ids[0];
     switchModel(next);
@@ -918,25 +584,18 @@ export function Live2DWidget() {
    * 不会产生第二个实例，也不依赖 model_list.json 的 models 下标（即使生产 CDN 的
    * model_list 尚未更新出新模型，只要 model/<name>/index.json 可访问就能切换）。
    *
-   * 兜底方案：仅当渲染器实例尚未就绪时，才走"更新 modelId + 重挂载组件"的老路径。
+   * 兜底方案：仅当渲染器实例尚未就绪时，才走"重挂载组件重新 initWidget"的老路径
+   * （init 流程会按命中根的 model_list 重新解析 modelId，口径唯一）。
    */
   function switchModel(name: string) {
-    // 内置模型存在 AVATAR_MODELS，自定义模型在其配置表里
-    const isBase = (BASE_MODELS as readonly string[]).includes(name);
+    // 内置模型存在 BUILTIN_MODELS，自定义模型在其配置表里
+    const isBase = (BUILTIN_MODELS as readonly string[]).includes(name);
     const custom = customModelsRef.current.find((c) => c.id === name);
     if (!isBase && !custom) return;
-    // fitted for localStorage.modelId：仅内置模型有意义；自定义模型存 -1（插件 initCheck 兜底用不到）
-    const modelId = isBase ? (BASE_MODELS as readonly string[]).indexOf(name) : -1;
-    try {
-      localStorage.setItem("modelId", String(modelId));
-    } catch {
-      // ignore
-    }
     setActiveModel(name);
     showTips(t("theme.live2d.switch.switching"), 3000);
 
-    const app = (window as unknown as { __rinLive2dApp?: unknown })
-      .__rinLive2dApp;
+    const app = (window as unknown as { __rinLive2dApp?: unknown }).__rinLive2dApp;
     const canChange = app && typeof (app as { changeModel?: unknown }).changeModel === "function";
     // 渲染器就绪 → 复用实例直接换模型。内置模型按目标选根（BCSZ→打包根、furina→远端）；
     // 自定义模型直接用其配置的 .model3.json url 加载。
@@ -998,7 +657,7 @@ export function Live2DWidget() {
     setLocation("/");
   }
 
-  /** 发送聊天消息：走设置里绑定的 AI（ai_summary 配置），注入芙宁娜人设 */
+  /** 发送聊天消息：走设置里绑定的 AI（ai_summary 配置），注入当前模型的人设 */
   async function handleChatSend() {
     const content = chatInput.trim();
     if (!content || chatLoading) return;
@@ -1012,9 +671,10 @@ export function Live2DWidget() {
     setChatLoading(true);
     setChatError(null);
 
-    // 服务端有 30 条上限：system + 最近 20 条历史 + 新消息
+    // 服务端有 30 条上限：system + 最近 20 条历史 + 新消息。
+    // 人设跟随当前模型（内置模型各有人设，自定义模型带角色名生成）。
     const payload: AIChatMessage[] = [
-      { role: "system", content: FURINA_SYSTEM_PROMPT },
+      { role: "system", content: chatPromptFor(activeModel, customModelsRef.current) },
       ...nextDisplay,
     ];
     const { data, error } = await client.chat.send(payload);
@@ -1069,25 +729,14 @@ export function Live2DWidget() {
     let disposed = false;
 
     // ---- 首次挂载，清掉可能残留的插件会话状态，保证每次挂载都从干净状态开始 ----
+    // 读取本次挂载要加载的默认模型（缺省 furina）。首屏由 pickCdnRoot(activeModel)
+    // 自动选根：furina 走远端 CDN，BCSZ1.1 走本地打包根。下方 loader 前还会按
+    // "命中根的实际 model_list"解析真实下标并写入 localStorage.modelId（唯一写入点）。
     try {
       localStorage.removeItem("waifu-disabled");
       localStorage.removeItem("waifu-display");
       sessionStorage.removeItem("waifu-message-priority");
-      // 读取本次挂载要加载的默认模型（缺省 furina）。首屏由 pickCdnRoot(activeModel)
-      // 自动选根：furina 走远端 github.io（其 model_list=["furina"]，下标 0），BCSZ1.1 走
-      // 本地打包根。下方 loader 前还会按"命中根的实际 model_list"再解析一次真实下标，
-      // 因此这里 modelId 的值仅供插件 initCheck 初始参考，真正下标以后续解析为准。
-      const initDefault = defaultModelRef.current;
-      const initDefaultIsBase = (BASE_MODELS as readonly string[]).includes(initDefault);
-      try {
-        localStorage.setItem(
-          "modelId",
-          String(initDefaultIsBase ? (BASE_MODELS as readonly string[]).indexOf(initDefault) : -1),
-        );
-      } catch {
-        // ignore
-      }
-      setActiveModel(initDefault);
+      setActiveModel(defaultModelRef.current);
     } catch {
       // ignore
     }
@@ -1163,7 +812,7 @@ export function Live2DWidget() {
 
     // ---- 下载进度追踪（必须在 initWidget 之前安装；流式计数 + Layout 注入）----
     // 进度分母：内置模型用精确总字节数；自定义模型未知 → 传 0，UI 只显示已下载量。
-    const isBaseActive = (BASE_MODELS as readonly string[]).includes(activeModel);
+    const isBaseActive = (BUILTIN_MODELS as readonly string[]).includes(activeModel);
     const progressTotal = isBaseActive ? EXPECTED_TOTAL_BY_NAME[activeModel] : 0;
     const restoreFetch = installProgressTracker(
       (p) => {
@@ -1243,7 +892,7 @@ export function Live2DWidget() {
       const model = getLive2dModel();
       if (!model) return;
       // 正在播放动作时不打断
-      if (actionStateRef.current) return;
+      if (isActionPlaying()) return;
       const roll = Math.random();
       if (roll < 0.22) {
         // 偶尔随机做一个动作
@@ -1255,11 +904,7 @@ export function Live2DWidget() {
         try {
           model.setExpression?.(name);
           window.setTimeout(() => {
-            try {
-              model._expressionManager?.stopAllMotions?.();
-            } catch {
-              // ignore
-            }
+            if (!disposed) stopAllMotions(model);
           }, 3000);
         } catch {
           // ignore
@@ -1281,7 +926,7 @@ export function Live2DWidget() {
         //    不等插件脚本加载，让大体积 moc3 尽早开始下载
         prefetchModel(cdnRoot, activeModel);
 
-        // 2.5) 后台全量预缓存两个模型（furina + BCSZ1.1）：把每个模型的全部资源
+        // 2.5) 后台全量预缓存全部内置模型（furina + BCSZ1.1）：把每个模型的全部资源
         //      （moc3/贴图/动作/物理/口型）写入本地 Cache Storage。首次进入即下载一次，
         //      之后切换模型都命中本地缓存、不再重复下载。（不阻塞主流程）
         precacheAllModels();
@@ -1313,11 +958,11 @@ export function Live2DWidget() {
         const customTarget = customModelsRef.current.find((c) => c.id === activeModel);
         const isCustomDefault = !!customTarget;
 
-        // 6) 复刻 Demo 的调用方式（cdnPath + modelId；毛豆 furina 为 Cubism5 / 使用 cubism5Path）
+        // 6) 复刻 Demo 的调用方式（cdnPath + modelId；内置模型均为 Cubism5）
         // modelId：插件加载的模型 = 当前 cdnPath 的 model_list.models[modelId]。
         // 注意：不同根的 models 列表不同且下标不互通——
         //   - 打包根（生产 BCSZ1.1）：models=["BCSZ1.1"]，BCSZ1.1 恒在下标 0；
-        //   - 远端 github.io 根：models=["furina"]（实测只含 furina，不含 BCSZ），furina=0。
+        //   - 远端根：models=["furina"]（实测只含 furina，不含 BCSZ），furina=0。
         // 因此不能想当然写死 0 或全局下标，必须按"命中根的实际 model_list"解析目标模型的
         // 真实下标。若命中根里根本没有 activeModel（如拿 BCSZ1.1 却落到 furina-only 的远端根），
         // 说明打包资源没随站点发布，此时应明确报错而非静默改加载别的模型
@@ -1326,17 +971,22 @@ export function Live2DWidget() {
         const loadFor = isCustomDefault ? "furina" : activeModel;
         const modelListRes = await fetch(`${cdnRoot}model_list.json`, { mode: "cors" });
         if (!modelListRes.ok) {
-          throw new Error(`模型清单不可用: ${cdnRoot}model_list.json`);
+          throw new Error(
+            t("theme.live2d.error.manifest_unavailable", { url: `${cdnRoot}model_list.json` }),
+          );
         }
         const modelList = (await modelListRes.json()) as { models?: unknown[] };
         const resolvedId = modelList.models?.indexOf(loadFor) ?? -1;
         if (resolvedId < 0) {
           throw new Error(
-            `模型 ${loadFor} 未在当前源(${cdnRoot})的 model_list 中。` +
-              `请确认该模型已随站点打包发布（打包根应为 ${location.origin}/live2d-bundled/）`,
+            t("theme.live2d.error.model_missing", {
+              name: loadFor,
+              root: bundledRootFor(loadFor) || cdnRoot,
+            }),
           );
         }
-        // 让插件 initCheck 读到的 modelId 与这里一致（插件会优先用 localStorage 值覆盖 config）
+        // 让插件 initCheck 读到的 modelId 与这里一致（插件会优先用 localStorage 值覆盖 config）。
+        // 这是 modelId 的唯一写入点：switchModel 走 changeModel(url)，不再额外写。
         try {
           localStorage.setItem("modelId", String(resolvedId));
         } catch {
@@ -1347,7 +997,6 @@ export function Live2DWidget() {
           cdnPath: cdnRoot,
           cubism2Path: CUBISM2_PATH,
           cubism5Path: CUBISM5_PATH,
-          tools: TOOLS,
           modelId: resolvedId,
           logLevel: "info",
           // 插件自带拖拽关闭，交给 React 文件夹拖拽统一处理
@@ -1768,11 +1417,13 @@ export function Live2DWidget() {
                   ) : null}
                 </div>
               ) : null}
-              {/* 聊天面板：浮在模型上方 */}
+              {/* 聊天面板：浮在模型上方，标题/提示跟随当前模型 */}
               {chatOpen ? (
                 <div className="absolute bottom-full right-0 mb-2 flex w-72 flex-col overflow-hidden rounded-2xl border border-black/10 bg-w shadow-xl dark:border-white/10">
                   <div className="flex items-center justify-between border-b border-black/10 px-3 py-2 dark:border-white/10">
-                    <span className="text-sm font-semibold">{t("theme.live2d.chat.title")}</span>
+                    <span className="text-sm font-semibold">
+                      {t("theme.live2d.chat.title", { name: activeDisplayName })}
+                    </span>
                     <button
                       type="button"
                       onClick={() => setChatOpen(false)}
@@ -1784,7 +1435,9 @@ export function Live2DWidget() {
                   </div>
                   <div ref={chatScrollRef} className="flex h-56 flex-col gap-2 overflow-y-auto p-3">
                     {chatMessages.length === 0 ? (
-                      <p className="t-muted text-xs">{t("theme.live2d.chat.hint")}</p>
+                      <p className="t-muted text-xs">
+                        {t("theme.live2d.chat.hint", { name: activeDisplayName })}
+                      </p>
                     ) : (
                       chatMessages.map((m, i) => (
                         <div
@@ -1815,7 +1468,7 @@ export function Live2DWidget() {
                           handleChatSend();
                         }
                       }}
-                      placeholder={t("theme.live2d.chat.placeholder")}
+                      placeholder={t("theme.live2d.chat.placeholder", { name: activeDisplayName })}
                       className="min-w-0 flex-1 rounded-full border border-black/10 bg-transparent px-3 py-1.5 text-xs outline-none transition focus:border-theme dark:border-white/10"
                     />
                     <button

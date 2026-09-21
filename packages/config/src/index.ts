@@ -20,7 +20,6 @@ export const CLIENT_CONFIG_DEFAULTS = new Map(
     "site.page_size": 5,
     "widget.live2d.enabled": false,
     "widget.live2d.position": "right",
-    "widget.live2d.model": "https://raw-githubusercontent-com-gh.zjkl0330.dpdns.org/827802685/Live2D/refs/heads/master/model/furina/furina.model3.json",
     "widget.live2d.scale": 1,
     "widget.live2d.layout": "",
     "widget.live2d.edge": false,

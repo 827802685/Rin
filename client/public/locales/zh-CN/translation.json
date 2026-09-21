@@ -854,14 +854,9 @@
         "title": "看板娘靠左",
         "desc": "将看板娘放在左侧边缘而非右侧"
       },
-      "model": {
-        "title": "模型文件",
-        "desc": ".model3.json 模型文件的远程地址。芙宁娜模型约 99MB（moc3 95MB + 4K 贴图 8MB），单文件超过站点的静态资源上限，无法放入前端 assets，需用远程引用（GitHub 加速代理或 Pages）。仓库 models/ 下的中文命名模型未被部署，填 /models/... 会 404 导致不显示。",
-        "label": "模型路径"
-      },
       "scale": {
         "title": "看板娘缩放",
-        "desc": "Live2D 模型的显示缩放比例",
+        "desc": "Live2D 模型的显示缩放比例。大模型（如芙宁娜）较吃性能，卡顿时可换用本地轻量模型或调小缩放",
         "label": "缩放"
       },
       "layout": {
@@ -869,14 +864,9 @@
         "desc": "注入模型 Layout 的 JSON，用于微调模型在画布中的位置/缩放，可解决颈部错位等问题。示例：{\"Center Y\": 0.05}",
         "label": "Layout JSON"
       },
-      "defaultModel": {
-        "title": "默认模型",
-        "desc": "页面加载时优先展示的看板娘模型"
-      },
       "custom": {
-        "title": "自定义模型",
-        "desc": "添加你自己的 Live2D 模型。填入角色名与模型清单地址（.model3.json 或 index.json），即可在看板娘上切换。",
-        "empty": "还没有自定义模型",
+        "title": "模型管理",
+        "desc": "内置与自定义模型统一管理：点「设为默认」切换默认模型，也可以添加自己的模型（模型清单地址为 .model3.json 或 index.json）。",
         "add": "添加模型",
         "remove": "删除",
         "defaultFlag": "默认",
@@ -884,7 +874,9 @@
         "urlPlaceholder": "https://…/index.json 或 .model3.json",
         "need_both": "请同时填写角色名与模型地址",
         "invalid_url": "模型地址需要以 http/https 开头，或以 / 开头的站内路径",
-        "dup_name": "已存在同名的自定义模型"
+        "dup_name": "已存在同名的自定义模型",
+        "builtin": "内置",
+        "set_default": "设为默认"
       },
       "show": "显示看板娘",
       "hide": "隐藏看板娘",
@@ -903,15 +895,13 @@
       },
       "chat": {
         "button": "聊天",
-        "title": "和芙宁娜聊天",
-        "hint": "我是芙宁娜～有什么想聊的吗？",
-        "placeholder": "和芙宁娜说点什么…",
+        "title": "和{{name}}聊天",
+        "hint": "我是{{name}}～有什么想聊的吗？",
+        "placeholder": "和{{name}}说点什么…",
         "send": "发送",
         "error": "聊天失败，请稍后重试"
       },
       "talk": {
-        "idle1": "你好呀，我是芙宁娜～",
-        "idle2": "今天也要一起加油哦！",
         "poke1": "呀！别突然戳我啦～",
         "poke2": "痒痒的……你在做什么呀？",
         "poke3": "唔，再摸的话要收费了哦～"
@@ -923,13 +913,17 @@
         "BCSZ1.1": "八重神子"
       },
       "error": {
-        "webgl": "当前浏览器不支持 WebGL，无法渲染 Live2D 模型",
-        "load_failed": "Live2D 模型加载失败，请检查模型地址或稍后重试"
+        "manifest_unavailable": "模型清单不可用: {{url}}",
+        "model_missing": "模型 {{name}} 未在当前源({{root}})的 model_list 中，请确认该模型已随站点打包发布"
       },
       "loading": {
         "connecting": "正在连接模型…",
         "downloading": "正在下载模型",
         "stalled": "模型下载停滞，请检查网络后刷新重试"
+      },
+      "edge": {
+        "title": "趴在屏幕边缘",
+        "desc": "模型放大并趴在屏幕底部边缘，只露出上半身（桌面模式）"
       }
     },
     "cursor": {
@@ -973,7 +967,8 @@
         "title": "播放列表",
         "desc": "包含 name、artist、url 和 cover 的曲目 JSON 数组",
         "example": "插入示例",
-        "clear": "清空"
+        "clear": "清空",
+        "invalid_json": "JSON 格式不正确，请检查后再保存"
       },
       "play": "播放",
       "pause": "暂停",
