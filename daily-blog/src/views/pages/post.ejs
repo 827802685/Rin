@@ -1,0 +1,14 @@
+<article class="post">
+  <h1 class="post__title"><%= post.title %></h1>
+  <p class="post__meta">
+    <span><%= post.publishedAt %></span>
+    <span>·</span>
+    <span><%= post.author %></span>
+    <span>·</span>
+    <span>约 <%= post.readingMinutes %> 分钟</span>
+  </p>
+  <div class="post__content markdown-body">
+    <%- post.contentHtml %>
+  </div>
+  <p class="post__back"><a href="/">← 返回文章列表</a></p>
+</article>

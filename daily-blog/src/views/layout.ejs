@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title><%= title %> · <%= site.title %></title>
+    <meta name="description" content="<%= typeof description !== 'undefined' && description ? description : site.description %>" />
+    <link rel="stylesheet" href="/assets/styles.css" />
+  </head>
+  <body>
+    <%- include("partials/header.ejs") %>
+    <main class="container">
+      <%- body %>
+    </main>
+    <%- include("partials/footer.ejs") %>
+  </body>
+</html>
