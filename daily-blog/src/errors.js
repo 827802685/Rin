@@ -25,6 +25,24 @@ export class ValidationError extends AppError {
   }
 }
 
+export class UnauthorizedError extends AppError {
+  constructor(message = "需要登录后才能访问", details = null) {
+    super(message, { statusCode: 401, code: "unauthorized", details });
+  }
+}
+
+export class ForbiddenError extends AppError {
+  constructor(message = "没有权限执行该操作", details = null) {
+    super(message, { statusCode: 403, code: "forbidden", details });
+  }
+}
+
+export class ConflictError extends AppError {
+  constructor(message = "资源冲突", details = null) {
+    super(message, { statusCode: 409, code: "conflict", details });
+  }
+}
+
 export class DatabaseError extends AppError {
   constructor(message = "数据库操作失败", details = null) {
     super(message, { statusCode: 500, code: "database_error", details });

@@ -4,6 +4,16 @@
     <nav class="site-header__nav">
       <a href="/">首页</a>
       <a href="/health">健康检查</a>
+      <% if (typeof currentAdmin !== "undefined" && currentAdmin) { %>
+        <a href="/admin">后台管理</a>
+        <form class="nav-inline-form" method="post" action="/admin/logout">
+          <button class="link-button" type="submit" title="退出登录">
+            退出（<%= currentAdmin.username %>）
+          </button>
+        </form>
+      <% } else { %>
+        <a href="/admin/login">登录</a>
+      <% } %>
     </nav>
   </div>
 </header>

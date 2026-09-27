@@ -1,12 +1,27 @@
 import { createApp } from "./app.js";
 import { config } from "./config.js";
 import { getDb, closeDb } from "./db/index.js";
+import { authService } from "./services/auth.service.js";
 import { logger, setLogLevel } from "./logger.js";
 
 setLogLevel(config.logLevel);
 
 // 启动时应用数据库迁移，失败即快速失败，避免带着旧结构继续运行。
 getDb();
+
+// 按 .env 同步管理员账号：未设置 ADMIN_PASSWORD 时后台登录关闭，仅记录警告。
+const adminBootstrap = authService.ensureAdminFromEnv();
+if (adminBootstrap.enabled) {
+  logger.info("admin.bootstrap", {
+    username: adminBootstrap.username,
+    created: adminBootstrap.created,
+    updated: adminBootstrap.updated,
+  });
+} else {
+  logger.warn("admin.bootstrap.disabled", {
+    reason: "未设置 ADMIN_PASSWORD，后台登录不可用",
+  });
+}
 
 const app = createApp();
 const server = app.listen(config.port, config.host, () => {

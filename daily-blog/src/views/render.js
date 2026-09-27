@@ -9,5 +9,5 @@ const VIEWS_DIR = path.join(import.meta.dirname, "..", "views");
  */
 export async function renderPage(res, view, data = {}) {
   const body = await ejs.renderFile(path.join(VIEWS_DIR, view), data);
-  res.render("layout", { ...data, body });
+  res.render("layout", { wide: false, ...data, body });
 }

@@ -9,7 +9,7 @@
   </head>
   <body>
     <%- include("partials/header.ejs") %>
-    <main class="container">
+    <main class="container<%= typeof wide !== 'undefined' && wide ? ' container--wide' : '' %>">
       <%- body %>
     </main>
     <%- include("partials/footer.ejs") %>

@@ -20,28 +20,54 @@ npm start            # 启动服务，默认 http://127.0.0.1:3000
 
 ```bash
 npm run dev          # 开发模式（文件变化自动重启）
-npm run reset        # 删除本地库文件并重新迁移 + 填充示例数据
+npm run reset        # 删除本地库文件并重新迁移 + 填充示例数据 + 同步管理员账号
 npm test             # 运行全部测试（node:test + supertest）
 ```
+
+## 后台管理
+
+1. 在 `daily-blog/.env` 中设置 `ADMIN_USERNAME` 与 `ADMIN_PASSWORD`（至少 8 位），然后 `npm start`；
+   启动时会按这两个值自动创建或同步管理员账号，**改密码 = 改 `.env` 后重启**。
+2. 访问 <http://127.0.0.1:3000/admin/login> 登录（未设置 `ADMIN_PASSWORD` 时后台登录关闭，前台不受影响）。
+3. `/admin` 是文章列表（草稿与已发布都在内），可新建、编辑、删除，并一键切换「发布 / 转为草稿」。
+4. 编辑器支持 Markdown 实时预览（复用前台同一套渲染与清洗规则）与 `Ctrl / Cmd + S` 保存。
+
+草稿在前台完全不可见：首页列表与 `/posts/:slug` 详情页都只返回已发布文章。
+
+| 端点 | 说明 |
+| --- | --- |
+| `GET /admin/login` | 登录页 |
+| `POST /admin/login` | 校验口令并写入会话 Cookie |
+| `POST /admin/logout` | 删除服务端会话并清除 Cookie |
+| `GET /admin` | 后台文章列表，支持 `?status=draft\|published` 与 `?page=` |
+| `GET /admin/posts/new`、`POST /admin/posts` | 新建文章 |
+| `GET /admin/posts/:id/edit`、`POST /admin/posts/:id` | 编辑文章 |
+| `POST /admin/posts/:id/status` | 切换草稿 / 发布（`status=draft\|published`） |
+| `POST /admin/posts/:id/delete` | 删除文章 |
+| `POST /admin/api/preview` | 编辑页 Markdown 预览接口，返回清洗后的 HTML |
+
+后台页面未登录时跳转登录页并带 `?next=`；`/admin/api/*` 未登录返回 401 JSON。
 
 ## 目录结构
 
 ```text
 daily-blog/
 ├── migrations/            # SQL 迁移，按文件名顺序执行，可重复运行
-├── public/                # 静态资源（样式）
+├── public/                # 静态资源（样式、后台编辑器脚本）
 ├── scripts/               # 迁移 / 填充 / 重置脚本
 ├── src/
 │   ├── app.js             # 应用组装：中间件与路由注册
-│   ├── server.js          # 进程入口：监听端口 + 优雅停机
+│   ├── server.js          # 进程入口：监听端口 + 管理员账号同步 + 优雅停机
 │   ├── config.js          # 集中配置，启动时校验
 │   ├── logger.js          # 结构化 JSON 日志（带 requestId）
 │   ├── errors.js          # 类型化错误体系
 │   ├── db/                # 数据库连接、迁移执行、示例数据
+│   ├── lib/               # 通用小工具（Cookie 读写）
 │   ├── repositories/      # 数据访问层（只写 SQL）
 │   ├── services/          # 业务规则层（不依赖 HTTP 对象）
+│   ├── validation/        # 请求表单校验（zod）
 │   ├── routes/            # 路由层（解析请求 → 调用服务 → 渲染）
-│   ├── middlewares/       # 请求上下文、404、全局错误处理
+│   ├── middlewares/       # 请求上下文、会话与鉴权、404、全局错误处理
 │   └── views/             # EJS 模板（layout + pages + partials）
 └── tests/                 # node:test 测试用例
 ```
@@ -59,8 +85,14 @@ daily-blog/
 | `SITE_DESCRIPTION` | `以每日迭代方式构建的个人博客` | 站点描述 |
 | `SITE_AUTHOR` | `admin` | 默认作者 |
 | `SITE_PAGE_SIZE` | `10` | 列表每页文章数 |
+| `ADMIN_USERNAME` | `admin` | 管理员用户名，3-32 位字母/数字/`_.-` |
+| `ADMIN_PASSWORD` | 空 | 管理员口令，**至少 8 位**；留空则后台登录关闭 |
+| `SESSION_COOKIE_NAME` | `daily_blog_admin` | 会话 Cookie 名 |
+| `SESSION_TTL_HOURS` | `12` | 会话有效期（1-720 小时） |
+| `SESSION_COOKIE_SECURE` | 生产环境 `true` | 是否只在 HTTPS 下发送会话 Cookie |
 
 配置缺失或取值非法时，进程在启动阶段直接退出，不会带着错误配置继续运行。
+生产环境额外强制：必须设置 `ADMIN_PASSWORD`，且不能沿用 `.env.example` 里的占位值。
 
 ## 健康检查
 

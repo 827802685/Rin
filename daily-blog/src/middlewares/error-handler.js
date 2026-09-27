@@ -28,7 +28,7 @@ export function errorHandler(error, req, res, next) {
     return;
   }
 
-  if (req.accepts("html") && !req.originalUrl.startsWith("/api/")) {
+  if (req.accepts("html") && !isJsonEndpoint(req)) {
     res.status(statusCode).render("pages/error", {
       title: `${statusCode} · ${message}`,
       statusCode,
@@ -39,4 +39,10 @@ export function errorHandler(error, req, res, next) {
   }
 
   res.status(statusCode).json({ error: { code, message } });
+}
+
+/** 接口路径统一返回 JSON，避免接口出错时把错误页 HTML 塞给调用方。 */
+function isJsonEndpoint(req) {
+  const url = req.originalUrl ?? "";
+  return url.startsWith("/api/") || url.startsWith("/admin/api/");
 }
