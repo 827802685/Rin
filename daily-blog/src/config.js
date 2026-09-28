@@ -80,6 +80,17 @@ if (sessionTtlHours <= 0 || sessionTtlHours > 24 * 30) {
   throw new Error(`配置项 SESSION_TTL_HOURS 必须在 1-720 之间，当前值：${sessionTtlHours}`);
 }
 
+// 标签数量上限：超过只会让文章页标签区失控，前台也没有展示价值。
+const maxTagsPerPost = readInt("SITE_MAX_TAGS_PER_POST", 8);
+if (maxTagsPerPost <= 0 || maxTagsPerPost > 50) {
+  throw new Error(`配置项 SITE_MAX_TAGS_PER_POST 必须在 1-50 之间，当前值：${maxTagsPerPost}`);
+}
+
+const sitePageSize = readInt("SITE_PAGE_SIZE", 10);
+if (sitePageSize <= 0 || sitePageSize > 100) {
+  throw new Error(`配置项 SITE_PAGE_SIZE 必须在 1-100 之间，当前值：${sitePageSize}`);
+}
+
 export const config = Object.freeze({
   env,
   port,
@@ -89,7 +100,8 @@ export const config = Object.freeze({
     title: readString("SITE_TITLE", "每日迭代博客"),
     description: readString("SITE_DESCRIPTION", "以每日迭代方式构建的个人博客"),
     author: readString("SITE_AUTHOR", "admin"),
-    pageSize: readInt("SITE_PAGE_SIZE", 10),
+    pageSize: sitePageSize,
+    maxTagsPerPost,
   }),
   admin: Object.freeze({
     username: adminUsername,

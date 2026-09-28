@@ -28,6 +28,12 @@ const postSchema = z.object({
   status: z.enum(POST_STATUSES, {
     errorMap: () => ({ message: `文章状态只能是 ${POST_STATUSES.join(" / ")}` }),
   }),
+  // 空串表示「不选分类 / 不设标签」，非空时必须是数据库主键形态的数字。
+  categoryId: z
+    .string()
+    .trim()
+    .refine((value) => value === "" || /^[1-9]\d*$/.test(value), "请选择有效的分类"),
+  tags: z.string().trim().max(300, "标签最长 300 个字符"),
 });
 
 function asString(value) {
@@ -46,6 +52,8 @@ export function parsePostInput(body = {}) {
     content: asString(body.content),
     author: asString(body.author),
     status: asString(body.status) || "draft",
+    categoryId: asString(body.categoryId),
+    tags: asString(body.tags),
   };
 
   const result = postSchema.safeParse(values);

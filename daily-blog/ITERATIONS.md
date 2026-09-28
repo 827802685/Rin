@@ -8,7 +8,7 @@
 | --- | --- | --- | --- | --- |
 | Day 1 | 最小可运行版本 | P0 | 项目骨架、文章模型、列表页、详情页、健康检查、日志与错误处理 | ✅ 已完成 |
 | Day 2 | 后台管理与文章编辑 | P0 | 管理员登录、Markdown 编辑、新建/编辑/删除、草稿与发布 | ✅ 已完成 |
-| Day 3 | 分类与标签 | P1 | 分类/标签数据模型、文章归类、分类页与标签页 | ⬜ 待办 |
+| Day 3 | 分类与标签 | P1 | 分类/标签数据模型、文章归类、分类页与标签页 | ✅ 已完成 |
 | Day 4 | 搜索 | P1 | 关键词搜索页、搜索接口、结果高亮、空结果提示 | ⬜ 待办 |
 | Day 5 | 评论 | P2 | 游客评论提交、审核状态、后台审核、基础防灌水 | ⬜ 待办 |
 | Day 6 | 站点体验 | P2 | 归档页、RSS、sitemap、SEO meta、站点配置页 | ⬜ 待办 |
@@ -136,3 +136,103 @@
 ### 下一步（Day 3）
 
 分类与标签：新增分类/标签数据模型与文章-标签关联，后台可维护分类标签，前台提供分类页与标签页。
+
+---
+
+## Day 3（2026-09-28）· 分类与标签
+
+### 本次新增功能
+
+**数据模型**
+
+- 新增 `migrations/003_taxonomy.sql`：`categories`、`tags`、`post_categories`、`post_tags` 四张表与两个外键索引
+- 没有对已交付的 `posts` 表做 `ALTER TABLE ADD COLUMN`：SQLite 的 `ADD COLUMN` 不支持 `IF NOT EXISTS`，
+  重复执行会直接报 `duplicate column name`，无法满足「迁移可重复执行」的约束。
+  因此用 `post_categories` 表 + `post_id` 主键表达「一篇文章至多属于一个分类」，既保持幂等也不改写旧迁移
+- `post_tags` 是文章与标签的多对多关联表；文章删除时两张关联表都 `ON DELETE CASCADE` 连带清理
+
+**前台**
+
+- 新增分类总览 `/categories`、分类文章页 `/categories/:slug`、标签总览 `/tags`、标签文章页 `/tags/:slug`
+- 首页文章卡片与文章详情页展示分类与标签，全部可点击跳转；站点头部导航加入「分类 / 标签」入口
+- 列表页（首页 / 分类页 / 标签页）统一走同一个分页实现：超范围页码回落到最后一页，每页条数上下限一致
+- 列表页的分类与标签用两次批量查询补齐（`WHERE post_id IN (...)`），不是逐篇文章查询，避免 N+1
+
+**后台**
+
+- 新增 `/admin/taxonomy` 分类与标签管理页：新建、重命名、调整 slug、删除，并显示各自文章数与前台链接
+- 文章编辑器新增「分类」单选下拉（可留空 = 不设分类）与「标签」逗号分隔输入框
+  （支持中文逗号与顿号，带 `datalist` 提示已有标签），编辑时回填已选分类与已有标签
+- 文章主体与分类/标签写入放在同一事务内，避免出现「文章存了但标签丢了」的中间状态
+- 后台文章列表与 `/admin/taxonomy` 都按「全部文章（含草稿）」计数，前台一律只算已发布
+
+**业务规则**
+
+- 分类与标签的 slug 留空自动生成：中文名称**直接以中文作为 slug**（URL 会被浏览器编码，但可读性好），
+  英文派生不出有意义片段时退化为 `tag-20260928-a1b2c3`；手填 slug 冲突返回 409 并回填输入
+- 分类名称、标签名称均要求唯一，重名返回 409
+- **分类下仍有文章（含草稿）时禁止删除**（409 并告知篇数），不做静默解绑；
+  标签删除只解除关联，文章本身不受影响
+- 标签对同一篇文章去重（不区分大小写），数量上限由 `SITE_MAX_TAGS_PER_POST` 控制，超限返回 400 且整篇文章不写库
+- 写文章时填写的标签若不存在会自动创建，省去先去后台建标签的一步
+- 前台分类页/标签页对不存在或已删除的分类/标签直接 404，而不是渲染空列表
+
+### 主要文件
+
+| 文件 | 作用 |
+| --- | --- |
+| `migrations/003_taxonomy.sql` | 分类、标签、文章-分类、文章-标签四张表与索引 |
+| `src/lib/slug.js` | 文章/分类/标签共用的 slug 生成规则（英文派生、中文兜底、时间戳兜底） |
+| `src/db/transaction.js` | 事务助手，把「只由仓储调用组成」的函数包进一个事务 |
+| `src/repositories/categories.repository.js`、`tags.repository.js` | 分类与标签的 SQL（含按已发布/全部两种口径计数） |
+| `src/repositories/posts.repository.js` | 新增按分类/标签分页查询、批量取分类标签、设置分类、同步标签 |
+| `src/services/taxonomy.service.js` | 分类/标签 CRUD、slug 与重名规则、删除占用保护、标签解析与同步 |
+| `src/services/posts.service.js` | 列表与详情挂载分类标签；新增 `listByCategorySlug` / `listByTagSlug`；写入走事务 |
+| `src/validation/taxonomy-input.js` | 分类/标签表单校验（slug 允许中文） |
+| `src/validation/post-input.js` | 新增 `categoryId` 与 `tags` 字段校验 |
+| `src/routes/site.routes.js` | 前台分类页与标签页路由 |
+| `src/routes/admin.routes.js` | 分类标签管理路由；编辑器注入分类列表与标签候选 |
+| `src/views/pages/taxonomies.ejs`、`taxonomy.ejs` | 前台分类/标签总览与文章列表 |
+| `src/views/pages/admin/taxonomy.ejs` | 后台分类与标签管理页 |
+| `src/views/pages/home.ejs`、`post.ejs`、`partials/header.ejs`、`pages/admin/editor.ejs`、`pages/admin/dashboard.ejs` | 分类标签展示、导航入口、编辑器表单 |
+| `public/styles.css` | chip、分类标签列表、后台管理页样式；把「小屏隐藏表格第 3 列」限定到后台文章列表 |
+| `src/config.js`、`.env.example` | 新增 `SITE_MAX_TAGS_PER_POST` 集中校验；`SITE_PAGE_SIZE` 补上 1-100 边界 |
+| `src/db/seed.js` | 示例分类/标签与文章关联，幂等且不覆盖人工改动 |
+| `tests/taxonomy.test.js`、`tests/admin-taxonomy.test.js` | 前台 7 个 + 后台 15 个用例（新增 22 个） |
+
+不引入任何新的第三方依赖：slug 生成与中文兜底用 `node:crypto` + Unicode 属性正则，校验复用已有的 zod。
+
+### 验证结果
+
+- `npm run migrate` → `["001_init.sql","002_admin.sql","003_taxonomy.sql"]`；连续执行两次迁移脚本后表清单不变，
+  `003` 本身可重复执行（已单独验证：绕过版本记录直接连跑两遍不报错）
+- `npm test` → **63 个用例全部通过**（Day 1 的 8 个 + Day 2 的 33 个 + Day 3 新增 22 个）
+- `npm start` 后 curl 冒烟 → **71 项检查全部通过**，覆盖：首页/分类页/标签页渲染与 chip、
+  中文 slug 标签页（URL 编码后请求）、草稿在分类页不可见且不计入计数、未登录跳转登录页（页面 302 / 接口 401）、
+  登录（错误口令 401 / 正确口令 303）、后台管理页、新建分类/标签、文章写入分类与标签后前台可见、
+  编辑页回填分类与标签、名称重复 409、slug 冲突 409、删除占用分类 409（并提示篇数）、名称为空 400、
+  重命名后新 slug 可访问且旧 slug 404、删除标签只解除关联、预览接口、转草稿后前台 404、
+  分类被草稿占用时同样禁止删除、清空分类后可删除、删除分类不影响文章、登出后会话立即失效
+- 服务端结构化日志可串联全过程：`admin.bootstrap` → `auth.login.failed` → `auth.login.succeeded` →
+  `admin.category.created` → `admin.tag.created` ×2 → `admin.post.created` → `admin.category.updated` →
+  `admin.tag.deleted` → `admin.post.status_changed` → `admin.post.updated` → `admin.category.deleted` → `auth.logout`
+- 反向验证：故意去掉分类查询与计数里的 `status = 'published'` 过滤后，
+  「草稿的分类不计入前台分类页与计数」用例立刻失败；恢复后 63/63 重新全绿
+- 测试过程中发现并修复的真实问题：① `posts.service` 里残留了重复的 `slugifyTitle` 定义（改为统一从 `src/lib/slug.js` 引入）；
+  ② 冒烟脚本首轮把文章 id 写死为 1，实际改到的是示例文章，说明「按 slug 反查 id」比依赖自增顺序可靠；
+  ③ 小屏隐藏表格第 3 列的旧规则会误伤分类标签管理页，改为只作用于后台文章列表
+
+### 已知限制
+
+- 一篇文章只能有一个分类（`post_categories` 用 `post_id` 做主键强制），不支持多分类；标签则不限个数（受配置上限约束）
+- 分类/标签的排序是「名称升序（ASCII 优先，中文在后）」，没有手工排序、没有层级（不支持父子分类）
+- 中文 slug 的链接在浏览器地址栏会显示为 `%E6%8A%80%E6%9C%AF` 形式，可读性不如英文 slug；
+  需要英文链接时请在创建时手填 slug
+- 分类与标签的写操作仍只依赖 `SameSite=Lax` Cookie，**尚未加 CSRF token**；与 Day 2 一致，归入 Day 7 加固
+- 标签的创建是「写文章时顺带创建」，因此输入错别字会静默产生一个新标签，后台目前只能重命名/删除，没有合并标签功能
+- 分类页/标签页是普通分页列表，没有做「按年份归档」或「标签云按热度加权」的展示
+
+### 下一步（Day 4）
+
+关键词搜索：搜索页与搜索接口，标题/摘要/正文匹配，结果高亮与空结果提示，
+并考虑与分类、标签筛选组合使用。

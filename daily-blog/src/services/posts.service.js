@@ -1,7 +1,9 @@
-import { randomBytes } from "node:crypto";
 import { marked } from "marked";
 import sanitizeHtml from "sanitize-html";
 import { postsRepository } from "../repositories/posts.repository.js";
+import { taxonomyService } from "./taxonomy.service.js";
+import { withTransaction } from "../db/transaction.js";
+import { slugifyText, timestampSlug } from "../lib/slug.js";
 import { NotFoundError, ValidationError, ConflictError } from "../errors.js";
 
 export const POST_STATUSES = Object.freeze(["draft", "published"]);
@@ -58,22 +60,10 @@ export function estimateReadingMinutes(markdown) {
 
 /** 由标题生成 URL 友好的 slug；非 ASCII 标题（如纯中文）会得到空串，交由调用方兜底。 */
 export function slugifyTitle(title, maxLength = 80) {
-  return String(title ?? "")
-    .normalize("NFKD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, maxLength)
-    .replace(/-+$/g, "");
+  return slugifyText(title, maxLength);
 }
 
-function timestampSlug() {
-  const stamp = new Date().toISOString().slice(0, 10).replace(/-/g, "");
-  return `post-${stamp}-${randomBytes(3).toString("hex")}`;
-}
-
-function decorate(row, { withContent = false } = {}) {
+function decorate(row, { withContent = false, category = null, tags = [] } = {}) {
   const html = renderMarkdown(row.content_md);
   return {
     id: row.id,
@@ -88,10 +78,75 @@ function decorate(row, { withContent = false } = {}) {
     updatedAt: row.updated_at,
     publishedAt: row.published_at ?? row.created_at,
     readingMinutes: estimateReadingMinutes(row.content_md),
+    category,
+    tags,
     contentHtml: withContent ? html : undefined,
     contentMd: withContent ? row.content_md : undefined,
     // 后台编辑页需要「原样」的摘要，避免把自动生成的摘要回填进表单后再存库
     summaryRaw: withContent ? row.summary : undefined,
+  };
+}
+
+/** 批量补齐列表页文章的分类与标签，避免每条文章单独查询（N+1）。 */
+function attachTaxonomyRows(rows) {
+  const ids = rows.map((row) => row.id);
+  const categoryByPost = new Map();
+  for (const row of postsRepository.findCategoriesByPostIds(ids)) {
+    categoryByPost.set(row.post_id, { id: row.category_id, slug: row.slug, name: row.name });
+  }
+
+  const tagsByPost = new Map();
+  for (const row of postsRepository.findTagsByPostIds(ids)) {
+    if (!tagsByPost.has(row.post_id)) {
+      tagsByPost.set(row.post_id, []);
+    }
+    tagsByPost.get(row.post_id).push({ id: row.tag_id, slug: row.slug, name: row.name });
+  }
+
+  return { categoryByPost, tagsByPost };
+}
+
+/** 单篇文章的分类与标签。 */
+function loadTaxonomy(postId) {
+  const [categoryRow] = postsRepository.findCategoriesByPostIds([postId]);
+  return {
+    category: categoryRow
+      ? { id: categoryRow.category_id, slug: categoryRow.slug, name: categoryRow.name }
+      : null,
+    tags: postsRepository
+      .findTagsByPostIds([postId])
+      .map((row) => ({ id: row.tag_id, slug: row.slug, name: row.name })),
+  };
+}
+
+/**
+ * 前台列表页通用分页：首页、分类页、标签页共用同一套页码归一化与计数逻辑，
+ * 保证三处行为完全一致（超范围页码回落到最后一页、每页条数上下限一致）。
+ */
+function paginatePublished(page, pageSize, { count, fetchPage }) {
+  const safePageSize = Math.min(Math.max(Number.parseInt(pageSize, 10) || 10, 1), 50);
+  const safePage = Math.max(Number.parseInt(page, 10) || 1, 1);
+  const total = count();
+  const totalPages = Math.max(1, Math.ceil(total / safePageSize));
+  const currentPage = Math.min(safePage, totalPages);
+  const rows = fetchPage({ limit: safePageSize, offset: (currentPage - 1) * safePageSize });
+  const { categoryByPost, tagsByPost } = attachTaxonomyRows(rows);
+
+  return {
+    items: rows.map((row) =>
+      decorate(row, {
+        category: categoryByPost.get(row.id) ?? null,
+        tags: tagsByPost.get(row.id) ?? [],
+      }),
+    ),
+    pagination: {
+      page: currentPage,
+      pageSize: safePageSize,
+      total,
+      totalPages,
+      hasPrev: currentPage > 1,
+      hasNext: currentPage < totalPages,
+    },
   };
 }
 
@@ -156,6 +211,9 @@ function normalizeInput(input = {}) {
     author: String(input.author ?? "").trim() || "admin",
     status: normalizeStatus(input.status ?? "draft"),
     slug: String(input.slug ?? "").trim(),
+    // 分类由服务层校验存在性；标签在这里只做拆分与去重（会顺带创建不存在的标签）。
+    categoryId: input.categoryId === "" || input.categoryId === undefined ? null : input.categoryId,
+    tagNames: taxonomyService.parseTagInput(input.tags ?? ""),
   };
 }
 
@@ -165,27 +223,10 @@ function normalizeInput(input = {}) {
  */
 export const postsService = {
   listPublished({ page = 1, pageSize = 10 } = {}) {
-    const safePageSize = Math.min(Math.max(Number.parseInt(pageSize, 10) || 10, 1), 50);
-    const safePage = Math.max(Number.parseInt(page, 10) || 1, 1);
-    const total = postsRepository.countPublished();
-    const totalPages = Math.max(1, Math.ceil(total / safePageSize));
-    const currentPage = Math.min(safePage, totalPages);
-    const rows = postsRepository.findPublishedPage({
-      limit: safePageSize,
-      offset: (currentPage - 1) * safePageSize,
+    return paginatePublished(page, pageSize, {
+      count: () => postsRepository.countPublished(),
+      fetchPage: ({ limit, offset }) => postsRepository.findPublishedPage({ limit, offset }),
     });
-
-    return {
-      items: rows.map((row) => decorate(row)),
-      pagination: {
-        page: currentPage,
-        pageSize: safePageSize,
-        total,
-        totalPages,
-        hasPrev: currentPage > 1,
-        hasNext: currentPage < totalPages,
-      },
-    };
   },
 
   getPublishedBySlug(slug) {
@@ -196,7 +237,36 @@ export const postsService = {
     if (!row) {
       throw new NotFoundError(`文章不存在：${slug}`);
     }
-    return decorate(row, { withContent: true });
+    const { category, tags } = loadTaxonomy(row.id);
+    return decorate(row, { withContent: true, category, tags });
+  },
+
+  // ---------- Day 3：按分类 / 标签浏览 ----------
+
+  /** 分类页：该分类下的已发布文章，支持分页。分类不存在时 404。 */
+  listByCategorySlug(slug, { page = 1, pageSize = 10 } = {}) {
+    const category = taxonomyService.getCategoryBySlug(slug);
+    return {
+      category,
+      ...paginatePublished(page, pageSize, {
+        count: () => postsRepository.countPublishedByCategorySlug(category.slug),
+        fetchPage: ({ limit, offset }) =>
+          postsRepository.findPublishedPageByCategorySlug({ slug: category.slug, limit, offset }),
+      }),
+    };
+  },
+
+  /** 标签页：该标签下的已发布文章，支持分页。标签不存在时 404。 */
+  listByTagSlug(slug, { page = 1, pageSize = 10 } = {}) {
+    const tag = taxonomyService.getTagBySlug(slug);
+    return {
+      tag,
+      ...paginatePublished(page, pageSize, {
+        count: () => postsRepository.countPublishedByTagSlug(tag.slug),
+        fetchPage: ({ limit, offset }) =>
+          postsRepository.findPublishedPageByTagSlug({ slug: tag.slug, limit, offset }),
+      }),
+    };
   },
 
   // ---------- Day 2：后台管理 ----------
@@ -219,11 +289,17 @@ export const postsService = {
       offset: (currentPage - 1) * safePageSize,
       status: filter,
     });
+    const { categoryByPost, tagsByPost } = attachTaxonomyRows(rows);
 
     return {
       counts: postsRepository.countByStatus(),
       statusFilter: filter,
-      items: rows.map((row) => decorate(row)),
+      items: rows.map((row) =>
+        decorate(row, {
+          category: categoryByPost.get(row.id) ?? null,
+          tags: tagsByPost.get(row.id) ?? [],
+        }),
+      ),
       pagination: {
         page: currentPage,
         pageSize: safePageSize,
@@ -241,21 +317,29 @@ export const postsService = {
     if (!row) {
       throw new NotFoundError(`文章不存在：id=${id}`);
     }
-    return decorate(row, { withContent: true });
+    const { category, tags } = loadTaxonomy(row.id);
+    return decorate(row, { withContent: true, category, tags });
   },
 
   createPost(input) {
     const data = normalizeInput(input);
     const slug = resolveSlug({ slug: data.slug, title: data.title });
-    const id = postsRepository.insert({
-      slug,
-      title: data.title,
-      summary: data.summary,
-      contentMd: data.contentMd,
-      status: data.status,
-      author: data.author,
+    // 文章主体与分类/标签一起写，任一失败则整体回滚，不留下半成品。
+    return withTransaction(() => {
+      const id = postsRepository.insert({
+        slug,
+        title: data.title,
+        summary: data.summary,
+        contentMd: data.contentMd,
+        status: data.status,
+        author: data.author,
+      });
+      taxonomyService.savePostTaxonomy(id, {
+        categoryId: data.categoryId,
+        tagNames: data.tagNames,
+      });
+      return this.getById(id);
     });
-    return this.getById(id);
   },
 
   updatePost(id, input) {
@@ -268,15 +352,20 @@ export const postsService = {
     const data = normalizeInput(input);
     const slug = resolveSlug({ slug: data.slug, title: data.title, excludeId: postId });
 
-    postsRepository.updateById(postId, {
-      slug,
-      title: data.title,
-      summary: data.summary,
-      contentMd: data.contentMd,
-      author: data.author,
+    return withTransaction(() => {
+      postsRepository.updateById(postId, {
+        slug,
+        title: data.title,
+        summary: data.summary,
+        contentMd: data.contentMd,
+        author: data.author,
+      });
+      taxonomyService.savePostTaxonomy(postId, {
+        categoryId: data.categoryId,
+        tagNames: data.tagNames,
+      });
+      return this.getById(postId);
     });
-
-    return this.getById(postId);
   },
 
   /**

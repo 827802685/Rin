@@ -69,6 +69,40 @@
           <% if (errors.status) { %><span class="field__error"><%= errors.status %></span><% } %>
         </label>
 
+        <label class="field <%= errors.categoryId ? 'field--invalid' : '' %>">
+          <span class="field__label">分类</span>
+          <select class="field__input" name="categoryId">
+            <option value="" <%= values.categoryId === "" ? "selected" : "" %>>（不设分类）</option>
+            <% categories.forEach(function (category) { %>
+              <option value="<%= category.id %>" <%= String(category.id) === values.categoryId ? "selected" : "" %>><%= category.name %></option>
+            <% }); %>
+          </select>
+          <% if (errors.categoryId) { %><span class="field__error"><%= errors.categoryId %></span><% } %>
+          <span class="field__hint">
+            没有想要的分类？到 <a href="/admin/taxonomy">分类与标签</a> 里新建。
+          </span>
+        </label>
+
+        <label class="field <%= errors.tags ? 'field--invalid' : '' %>">
+          <span class="field__label">标签（逗号分隔）</span>
+          <input
+            class="field__input"
+            type="text"
+            name="tags"
+            value="<%= values.tags %>"
+            maxlength="300"
+            list="tag-suggestions"
+            placeholder="例如：迭代, 工程实践"
+          />
+          <datalist id="tag-suggestions">
+            <% allTags.forEach(function (tag) { %>
+              <option value="<%= tag.name %>"></option>
+            <% }); %>
+          </datalist>
+          <% if (errors.tags) { %><span class="field__error"><%= errors.tags %></span><% } %>
+          <span class="field__hint">标签不存在会自动创建，最多 <%= maxTags %> 个。</span>
+        </label>
+
         <label class="field <%= errors.slug ? 'field--invalid' : '' %>">
           <span class="field__label">slug（留空自动生成）</span>
           <input class="field__input" type="text" name="slug" value="<%= values.slug %>" maxlength="120" />

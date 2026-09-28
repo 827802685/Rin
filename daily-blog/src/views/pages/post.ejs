@@ -7,6 +7,20 @@
     <span>·</span>
     <span>约 <%= post.readingMinutes %> 分钟</span>
   </p>
+  <% if (post.category || post.tags.length > 0) { %>
+    <p class="post__taxonomy">
+      <% if (post.category) { %>
+        <span class="post__taxonomy-label">分类</span>
+        <a class="chip chip--category" href="/categories/<%= encodeURIComponent(post.category.slug) %>"><%= post.category.name %></a>
+      <% } %>
+      <% if (post.tags.length > 0) { %>
+        <span class="post__taxonomy-label">标签</span>
+        <% post.tags.forEach(function (tag) { %>
+          <a class="chip" href="/tags/<%= encodeURIComponent(tag.slug) %>"><%= tag.name %></a>
+        <% }); %>
+      <% } %>
+    </p>
+  <% } %>
   <div class="post__content markdown-body">
     <%- post.contentHtml %>
   </div>

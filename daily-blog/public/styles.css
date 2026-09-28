@@ -544,8 +544,171 @@ main.container {
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .admin-table th:nth-child(3),
-  .admin-table td:nth-child(3) {
+  /* 只针对后台文章列表（4 列）：小屏隐藏「更新时间」列。
+     分类与标签管理页不使用表格，因此不受这条规则影响。 */
+  .admin-table--posts th:nth-child(3),
+  .admin-table--posts td:nth-child(3) {
     display: none;
+  }
+}
+
+/* ---------- Day 3：分类与标签 ---------- */
+
+.chip {
+  display: inline-block;
+  padding: 1px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text-muted);
+  font-size: 12px;
+  line-height: 1.8;
+  white-space: nowrap;
+}
+
+.chip:hover {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+  text-decoration: none;
+}
+
+.chip--category {
+  background: #eef4ff;
+  border-color: #c9dbff;
+  color: #1c4fb8;
+}
+
+.chip--large {
+  font-size: 14px;
+  padding: 3px 14px;
+}
+
+.post-card__taxonomy {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 12px 0 0;
+}
+
+.post__taxonomy {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 18px;
+}
+
+.post__taxonomy-label {
+  color: var(--color-text-muted);
+  font-size: 12px;
+}
+
+.chip-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 12px;
+}
+
+.chip-list__item {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  padding: 12px 16px;
+}
+
+.chip-list__count {
+  color: var(--color-text-muted);
+  font-size: 13px;
+}
+
+.chip-list__desc {
+  color: var(--color-text-muted);
+  font-size: 13px;
+  flex-basis: 100%;
+}
+
+.field__hint {
+  display: block;
+  margin-top: 6px;
+  color: var(--color-text-muted);
+  font-size: 13px;
+}
+
+.admin-head__actions {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  white-space: nowrap;
+}
+
+.taxonomy-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 20px;
+  align-items: start;
+}
+
+.taxonomy-create {
+  border-bottom: 1px solid var(--color-border);
+  padding-bottom: 12px;
+  margin-bottom: 18px;
+}
+
+.taxonomy-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 14px;
+}
+
+.taxonomy-item {
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+
+.taxonomy-item__form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin: 0;
+}
+
+.taxonomy-item__form .field__input {
+  width: auto;
+  flex: 0 1 130px;
+  padding: 6px 10px;
+  font-size: 14px;
+}
+
+.taxonomy-item__form .field__input--grow {
+  flex: 1 1 160px;
+}
+
+.taxonomy-item__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin-top: 8px;
+  color: var(--color-text-muted);
+  font-size: 13px;
+}
+
+.taxonomy-item__meta form {
+  margin: 0;
+}
+
+@media (max-width: 900px) {
+  .taxonomy-grid {
+    grid-template-columns: minmax(0, 1fr);
   }
 }

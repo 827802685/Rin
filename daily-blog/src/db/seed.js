@@ -70,6 +70,86 @@ throw new NotFoundError("文章不存在");
   },
 ];
 
+/** 示例分类：中文名称刻意搭配英文 slug，另一种风格（纯中文 slug）见 seedTags 的「迭代」。 */
+export const seedCategories = [
+  { slug: "daily-iteration", name: "每日迭代", description: "以「每天一个可交付小目标」推进的实践记录。" },
+  { slug: "engineering", name: "工程实践", description: "配置、日志、错误处理等基础设施与工程习惯。" },
+];
+
+/** 示例标签：其中「迭代」故意用中文作为 slug，用于验证中文 slug 在 URL 里同样可用。 */
+export const seedTags = [
+  { slug: "迭代", name: "迭代" },
+  { slug: "methodology", name: "方法论" },
+  { slug: "engineering-practice", name: "工程实践" },
+  { slug: "architecture", name: "架构设计" },
+];
+
+/** 示例文章 → 分类/标签的关联，按 slug 显式指定，避免中文名称带来的歧义。 */
+const SEED_LINKS = [
+  { postSlug: "hello-daily-blog", categorySlug: "daily-iteration", tagSlugs: ["迭代", "architecture"] },
+  { postSlug: "why-daily-iteration", categorySlug: "daily-iteration", tagSlugs: ["迭代", "methodology"] },
+  {
+    postSlug: "engineering-baseline",
+    categorySlug: "engineering",
+    tagSlugs: ["engineering-practice", "architecture"],
+  },
+];
+
+/**
+ * 写入示例分类、标签并关联到示例文章。
+ * 幂等且不覆盖人工改动：已存在的分类/标签不重建，已有分类的文章不会被重新指派。
+ */
+function seedTaxonomy(db) {
+  const insertCategory = db.prepare(
+    `INSERT INTO categories (slug, name, description)
+     VALUES (@slug, @name, @description)
+     ON CONFLICT(slug) DO NOTHING`,
+  );
+  const insertTag = db.prepare(
+    `INSERT INTO tags (slug, name) VALUES (@slug, @name) ON CONFLICT(slug) DO NOTHING`,
+  );
+  const findCategory = db.prepare("SELECT id FROM categories WHERE slug = ?");
+  const findTag = db.prepare("SELECT id FROM tags WHERE slug = ?");
+  const findPost = db.prepare("SELECT id FROM posts WHERE slug = ?");
+  const linkCategory = db.prepare(
+    `INSERT INTO post_categories (post_id, category_id) VALUES (?, ?)
+     ON CONFLICT(post_id) DO NOTHING`,
+  );
+  const linkTag = db.prepare("INSERT OR IGNORE INTO post_tags (post_id, tag_id) VALUES (?, ?)");
+
+  const run = db.transaction(() => {
+    for (const category of seedCategories) {
+      insertCategory.run(category);
+    }
+    for (const tag of seedTags) {
+      insertTag.run(tag);
+    }
+
+    let linkedCategories = 0;
+    let linkedTags = 0;
+    for (const link of SEED_LINKS) {
+      const post = findPost.get(link.postSlug);
+      if (!post) {
+        continue;
+      }
+      const category = findCategory.get(link.categorySlug);
+      if (category && linkCategory.run(post.id, category.id).changes > 0) {
+        linkedCategories += 1;
+      }
+      for (const tagSlug of link.tagSlugs) {
+        const tag = findTag.get(tagSlug);
+        if (tag && linkTag.run(post.id, tag.id).changes > 0) {
+          linkedTags += 1;
+        }
+      }
+    }
+
+    return { linkedCategories, linkedTags };
+  });
+
+  return run();
+}
+
 export function seed(db = getDb()) {
   const insert = db.prepare(
     `INSERT INTO posts (slug, title, summary, content_md, status, author, published_at)
@@ -79,16 +159,20 @@ export function seed(db = getDb()) {
   );
 
   const existing = db.prepare("SELECT COUNT(*) AS total FROM posts").get().total;
-  if (existing > 0) {
-    return { inserted: 0, skipped: existing };
+  let inserted = 0;
+
+  if (existing === 0) {
+    const insertAll = db.transaction((posts) => {
+      for (const post of posts) {
+        insert.run({ ...post, offset: `-${post.daysAgo} days` });
+      }
+    });
+    insertAll(seedPosts);
+    inserted = seedPosts.length;
   }
 
-  const insertAll = db.transaction((posts) => {
-    for (const post of posts) {
-      insert.run({ ...post, offset: `-${post.daysAgo} days` });
-    }
-  });
-  insertAll(seedPosts);
+  // 分类与标签的示例数据独立于文章：即使文章早已存在，重复执行也只是补齐缺失的关联。
+  const taxonomy = seedTaxonomy(db);
 
-  return { inserted: seedPosts.length, skipped: existing };
+  return { inserted, skipped: existing, taxonomy };
 }

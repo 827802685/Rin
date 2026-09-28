@@ -6,6 +6,18 @@ const COLUMNS = `
   created_at, updated_at, published_at
 `;
 
+/** 需要 JOIN 分类/标签时使用带表别名的列名。 */
+const COLUMNS_ALIASED = `
+  p.id, p.slug, p.title, p.summary, p.content_md, p.status, p.author,
+  p.created_at, p.updated_at, p.published_at
+`;
+
+const PUBLISHED_ORDER = "ORDER BY COALESCE(p.published_at, p.created_at) DESC, p.id DESC";
+
+function placeholders(count) {
+  return new Array(count).fill("?").join(", ");
+}
+
 /**
  * 文章仓储层：只负责 SQL 与数据映射，不含业务规则。
  * status 取值由服务层校验后再传入，因此这里可以安全地拼接 SQL 片段。
@@ -166,6 +178,147 @@ export const postsRepository = {
   deleteById(id) {
     return safeRun("deleteById", () =>
       getDb().prepare("DELETE FROM posts WHERE id = ?").run(id).changes,
+    );
+  },
+
+  // ---------- Day 3：分类与标签 ----------
+
+  /**
+   * 按 slug 分页查询某个分类下的已发布文章。
+   * 分类不存在时返回空列表，由服务层负责区分「分类不存在」与「分类下暂无文章」。
+   */
+  countPublishedByCategorySlug(slug) {
+    return safeRun("countPublishedByCategorySlug", () =>
+      getDb()
+        .prepare(
+          `SELECT COUNT(*) AS total
+           FROM posts p
+           JOIN post_categories pc ON pc.post_id = p.id
+           JOIN categories c ON c.id = pc.category_id
+           WHERE p.status = 'published' AND c.slug = ?`,
+        )
+        .get(slug).total,
+    );
+  },
+
+  findPublishedPageByCategorySlug({ slug, limit, offset }) {
+    return safeRun("findPublishedPageByCategorySlug", () =>
+      getDb()
+        .prepare(
+          `SELECT ${COLUMNS_ALIASED}
+           FROM posts p
+           JOIN post_categories pc ON pc.post_id = p.id
+           JOIN categories c ON c.id = pc.category_id
+           WHERE p.status = 'published' AND c.slug = ?
+           ${PUBLISHED_ORDER}
+           LIMIT ? OFFSET ?`,
+        )
+        .all(slug, limit, offset),
+    );
+  },
+
+  countPublishedByTagSlug(slug) {
+    return safeRun("countPublishedByTagSlug", () =>
+      getDb()
+        .prepare(
+          `SELECT COUNT(*) AS total
+           FROM posts p
+           JOIN post_tags pt ON pt.post_id = p.id
+           JOIN tags t ON t.id = pt.tag_id
+           WHERE p.status = 'published' AND t.slug = ?`,
+        )
+        .get(slug).total,
+    );
+  },
+
+  findPublishedPageByTagSlug({ slug, limit, offset }) {
+    return safeRun("findPublishedPageByTagSlug", () =>
+      getDb()
+        .prepare(
+          `SELECT ${COLUMNS_ALIASED}
+           FROM posts p
+           JOIN post_tags pt ON pt.post_id = p.id
+           JOIN tags t ON t.id = pt.tag_id
+           WHERE p.status = 'published' AND t.slug = ?
+           ${PUBLISHED_ORDER}
+           LIMIT ? OFFSET ?`,
+        )
+        .all(slug, limit, offset),
+    );
+  },
+
+  /** 批量取出这批文章的分类，避免列表页逐条查询（N+1）。 */
+  findCategoriesByPostIds(ids) {
+    if (ids.length === 0) {
+      return [];
+    }
+    return safeRun("findCategoriesByPostIds", () =>
+      getDb()
+        .prepare(
+          `SELECT pc.post_id, c.id AS category_id, c.slug, c.name
+           FROM post_categories pc
+           JOIN categories c ON c.id = pc.category_id
+           WHERE pc.post_id IN (${placeholders(ids.length)})`,
+        )
+        .all(...ids),
+    );
+  },
+
+  /** 批量取出这批文章的标签，避免列表页逐条查询（N+1）。 */
+  findTagsByPostIds(ids) {
+    if (ids.length === 0) {
+      return [];
+    }
+    return safeRun("findTagsByPostIds", () =>
+      getDb()
+        .prepare(
+          `SELECT pt.post_id, t.id AS tag_id, t.slug, t.name
+           FROM post_tags pt
+           JOIN tags t ON t.id = pt.tag_id
+           WHERE pt.post_id IN (${placeholders(ids.length)})
+           ORDER BY t.name COLLATE NOCASE ASC, t.id ASC`,
+        )
+        .all(...ids),
+    );
+  },
+
+  /** 设置文章分类；categoryId 为 null 表示清除分类。 */
+  setCategory(postId, categoryId) {
+    return safeRun("setCategory", () => {
+      if (categoryId === null || categoryId === undefined) {
+        return getDb().prepare("DELETE FROM post_categories WHERE post_id = ?").run(postId).changes;
+      }
+      return getDb()
+        .prepare(
+          `INSERT INTO post_categories (post_id, category_id)
+           VALUES (@postId, @categoryId)
+           ON CONFLICT(post_id) DO UPDATE SET category_id = excluded.category_id`,
+        )
+        .run({ postId, categoryId }).changes;
+    });
+  },
+
+  findTagIdsByPostId(postId) {
+    return safeRun("findTagIdsByPostId", () =>
+      getDb()
+        .prepare("SELECT tag_id FROM post_tags WHERE post_id = ? ORDER BY tag_id ASC")
+        .all(postId)
+        .map((row) => row.tag_id),
+    );
+  },
+
+  /** 整体替换文章标签：先清空再写入，调用方负责包在事务里。 */
+  clearTags(postId) {
+    return safeRun("clearTags", () =>
+      getDb().prepare("DELETE FROM post_tags WHERE post_id = ?").run(postId).changes,
+    );
+  },
+
+  addTag(postId, tagId) {
+    return safeRun("addTag", () =>
+      getDb()
+        .prepare("INSERT OR IGNORE INTO post_tags (post_id, tag_id) VALUES (?, ?)")
+        .run(postId, tagId).changes,
     );
   },
 };

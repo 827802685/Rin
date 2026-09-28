@@ -8,7 +8,10 @@
       <% } %>
     </p>
   </div>
-  <a class="button" href="/admin/posts/new">新建文章</a>
+  <div class="admin-head__actions">
+    <a class="link-muted" href="/admin/taxonomy">分类与标签</a>
+    <a class="button" href="/admin/posts/new">新建文章</a>
+  </div>
 </section>
 
 <% if (flash) { %>
@@ -24,7 +27,7 @@
 <% if (items.length === 0) { %>
   <p class="empty-state">这里还没有文章，点右上角「新建文章」写下第一篇。</p>
 <% } else { %>
-  <table class="admin-table">
+  <table class="admin-table admin-table--posts">
     <thead>
       <tr>
         <th>标题</th>
@@ -38,7 +41,7 @@
         <tr>
           <td>
             <a class="admin-table__title" href="/admin/posts/<%= post.id %>/edit"><%= post.title %></a>
-            <p class="admin-table__meta">/<%= post.slug %> · <%= post.author %></p>
+            <p class="admin-table__meta">/<%= post.slug %> · <%= post.author %><% if (post.category) { %> · <%= post.category.name %><% } %><% if (post.tags.length > 0) { %> · #<%= post.tags.map(function (tag) { return tag.name; }).join(" · #") %><% } %></p>
           </td>
           <td>
             <span class="badge badge--<%= post.status %>"><%= post.statusLabel %></span>

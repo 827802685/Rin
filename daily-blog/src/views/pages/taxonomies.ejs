@@ -1,0 +1,20 @@
+<section class="page-intro">
+  <h1><%= heading %></h1>
+  <p class="page-intro__meta">共 <%= items.length %> 个<%= heading %>（只统计已发布文章）</p>
+</section>
+
+<% if (items.length === 0) { %>
+  <p class="empty-state"><%= emptyHint %></p>
+<% } else { %>
+  <ul class="chip-list">
+    <% items.forEach(function (item) { %>
+      <li class="chip-list__item">
+        <a class="chip chip--large" href="<%= item.url %>"><%= item.name %></a>
+        <span class="chip-list__count"><%= item.postCount %> 篇</span>
+        <% if (item.description) { %>
+          <span class="chip-list__desc"><%= item.description %></span>
+        <% } %>
+      </li>
+    <% }); %>
+  </ul>
+<% } %>
