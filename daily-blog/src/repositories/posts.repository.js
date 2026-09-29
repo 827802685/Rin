@@ -1,5 +1,6 @@
 import { getDb } from "../db/index.js";
 import { safeRun } from "../db/errors.js";
+import { LIKE_ESCAPE_CHAR, buildContainsPattern } from "../lib/like.js";
 
 const COLUMNS = `
   id, slug, title, summary, content_md, status, author,
@@ -16,6 +17,72 @@ const PUBLISHED_ORDER = "ORDER BY COALESCE(p.published_at, p.created_at) DESC, p
 
 function placeholders(count) {
   return new Array(count).fill("?").join(", ");
+}
+
+/** 搜索条件里的 LIKE 一律显式声明转义字符，避免 `%` `_` 被当成通配符。 */
+const LIKE_ESCAPE = `ESCAPE '${LIKE_ESCAPE_CHAR}'`;
+
+/**
+ * 构造搜索 WHERE 子句与排序表达式。
+ *
+ * - 关键词之间是「且」：`博客 日志` 要求两个词都出现，减少一堆不相关的结果；
+ * - 单个词只要命中标题、摘要、正文任一列即可；
+ * - 相关度排序：命中标题的词越多越靠前，其次看摘要，最后按发布时间；
+ * - 分类/标签筛选用 EXISTS 子查询，避免与分页查询的自连接产生重复行。
+ *
+ * 所有用户输入都走命名参数绑定，SQL 片段只由固定字符串拼成，不拼接用户数据。
+ */
+function buildSearchClause({ terms = [], categorySlug = null, tagSlug = null } = {}) {
+  const params = {};
+  const conditions = ["p.status = 'published'"];
+
+  if (terms.length > 0) {
+    const termConditions = terms.map((term, index) => {
+      const key = `term${index}`;
+      params[key] = buildContainsPattern(term);
+      return (
+        `(p.title LIKE @${key} ${LIKE_ESCAPE}` +
+        ` OR COALESCE(p.summary, '') LIKE @${key} ${LIKE_ESCAPE}` +
+        ` OR p.content_md LIKE @${key} ${LIKE_ESCAPE})`
+      );
+    });
+    conditions.push(`(${termConditions.join(" AND ")})`);
+  }
+
+  if (categorySlug) {
+    params.categorySlug = categorySlug;
+    conditions.push(
+      `EXISTS (SELECT 1 FROM post_categories pc
+               JOIN categories c ON c.id = pc.category_id
+               WHERE pc.post_id = p.id AND c.slug = @categorySlug)`,
+    );
+  }
+
+  if (tagSlug) {
+    params.tagSlug = tagSlug;
+    conditions.push(
+      `EXISTS (SELECT 1 FROM post_tags pt
+               JOIN tags t ON t.id = pt.tag_id
+               WHERE pt.post_id = p.id AND t.slug = @tagSlug)`,
+    );
+  }
+
+  let orderSql = PUBLISHED_ORDER;
+  if (terms.length > 0) {
+    const titleHits = terms
+      .map((_, index) => `CASE WHEN p.title LIKE @term${index} ${LIKE_ESCAPE} THEN 1 ELSE 0 END`)
+      .join(" + ");
+    const summaryHits = terms
+      .map(
+        (_, index) =>
+          `CASE WHEN COALESCE(p.summary, '') LIKE @term${index} ${LIKE_ESCAPE} THEN 1 ELSE 0 END`,
+      )
+      .join(" + ");
+    orderSql = `ORDER BY (${titleHits}) DESC, (${summaryHits}) DESC,
+                COALESCE(p.published_at, p.created_at) DESC, p.id DESC`;
+  }
+
+  return { whereSql: conditions.join(" AND "), params, orderSql };
 }
 
 /**
@@ -320,5 +387,33 @@ export const postsRepository = {
         .prepare("INSERT OR IGNORE INTO post_tags (post_id, tag_id) VALUES (?, ?)")
         .run(postId, tagId).changes,
     );
+  },
+
+  // ---------- Day 4：关键词搜索 ----------
+
+  /** 搜索命中的已发布文章数。 */
+  countPublishedBySearch(criteria) {
+    return safeRun("countPublishedBySearch", () => {
+      const { whereSql, params } = buildSearchClause(criteria);
+      return getDb()
+        .prepare(`SELECT COUNT(*) AS total FROM posts p WHERE ${whereSql}`)
+        .get(params).total;
+    });
+  },
+
+  /** 搜索命中的已发布文章分页，按相关度（标题命中数 → 摘要命中数 → 时间）排序。 */
+  findPublishedPageBySearch({ limit, offset, ...criteria }) {
+    return safeRun("findPublishedPageBySearch", () => {
+      const { whereSql, params, orderSql } = buildSearchClause(criteria);
+      return getDb()
+        .prepare(
+          `SELECT ${COLUMNS_ALIASED}
+           FROM posts p
+           WHERE ${whereSql}
+           ${orderSql}
+           LIMIT @limit OFFSET @offset`,
+        )
+        .all({ ...params, limit, offset });
+    });
   },
 };

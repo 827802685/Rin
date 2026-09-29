@@ -91,6 +91,13 @@ if (sitePageSize <= 0 || sitePageSize > 100) {
   throw new Error(`配置项 SITE_PAGE_SIZE 必须在 1-100 之间，当前值：${sitePageSize}`);
 }
 
+// 搜索关键词长度上限：LIKE '%关键词%' 无法走索引，超长关键词只会白白拖慢查询，
+// 因此在入口处就拦掉，而不是让数据库去扫一个大 pattern。
+const searchMaxLength = readInt("SITE_SEARCH_MAX_LENGTH", 64);
+if (searchMaxLength < 8 || searchMaxLength > 200) {
+  throw new Error(`配置项 SITE_SEARCH_MAX_LENGTH 必须在 8-200 之间，当前值：${searchMaxLength}`);
+}
+
 export const config = Object.freeze({
   env,
   port,
@@ -102,6 +109,7 @@ export const config = Object.freeze({
     author: readString("SITE_AUTHOR", "admin"),
     pageSize: sitePageSize,
     maxTagsPerPost,
+    searchMaxLength,
   }),
   admin: Object.freeze({
     username: adminUsername,

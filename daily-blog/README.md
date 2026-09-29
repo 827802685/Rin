@@ -74,6 +74,21 @@ npm test             # 运行全部测试（node:test + supertest）
 | `GET /tags` | 标签总览 |
 | `GET /tags/:slug` | 该标签下已发布文章（支持 `?page=`） |
 
+## 搜索
+
+- `/search` 是搜索页：一个输入框 + 分类/标签两个筛选下拉，可组合使用；结果里的关键词用 `<mark>` 高亮。
+- `/api/search` 是同功能的 JSON 接口，与页面共用同一套服务层实现。
+- 匹配范围是**标题、摘要、正文**；**多个关键词用空格分隔，需要同时命中**（`博客 日志` 会同时要求两个词出现）。
+- 结果按相关度排序：标题里命中越多越靠前，其次看摘要，最后按发布时间。
+- 关键词里的 `%` `_` 按字面量处理（不会被当成 SQL 通配符）；**草稿永远不会出现在搜索结果里**。
+- 空结果会给提示与「按分类 / 标签浏览」入口；筛选用的分类/标签不存在时返回 404。
+- 关键词超长（默认 64 字，可配）返回 400。
+
+| 端点 | 说明 |
+| --- | --- |
+| `GET /search` | 搜索页，参数 `?q=`（关键词）、`?page=`、`?category=`、`?tag=` |
+| `GET /api/search` | 搜索接口，返回 JSON（含 `titleHtml` / `excerptHtml` 高亮片段） |
+
 ## 目录结构
 
 ```text
@@ -88,7 +103,7 @@ daily-blog/
 │   ├── logger.js          # 结构化 JSON 日志（带 requestId）
 │   ├── errors.js          # 类型化错误体系
 │   ├── db/                # 数据库连接、迁移执行、事务助手、示例数据
-│   ├── lib/               # 通用小工具（Cookie 读写、slug 生成）
+│   ├── lib/               # 通用小工具（Cookie 读写、slug 生成、LIKE 转义、搜索高亮）
 │   ├── repositories/      # 数据访问层（只写 SQL）
 │   ├── services/          # 业务规则层（不依赖 HTTP 对象）
 │   ├── validation/        # 请求表单校验（zod）
@@ -112,6 +127,7 @@ daily-blog/
 | `SITE_AUTHOR` | `admin` | 默认作者 |
 | `SITE_PAGE_SIZE` | `10` | 列表每页文章数（1-100，首页 / 分类页 / 标签页共用） |
 | `SITE_MAX_TAGS_PER_POST` | `8` | 一篇文章最多可设置的标签数（1-50） |
+| `SITE_SEARCH_MAX_LENGTH` | `64` | 搜索关键词长度上限（8-200），超出返回 400 |
 | `ADMIN_USERNAME` | `admin` | 管理员用户名，3-32 位字母/数字/`_.-` |
 | `ADMIN_PASSWORD` | 空 | 管理员口令，**至少 8 位**；留空则后台登录关闭 |
 | `SESSION_COOKIE_NAME` | `daily_blog_admin` | 会话 Cookie 名 |

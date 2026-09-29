@@ -37,15 +37,20 @@ export function renderMarkdown(markdown) {
   });
 }
 
-/** 纯文本摘要：去掉 Markdown 标记后截断。 */
-export function buildExcerpt(markdown, maxLength = 120) {
-  const text = (markdown ?? "")
+/** 把 Markdown 压成纯文本：去掉代码块、图片、链接语法与标记符号。 */
+export function markdownToPlainText(markdown) {
+  return (markdown ?? "")
     .replace(/```[\s\S]*?```/g, " ")
     .replace(/!\[[^\]]*\]\([^)]*\)/g, " ")
     .replace(/\[([^\]]*)\]\([^)]*\)/g, "$1")
     .replace(/[#>*_`~\-]+/g, " ")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+/** 纯文本摘要：去掉 Markdown 标记后截断。 */
+export function buildExcerpt(markdown, maxLength = 120) {
+  const text = markdownToPlainText(markdown);
   if (text.length <= maxLength) {
     return text;
   }
@@ -63,7 +68,10 @@ export function slugifyTitle(title, maxLength = 80) {
   return slugifyText(title, maxLength);
 }
 
-function decorate(row, { withContent = false, category = null, tags = [] } = {}) {
+function decorate(
+  row,
+  { withContent = false, withContentText = false, category = null, tags = [] } = {},
+) {
   const html = renderMarkdown(row.content_md);
   return {
     id: row.id,
@@ -82,6 +90,8 @@ function decorate(row, { withContent = false, category = null, tags = [] } = {})
     tags,
     contentHtml: withContent ? html : undefined,
     contentMd: withContent ? row.content_md : undefined,
+    // 搜索结果需要在正文片段里定位关键词，但不值得为此渲染整篇 HTML
+    contentText: withContentText ? markdownToPlainText(row.content_md) : undefined,
     // 后台编辑页需要「原样」的摘要，避免把自动生成的摘要回填进表单后再存库
     summaryRaw: withContent ? row.summary : undefined,
   };
@@ -120,10 +130,10 @@ function loadTaxonomy(postId) {
 }
 
 /**
- * 前台列表页通用分页：首页、分类页、标签页共用同一套页码归一化与计数逻辑，
- * 保证三处行为完全一致（超范围页码回落到最后一页、每页条数上下限一致）。
+ * 前台列表页通用分页：首页、分类页、标签页、搜索页共用同一套页码归一化与计数逻辑，
+ * 保证各处行为完全一致（超范围页码回落到最后一页、每页条数上下限一致）。
  */
-function paginatePublished(page, pageSize, { count, fetchPage }) {
+export function paginatePublished(page, pageSize, { count, fetchPage, decorateOptions = {} }) {
   const safePageSize = Math.min(Math.max(Number.parseInt(pageSize, 10) || 10, 1), 50);
   const safePage = Math.max(Number.parseInt(page, 10) || 1, 1);
   const total = count();
@@ -135,6 +145,7 @@ function paginatePublished(page, pageSize, { count, fetchPage }) {
   return {
     items: rows.map((row) =>
       decorate(row, {
+        ...decorateOptions,
         category: categoryByPost.get(row.id) ?? null,
         tags: tagsByPost.get(row.id) ?? [],
       }),

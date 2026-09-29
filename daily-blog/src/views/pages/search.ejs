@@ -1,0 +1,71 @@
+<section class="page-intro">
+  <h1>搜索</h1>
+  <p class="page-intro__meta">
+    <% if (!submitted) { %>
+      按标题、摘要与正文搜索已发布文章
+    <% } else { %>
+      关键词「<%= query %>」共命中 <%= pagination.total %> 篇已发布文章
+    <% } %>
+  </p>
+</section>
+
+<%- include("../partials/search-form.ejs") %>
+
+<% if (!submitted) { %>
+  <p class="empty-state">
+    输入关键词开始搜索。多个关键词用空格分隔，需要同时命中才会出现在结果里。
+  </p>
+<% } else if (posts.length === 0) { %>
+  <div class="empty-state">
+    <p class="empty-state__title">没有找到与「<%= query %>」相关的文章。</p>
+    <p class="search-hint">
+      试试更短或更常见的关键词；也可以按
+      <a href="/categories">分类</a> 或 <a href="/tags">标签</a> 浏览全部文章。
+    </p>
+  </div>
+<% } else { %>
+  <ul class="post-list">
+    <% posts.forEach(function (post) { %>
+      <li class="post-card">
+        <h2 class="post-card__title">
+          <a href="/posts/<%= post.slug %>"><%- post.titleHtml %></a>
+        </h2>
+        <p class="post-card__meta">
+          <span><%= post.publishedAt %></span>
+          <span>·</span>
+          <span><%= post.author %></span>
+          <span>·</span>
+          <span>约 <%= post.readingMinutes %> 分钟</span>
+        </p>
+        <p class="post-card__summary"><%- post.excerptHtml %></p>
+        <% if (post.category || post.tags.length > 0) { %>
+          <p class="post-card__taxonomy">
+            <% if (post.category) { %>
+              <a class="chip chip--category" href="/categories/<%= encodeURIComponent(post.category.slug) %>"><%= post.category.name %></a>
+            <% } %>
+            <% post.tags.forEach(function (tag) { %>
+              <a class="chip" href="/tags/<%= encodeURIComponent(tag.slug) %>"><%= tag.name %></a>
+            <% }); %>
+          </p>
+        <% } %>
+      </li>
+    <% }); %>
+  </ul>
+
+  <nav class="pagination">
+    <% const querySuffix = listQuery ? listQuery + "&" : ""; %>
+    <% if (pagination.hasPrev) { %>
+      <a class="pagination__link" href="/search?<%= querySuffix %>page=<%= pagination.page - 1 %>">上一页</a>
+    <% } %>
+    <span class="pagination__current">第 <%= pagination.page %> / <%= pagination.totalPages %> 页</span>
+    <% if (pagination.hasNext) { %>
+      <a class="pagination__link" href="/search?<%= querySuffix %>page=<%= pagination.page + 1 %>">下一页</a>
+    <% } %>
+  </nav>
+<% } %>
+
+<p class="post__back">
+  <a href="/">返回首页</a>
+  <% if (category) { %> · <a href="/categories/<%= encodeURIComponent(category.slug) %>">分类：<%= category.name %></a><% } %>
+  <% if (tag) { %> · <a href="/tags/<%= encodeURIComponent(tag.slug) %>">标签：<%= tag.name %></a><% } %>
+</p>

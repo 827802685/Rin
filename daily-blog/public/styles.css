@@ -712,3 +712,89 @@ main.container {
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+/* ---------- Day 4：搜索 ---------- */
+
+.search-form {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  padding: 16px 18px;
+  margin-bottom: 22px;
+}
+
+.search-form__row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.search-form__input {
+  flex: 1 1 auto;
+}
+
+.search-form__row .button {
+  flex: 0 0 auto;
+  border: 0;
+  font: inherit;
+  cursor: pointer;
+}
+
+.search-form__filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px;
+  margin-top: 12px;
+  font-size: 13px;
+  color: var(--color-text-muted);
+}
+
+.search-form__filter {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.search-form__select {
+  width: auto;
+  padding: 5px 10px;
+  font-size: 14px;
+}
+
+.search-form__reset {
+  font-size: 13px;
+}
+
+.search-hint {
+  margin: 8px 0 0;
+  color: var(--color-text-muted);
+  font-size: 14px;
+}
+
+.empty-state__title {
+  margin: 0;
+  font-size: 18px;
+}
+
+/* 搜索结果高亮：命中关键词的片段 */
+mark {
+  background: #fff3bf;
+  color: inherit;
+  padding: 0 2px;
+  border-radius: 3px;
+}
+
+.post__back a {
+  color: var(--color-accent);
+}
+
+@media (max-width: 640px) {
+  .search-form__row {
+    flex-wrap: wrap;
+  }
+
+  .search-form__input {
+    flex: 1 1 100%;
+  }
+}
