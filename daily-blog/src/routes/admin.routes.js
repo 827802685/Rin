@@ -2,6 +2,7 @@ import express from "express";
 import { config } from "../config.js";
 import { UnauthorizedError, isAppError } from "../errors.js";
 import { POST_STATUSES, postsService } from "../services/posts.service.js";
+import { COMMENT_STATUSES, commentsService } from "../services/comments.service.js";
 import { taxonomyService } from "../services/taxonomy.service.js";
 import { authService } from "../services/auth.service.js";
 import { parsePostInput } from "../validation/post-input.js";
@@ -21,6 +22,9 @@ const router = express.Router();
 /** 后台列表每页条数：后台需要一屏看到更多，因此独立于前台 pageSize。 */
 const ADMIN_PAGE_SIZE = 20;
 
+/** 评论审核列表每页条数：评论正文较长，一屏不宜过多。 */
+const ADMIN_COMMENT_PAGE_SIZE = 15;
+
 const FLASH_MESSAGES = Object.freeze({
   created: "文章已创建",
   updated: "文章已保存",
@@ -33,6 +37,9 @@ const FLASH_MESSAGES = Object.freeze({
   "tag-created": "标签已创建",
   "tag-updated": "标签已更新",
   "tag-deleted": "标签已删除",
+  "comment-approved": "评论已通过",
+  "comment-rejected": "评论已拒绝",
+  "comment-deleted": "评论已删除",
 });
 
 function emptyFormValues() {
@@ -153,6 +160,12 @@ function readStatusFilter(req) {
   return POST_STATUSES.includes(raw) ? raw : null;
 }
 
+/** 评论审核列表的状态筛选。 */
+function readCommentStatusFilter(req) {
+  const raw = req.body?.filter || req.query?.status;
+  return COMMENT_STATUSES.includes(raw) ? raw : null;
+}
+
 // ---------- 登录 / 登出 ----------
 
 router.get(
@@ -238,6 +251,8 @@ router.get(
       title: "后台管理",
       wide: true,
       ...data,
+      // 待审评论数用于后台入口角标，让审核入口不会被忽略。
+      commentCounts: commentsService.countByStatus(),
       adminUser: req.admin,
       flash: FLASH_MESSAGES[req.query?.flash] ?? null,
       flashType: req.query?.flash === "deleted" ? "warn" : "info",
@@ -401,6 +416,74 @@ router.post(
     kind: "tag",
     remove: (id) => taxonomyService.removeTag(id),
     flashKey: "tag-deleted",
+  }),
+);
+
+// ---------- Day 5：评论审核 ----------
+
+function commentRedirect(res, flash, filter = null) {
+  const params = new URLSearchParams();
+  if (flash) {
+    params.set("flash", flash);
+  }
+  if (filter) {
+    params.set("status", filter);
+  }
+  const query = params.toString();
+  res.redirect(303, query ? `/admin/comments?${query}` : "/admin/comments");
+}
+
+/** 评论审核列表：默认把「待审」排在最前，支持按状态筛选与分页。 */
+router.get(
+  "/admin/comments",
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const statusFilter = readCommentStatusFilter(req);
+    const data = commentsService.listForAdmin({
+      page: req.query?.page,
+      pageSize: ADMIN_COMMENT_PAGE_SIZE,
+      status: statusFilter,
+    });
+
+    await renderPage(res, "pages/admin/comments.ejs", {
+      title: "评论审核",
+      wide: true,
+      ...data,
+      flash: FLASH_MESSAGES[req.query?.flash] ?? null,
+      flashType:
+        req.query?.flash === "comment-deleted" || req.query?.flash === "comment-rejected"
+          ? "warn"
+          : "info",
+    });
+  }),
+);
+
+/** 通过 / 拒绝：状态只能在这两者之间切换，改回「待审」会被服务层拒绝。 */
+router.post(
+  "/admin/comments/:id/status",
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const comment = commentsService.moderate(req.params.id, req.body?.status, req.admin?.id ?? null);
+    req.log.info("admin.comment.moderated", {
+      id: comment.id,
+      status: comment.status,
+      postId: comment.postId,
+    });
+    commentRedirect(
+      res,
+      comment.status === "approved" ? "comment-approved" : "comment-rejected",
+      readCommentStatusFilter(req),
+    );
+  }),
+);
+
+router.post(
+  "/admin/comments/:id/delete",
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const result = commentsService.remove(req.params.id);
+    req.log.info("admin.comment.deleted", { id: result.id });
+    commentRedirect(res, "comment-deleted", readCommentStatusFilter(req));
   }),
 );
 

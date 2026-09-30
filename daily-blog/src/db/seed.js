@@ -96,6 +96,82 @@ const SEED_LINKS = [
 ];
 
 /**
+ * 示例评论（Day 5）：覆盖待审、已通过、已拒绝三种状态，
+ * 其中一条含 4 个外链，用来演示「外链过多」的拒绝理由。
+ */
+const SEED_COMMENTS = [
+  {
+    postSlug: "hello-daily-blog",
+    authorName: "路过的读者",
+    authorEmail: "",
+    content: "第一天就能跑起来，节奏很舒服，期待后面的评论功能。",
+    status: "approved",
+    daysAgo: 0,
+  },
+  {
+    postSlug: "hello-daily-blog",
+    authorName: "小明",
+    authorEmail: "ming@example.com",
+    content: "请问评论提交之后是立刻可见的吗？",
+    status: "pending",
+    daysAgo: 0,
+  },
+  {
+    postSlug: "why-daily-iteration",
+    authorName: "Ana",
+    authorEmail: "ana@example.com",
+    content: "「每天结束时必须有一个能运行的版本」这个约束很实用，避免了半成品分支。",
+    status: "approved",
+    daysAgo: 1,
+  },
+  {
+    postSlug: "engineering-baseline",
+    authorName: "promo-bot",
+    authorEmail: "",
+    content:
+      "低价建站推广 http://example.com/a http://example.com/b http://example.com/c http://example.com/d",
+    status: "rejected",
+    daysAgo: 1,
+  },
+];
+
+/**
+ * 写入示例评论。
+ * 幂等：以「文章 + 昵称 + 内容」判定是否已存在，不覆盖人工审核结果。
+ */
+function seedComments(db) {
+  const findPost = db.prepare("SELECT id FROM posts WHERE slug = ?");
+  const exists = db.prepare(
+    `SELECT 1 AS ok FROM comments
+     WHERE post_id = ? AND author_name = ? AND content = ?`,
+  );
+  const insert = db.prepare(
+    `INSERT INTO comments
+       (post_id, author_name, author_email, author_url, content, status, ip_hash, user_agent, created_at)
+     VALUES (@postId, @authorName, @authorEmail, '', @content, @status, 'seed', 'seed',
+             datetime('now', @offset))`,
+  );
+
+  const run = db.transaction(() => {
+    let inserted = 0;
+    for (const comment of SEED_COMMENTS) {
+      const post = findPost.get(comment.postSlug);
+      if (!post) {
+        continue;
+      }
+      if (exists.get(post.id, comment.authorName, comment.content)) {
+        continue;
+      }
+      insert.run({ ...comment, postId: post.id, offset: `-${comment.daysAgo} days` });
+      inserted += 1;
+    }
+    return inserted;
+  });
+
+  return run();
+}
+
+/**
  * 写入示例分类、标签并关联到示例文章。
  * 幂等且不覆盖人工改动：已存在的分类/标签不重建，已有分类的文章不会被重新指派。
  */
@@ -173,6 +249,7 @@ export function seed(db = getDb()) {
 
   // 分类与标签的示例数据独立于文章：即使文章早已存在，重复执行也只是补齐缺失的关联。
   const taxonomy = seedTaxonomy(db);
+  const comments = seedComments(db);
 
-  return { inserted, skipped: existing, taxonomy };
+  return { inserted, skipped: existing, taxonomy, comments };
 }

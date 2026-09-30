@@ -2,6 +2,7 @@ import express from "express";
 import { postsService } from "../services/posts.service.js";
 import { taxonomyService } from "../services/taxonomy.service.js";
 import { renderPage } from "../views/render.js";
+import { renderPostPage } from "./comments.routes.js";
 import { asyncHandler } from "../middlewares/request-context.js";
 
 const router = express.Router();
@@ -93,15 +94,18 @@ router.get(
   }),
 );
 
-/** 文章详情页。 */
+/**
+ * 文章详情页（含评论区）。
+ * 渲染逻辑放在 comments.routes.js 的 renderPostPage，与「评论提交失败原地回填」共用一套。
+ */
 router.get(
   "/posts/:slug",
   asyncHandler(async (req, res) => {
     const post = postsService.getPublishedBySlug(req.params.slug);
-    await renderPage(res, "pages/post.ejs", {
-      title: post.title,
-      description: post.summary,
+    await renderPostPage(res, {
       post,
+      // 评论提交成功后跳回这里，给出「待审核」提示。
+      commentResult: req.query?.comment === "submitted" ? "submitted" : null,
     });
   }),
 );

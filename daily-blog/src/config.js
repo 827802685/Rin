@@ -98,6 +98,41 @@ if (searchMaxLength < 8 || searchMaxLength > 200) {
   throw new Error(`配置项 SITE_SEARCH_MAX_LENGTH 必须在 8-200 之间，当前值：${searchMaxLength}`);
 }
 
+// ---------- Day 5：评论与基础防灌水 ----------
+
+// 评论正文长度上下限：下限挡住「顶」「沙发」这类无意义灌水，上限挡住长篇复制粘贴。
+const commentMinLength = readInt("COMMENT_MIN_LENGTH", 2);
+if (commentMinLength < 1 || commentMinLength > 100) {
+  throw new Error(`配置项 COMMENT_MIN_LENGTH 必须在 1-100 之间，当前值：${commentMinLength}`);
+}
+const commentMaxLength = readInt("COMMENT_MAX_LENGTH", 1000);
+if (commentMaxLength < 20 || commentMaxLength > 5000) {
+  throw new Error(`配置项 COMMENT_MAX_LENGTH 必须在 20-5000 之间，当前值：${commentMaxLength}`);
+}
+if (commentMinLength >= commentMaxLength) {
+  throw new Error(
+    `配置项 COMMENT_MIN_LENGTH 必须小于 COMMENT_MAX_LENGTH，当前值：${commentMinLength} / ${commentMaxLength}`,
+  );
+}
+
+// 频率限制：同一来源（IP 摘要）在窗口期内的提交条数上限。
+const commentRateLimit = readInt("COMMENT_RATE_LIMIT", 3);
+if (commentRateLimit < 1 || commentRateLimit > 50) {
+  throw new Error(`配置项 COMMENT_RATE_LIMIT 必须在 1-50 之间，当前值：${commentRateLimit}`);
+}
+const commentRateWindowMinutes = readInt("COMMENT_RATE_WINDOW_MINUTES", 10);
+if (commentRateWindowMinutes < 1 || commentRateWindowMinutes > 1440) {
+  throw new Error(
+    `配置项 COMMENT_RATE_WINDOW_MINUTES 必须在 1-1440 之间，当前值：${commentRateWindowMinutes}`,
+  );
+}
+
+// 单条评论允许携带的外链数量，超出即视为推广垃圾（0 表示完全禁止外链）。
+const commentMaxLinks = readInt("COMMENT_MAX_LINKS", 3);
+if (commentMaxLinks < 0 || commentMaxLinks > 10) {
+  throw new Error(`配置项 COMMENT_MAX_LINKS 必须在 0-10 之间，当前值：${commentMaxLinks}`);
+}
+
 export const config = Object.freeze({
   env,
   port,
@@ -110,6 +145,13 @@ export const config = Object.freeze({
     pageSize: sitePageSize,
     maxTagsPerPost,
     searchMaxLength,
+  }),
+  comments: Object.freeze({
+    minLength: commentMinLength,
+    maxLength: commentMaxLength,
+    rateLimit: commentRateLimit,
+    rateWindowMinutes: commentRateWindowMinutes,
+    maxLinks: commentMaxLinks,
   }),
   admin: Object.freeze({
     username: adminUsername,

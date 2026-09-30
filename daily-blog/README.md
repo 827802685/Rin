@@ -33,6 +33,7 @@ npm test             # 运行全部测试（node:test + supertest）
 4. `/admin/taxonomy` 管理分类与标签：新建、重命名、调整 slug、删除，并显示各分类/标签的文章数。
 5. 编辑器支持 Markdown 实时预览（复用前台同一套渲染与清洗规则）与 `Ctrl / Cmd + S` 保存，
    并可选择分类、填写标签（标签不存在会自动创建）。
+6. `/admin/comments` 审核游客评论：通过、拒绝、删除，待审数量会显示在后台首页的入口上。
 
 草稿在前台完全不可见：首页列表与 `/posts/:slug` 详情页都只返回已发布文章。
 
@@ -52,8 +53,26 @@ npm test             # 运行全部测试（node:test + supertest）
 | `POST /admin/taxonomy/tags`、`POST /admin/taxonomy/tags/:id` | 新建 / 重命名标签 |
 | `POST /admin/taxonomy/tags/:id/delete` | 删除标签（同时解除与文章的关联，不删除文章） |
 | `POST /admin/api/preview` | 编辑页 Markdown 预览接口，返回清洗后的 HTML |
+| `GET /admin/comments` | 评论审核列表，支持 `?status=pending\|approved\|rejected` 与 `?page=` |
+| `POST /admin/comments/:id/status` | 通过 / 拒绝评论（`status=approved\|rejected`） |
+| `POST /admin/comments/:id/delete` | 删除评论 |
 
 后台页面未登录时跳转登录页并带 `?next=`；`/admin/api/*` 未登录返回 401 JSON。
+
+## 评论
+
+- 文章详情页底部可以匿名评论（昵称必填，邮箱与网址选填），提交后进入**待审**，
+  前台看不到；管理员在 `/admin/comments` 通过后才会公开显示。
+- 只有**已发布**文章能评论；草稿与不存在的文章提交评论返回 404。
+- 审核只有「通过 / 拒绝」两档，不允许改回待审；审核人与审核时间会记在评论上。
+- 基础防灌水：表单蜜罐字段（填了即判定为脚本，对外伪装成功但**不落库**）、
+  必填与字数校验、外链数量上限、同一来源在 `COMMENT_RATE_WINDOW_MINUTES` 分钟内
+  最多提交 `COMMENT_RATE_LIMIT` 条（超出 429）、窗口内重复内容（409）。
+- IP 不落库明文，只存加盐摘要用于限流。
+
+| 端点 | 说明 |
+| --- | --- |
+| `POST /posts/:slug/comments` | 游客提交评论，成功跳回 `?comment=submitted#comments` |
 
 ## 分类与标签
 
@@ -103,7 +122,7 @@ daily-blog/
 │   ├── logger.js          # 结构化 JSON 日志（带 requestId）
 │   ├── errors.js          # 类型化错误体系
 │   ├── db/                # 数据库连接、迁移执行、事务助手、示例数据
-│   ├── lib/               # 通用小工具（Cookie 读写、slug 生成、LIKE 转义、搜索高亮）
+│   ├── lib/               # 通用小工具（Cookie 读写、slug 生成、LIKE 转义、搜索高亮、IP 摘要、评论正文处理）
 │   ├── repositories/      # 数据访问层（只写 SQL）
 │   ├── services/          # 业务规则层（不依赖 HTTP 对象）
 │   ├── validation/        # 请求表单校验（zod）
@@ -128,6 +147,11 @@ daily-blog/
 | `SITE_PAGE_SIZE` | `10` | 列表每页文章数（1-100，首页 / 分类页 / 标签页共用） |
 | `SITE_MAX_TAGS_PER_POST` | `8` | 一篇文章最多可设置的标签数（1-50） |
 | `SITE_SEARCH_MAX_LENGTH` | `64` | 搜索关键词长度上限（8-200），超出返回 400 |
+| `COMMENT_MIN_LENGTH` | `2` | 评论正文长度下限（1-100） |
+| `COMMENT_MAX_LENGTH` | `1000` | 评论正文长度上限（20-5000） |
+| `COMMENT_RATE_LIMIT` | `3` | 同一来源在窗口期内最多提交的评论数（1-50），超出 429 |
+| `COMMENT_RATE_WINDOW_MINUTES` | `10` | 频率限制窗口（1-1440 分钟） |
+| `COMMENT_MAX_LINKS` | `3` | 单条评论允许的外链数（0-10），超出 400 |
 | `ADMIN_USERNAME` | `admin` | 管理员用户名，3-32 位字母/数字/`_.-` |
 | `ADMIN_PASSWORD` | 空 | 管理员口令，**至少 8 位**；留空则后台登录关闭 |
 | `SESSION_COOKIE_NAME` | `daily_blog_admin` | 会话 Cookie 名 |

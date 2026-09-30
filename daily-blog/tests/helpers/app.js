@@ -15,6 +15,9 @@ process.env.LOG_LEVEL = "error";
 process.env.ADMIN_USERNAME = "admin";
 process.env.ADMIN_PASSWORD = "test-password-123";
 process.env.SESSION_TTL_HOURS = "2";
+// 评论的频率限制默认 3 条 / 10 分钟，冒烟型用例会连续提交多条，这里放宽到不影响功能验证。
+// 频率限制本身的用例在 tests/comment-antispam.test.js 中用独立进程 + 独立配置覆盖。
+process.env.COMMENT_RATE_LIMIT = "50";
 
 // 环境变量必须在导入配置模块之前设置，因此使用动态 import。
 const { createApp } = await import("../../src/app.js");

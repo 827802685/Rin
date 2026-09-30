@@ -37,6 +37,13 @@ export class ForbiddenError extends AppError {
   }
 }
 
+/** 提交过于频繁（防灌水的频率限制命中）。 */
+export class TooManyRequestsError extends AppError {
+  constructor(message = "提交过于频繁，请稍后再试", details = null) {
+    super(message, { statusCode: 429, code: "rate_limited", details });
+  }
+}
+
 export class ConflictError extends AppError {
   constructor(message = "资源冲突", details = null) {
     super(message, { statusCode: 409, code: "conflict", details });

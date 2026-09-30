@@ -10,7 +10,7 @@
 | Day 2 | 后台管理与文章编辑 | P0 | 管理员登录、Markdown 编辑、新建/编辑/删除、草稿与发布 | ✅ 已完成 |
 | Day 3 | 分类与标签 | P1 | 分类/标签数据模型、文章归类、分类页与标签页 | ✅ 已完成 |
 | Day 4 | 搜索 | P1 | 关键词搜索页、搜索接口、结果高亮、空结果提示 | ✅ 已完成 |
-| Day 5 | 评论 | P2 | 游客评论提交、审核状态、后台审核、基础防灌水 | ⬜ 待办 |
+| Day 5 | 评论 | P2 | 游客评论提交、审核状态、后台审核、基础防灌水 | ✅ 已完成 |
 | Day 6 | 站点体验 | P2 | 归档页、RSS、sitemap、SEO meta、站点配置页 | ⬜ 待办 |
 | Day 7 | 交付加固 | P1 | 限流、安全头、备份脚本、完整文档与测试补齐 | ⬜ 待办 |
 
@@ -340,3 +340,117 @@ SQLite FTS5 + `trigram` 分词（对中文子串搜索友好），但会引入�
 
 评论：游客提交评论、审核状态（待审 / 通过 / 拒绝）、后台审核列表，
 以及基础防灌水（提交频率限制、字数与必填校验、蜜罐字段）。
+
+---
+
+## Day 5（2026-09-30）· 评论
+
+### 本次新增功能
+
+**数据模型（`migrations/004_comments.sql`）**
+
+- 新增 `comments` 表：`post_id`（级联文章）、昵称 / 邮箱 / 网址、正文、状态、来源摘要、审核人与审核时间
+- `status` 用 `CHECK (status IN ('pending','approved','rejected'))` 在**数据库层**兜底，
+  即使服务层被绕过也写不出非法状态
+- 不存明文 IP：只存 SHA-256 加盐摘要 `ip_hash`，够做「同一来源的频率限制」，不落库可反查的个人信息
+- 文章删除连带清理评论（`ON DELETE CASCADE`）；管理员账号删除只置空 `moderated_by`（`SET NULL`），
+  历史审核记录不丢
+- 三个索引分别服务于：前台按文章取已通过评论、后台按状态筛选、防灌水按来源统计
+
+**前台**
+
+- 文章详情页底部新增评论区：已通过评论列表（昵称可带外链、时间、正文保留换行）+ 提交表单
+- 首页卡片与详情页 meta 显示「N 条评论」，只统计**已通过**的评论
+- 提交成功后跳回 `?comment=submitted#comments` 并提示「通过审核后会显示在这里」；
+  校验失败则**原地渲染详情页**并保留已填内容（评论表单在正文下方，跳走会丢输入）
+- 评论正文不做 Markdown，走 EJS 的 `<%= %>` 转义，`<script>` 只会显示成文本
+
+**后台审核**
+
+- 新增 `/admin/comments`：待审排在最前，支持 `?status=pending|approved|rejected` 筛选与分页，
+  显示各状态计数、所属文章链接、来源标识与审核人
+- 一键「通过 / 拒绝」，以及带确认的删除；操作后回到列表并保留当前筛选条件
+- 后台首页新增「评论审核（N 待审）」入口角标，待审不会被忽略
+- 审核写入 `moderated_at` 与 `moderated_by`；**不允许改回「待审」**（避免列表状态漂移）
+
+**业务规则**
+
+- 新评论一律是 `pending`，前台完全不可见；只有通过审核才展示（草稿、已拒绝同理不展示）
+- 只有**已发布**文章能评论：草稿与不存在的文章提交评论返回 404
+
+**基础防灌水（四道关卡，按成本从低到高）**
+
+1. **蜜罐字段**：表单里有一个 CSS 隐藏、对屏幕阅读器不可见的 `homepage` 输入框，
+   真人不会填，填了即判定为脚本。命中时**对外伪装成成功**（303 + 成功提示）但**不落库**，
+   让脚本以为得手而不再换策略重试
+2. **必填与字数校验**：昵称必填（≤40），邮箱可选但必须合法，网址必须以 `http(s)://` 开头；
+   正文长度由 `COMMENT_MIN_LENGTH` / `COMMENT_MAX_LENGTH` 约束
+3. **外链数量上限**：正文里的 `http(s)` 链接超过 `COMMENT_MAX_LINKS` 视为推广垃圾，返回 400
+4. **频率限制 + 重复内容**：同一来源（IP 摘要）在 `COMMENT_RATE_WINDOW_MINUTES` 窗口内
+   最多提交 `COMMENT_RATE_LIMIT` 条，超出返回 **429**；窗口内重复提交完全相同的内容返回 **409**。
+   时间窗口由 SQLite 的 `datetime('now', '-10 minutes')` 计算，不混用 JS 时间格式；
+   限流按来源统计而非按文章，**换一篇文章也绕不过**
+
+### 主要文件
+
+| 文件 | 作用 |
+| --- | --- |
+| `migrations/004_comments.sql` | `comments` 表、CHECK 约束与三个索引 |
+| `src/config.js` | 新增 `COMMENT_MIN_LENGTH` / `COMMENT_MAX_LENGTH` / `COMMENT_RATE_LIMIT` / `COMMENT_RATE_WINDOW_MINUTES` / `COMMENT_MAX_LINKS` 集中校验（含 min < max 交叉校验） |
+| `src/errors.js` | 新增 `TooManyRequestsError`（429 / `rate_limited`） |
+| `src/lib/ip.js` | 来源 IP 的加盐 SHA-256 摘要，只用于限流 |
+| `src/lib/comment-text.js` | 正文换行归一化与外链计数 |
+| `src/repositories/comments.repository.js` | 评论 SQL：前台查询、批量计数、后台分页、审核、限流与重复检测 |
+| `src/services/comments.service.js` | 提交流程、四道防灌水规则、审核列表、通过/拒绝/删除 |
+| `src/validation/comment-input.js` | 评论表单 zod 校验，错误映射到具体表单项 |
+| `src/routes/comments.routes.js` | 游客提交路由 + `renderPostPage`（详情页 GET 与提交失败回填共用） |
+| `src/routes/site.routes.js` | 详情页改走 `renderPostPage` 并透传 `?comment=submitted` |
+| `src/routes/admin.routes.js` | `/admin/comments` 审核列表、通过/拒绝、删除；后台首页注入待审计数 |
+| `src/views/pages/post.ejs` | 评论区：列表 + 表单 + 蜜罐字段 |
+| `src/views/pages/admin/comments.ejs` | 后台审核列表 |
+| `src/views/pages/admin/dashboard.ejs`、`src/views/pages/home.ejs` | 待审入口角标；首页评论数 |
+| `src/services/posts.service.js`、`src/repositories/posts.repository.js` | 列表/详情挂载已通过评论数（批量查询，避免 N+1） |
+| `src/db/seed.js` | 示例评论：覆盖待审 / 已通过 / 已拒绝，含一条 4 外链的垃圾样本；幂等 |
+| `public/styles.css` | 评论区、评论表单、蜜罐隐藏、状态徽章、后台审核列表样式 |
+| `.env.example` | 5 个评论相关配置项的说明与默认值 |
+| `tests/comments.test.js`、`tests/admin-comments.test.js`、`tests/comment-antispam.test.js`、`tests/helpers/isolated-app.js` | 前台 12 + 后台 10 + 防灌水 5 个用例（新增 27 个）与独立进程/独立配置的测试脚手架 |
+
+不引入任何新的第三方依赖：IP 摘要用 `node:crypto`，正文处理与外链统计用正则，校验复用已有的 zod。
+
+### 验证结果
+
+- `npm run migrate` → `["001_init.sql","002_admin.sql","003_taxonomy.sql","004_comments.sql"]`，
+  重复执行不重跑（幂等）
+- `npm test` → **118 个用例全部通过**（Day 1 的 8 + Day 2 的 33 + Day 3 的 22 + Day 4 的 28 + Day 5 新增 27）
+- `npm start` 后 curl 冒烟 → **58 项检查全部通过**，覆盖：健康检查、首页/详情页回归、
+  已通过评论可见且待审/已拒绝不可见、评论数显示、提交成功 303 + 重定向 + 落库 + 待审不可见、
+  昵称/字数/邮箱/网址/外链五类校验、蜜罐伪成功且不落库、重复内容 409、频率限制 429、
+  未登录 302、错误口令 401、正确口令 303 + `HttpOnly; SameSite=Lax` Cookie、
+  审核页渲染与状态筛选、后台首页角标、通过（前台立即可见）、拒绝（前台不可见）、
+  改回待审 400、删除（条数减少）、登出后会话立即失效
+- 服务端结构化日志可串联全过程：`comment.submitted` → `comment.spam_rejected` →
+  `auth.login.succeeded` → `admin.comment.moderated` ×2 → `admin.comment.deleted`
+- 反向验证（变异测试，逐个破坏后确认用例真的会红，再恢复）：
+  ① 去掉前台评论查询的 `status = 'approved'` → 5 个用例失败（待审/已拒绝评论泄漏到前台）；
+  ② 去掉频率限制判断 → 2 个用例失败（超限不再 429）；
+  ③ 去掉蜜罐判定 → 1 个用例失败（脚本评论被写库）；恢复后 118/118 重新全绿
+- 实现过程中发现并修复的真实缺陷：表单里的蜜罐字段名是 `homepage`，
+  服务层却读 `input.honeypot`，导致蜜罐**完全失效**（评论被正常写库）。
+  是「蜜罐命中未落库」这条断言把它逼出来的——在路由层做了显式字段映射
+
+### 已知限制
+
+- 评论是**平铺列表，没有楼层回复**（无 `parent_id`），也没有点赞、编辑与邮件通知
+- 限流按 IP 摘要统计，同一 NAT / 代理出口下的正常用户会被一起限流；
+  且它记在进程内 SQLite 里，多实例部署时各实例独立计数（真正的限流归入 Day 7）
+- 时间窗口靠 SQLite 的 `datetime('now')`，重启服务不会清空额度（因为落在库里），
+  但改配置窗口需要重启才生效
+- 后台写操作仍只依赖 `SameSite=Lax` Cookie，**尚未加 CSRF token**；
+  评论提交接口也**没有图形验证码**，蜜罐只能挡住低级脚本（均归入 Day 7 加固）
+- 没有评论分页：单篇文章最多展示 200 条已通过评论（超出的不显示）
+- 邮箱与网址目前只做格式校验，**不做邮箱验证**，邮箱也不在前台展示（仅后台可见）
+- 拒绝评论不会通知提交者，也没有「拒绝原因」字段
+
+### 下一步（Day 6）
+
+站点体验：归档页（按年份/月份）、RSS、sitemap、SEO meta 与站点配置页。

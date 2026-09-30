@@ -18,6 +18,10 @@
           <span><%= post.author %></span>
           <span>·</span>
           <span>约 <%= post.readingMinutes %> 分钟</span>
+          <% if (post.commentCount > 0) { %>
+            <span>·</span>
+            <span><%= post.commentCount %> 条评论</span>
+          <% } %>
         </p>
         <p class="post-card__summary"><%= post.summary %></p>
         <% if (post.category || post.tags.length > 0) { %>

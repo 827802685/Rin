@@ -1,6 +1,7 @@
 import { marked } from "marked";
 import sanitizeHtml from "sanitize-html";
 import { postsRepository } from "../repositories/posts.repository.js";
+import { commentsRepository } from "../repositories/comments.repository.js";
 import { taxonomyService } from "./taxonomy.service.js";
 import { withTransaction } from "../db/transaction.js";
 import { slugifyText, timestampSlug } from "../lib/slug.js";
@@ -70,7 +71,13 @@ export function slugifyTitle(title, maxLength = 80) {
 
 function decorate(
   row,
-  { withContent = false, withContentText = false, category = null, tags = [] } = {},
+  {
+    withContent = false,
+    withContentText = false,
+    category = null,
+    tags = [],
+    commentCount = 0,
+  } = {},
 ) {
   const html = renderMarkdown(row.content_md);
   return {
@@ -88,6 +95,8 @@ function decorate(
     readingMinutes: estimateReadingMinutes(row.content_md),
     category,
     tags,
+    // 只统计已通过审核的评论，待审与已拒绝对前台不可见。
+    commentCount,
     contentHtml: withContent ? html : undefined,
     contentMd: withContent ? row.content_md : undefined,
     // 搜索结果需要在正文片段里定位关键词，但不值得为此渲染整篇 HTML
@@ -116,6 +125,15 @@ function attachTaxonomyRows(rows) {
   return { categoryByPost, tagsByPost };
 }
 
+/** 批量补齐列表页文章的已通过评论数，避免逐篇查询（N+1）。 */
+function attachCommentCounts(rows) {
+  const counts = new Map();
+  for (const row of commentsRepository.countApprovedByPostIds(rows.map((row) => row.id))) {
+    counts.set(row.post_id, row.total);
+  }
+  return counts;
+}
+
 /** 单篇文章的分类与标签。 */
 function loadTaxonomy(postId) {
   const [categoryRow] = postsRepository.findCategoriesByPostIds([postId]);
@@ -141,6 +159,7 @@ export function paginatePublished(page, pageSize, { count, fetchPage, decorateOp
   const currentPage = Math.min(safePage, totalPages);
   const rows = fetchPage({ limit: safePageSize, offset: (currentPage - 1) * safePageSize });
   const { categoryByPost, tagsByPost } = attachTaxonomyRows(rows);
+  const commentCounts = attachCommentCounts(rows);
 
   return {
     items: rows.map((row) =>
@@ -148,6 +167,7 @@ export function paginatePublished(page, pageSize, { count, fetchPage, decorateOp
         ...decorateOptions,
         category: categoryByPost.get(row.id) ?? null,
         tags: tagsByPost.get(row.id) ?? [],
+        commentCount: commentCounts.get(row.id) ?? 0,
       }),
     ),
     pagination: {
@@ -249,7 +269,12 @@ export const postsService = {
       throw new NotFoundError(`文章不存在：${slug}`);
     }
     const { category, tags } = loadTaxonomy(row.id);
-    return decorate(row, { withContent: true, category, tags });
+    return decorate(row, {
+      withContent: true,
+      category,
+      tags,
+      commentCount: commentsRepository.countApprovedByPostId(row.id),
+    });
   },
 
   // ---------- Day 3：按分类 / 标签浏览 ----------

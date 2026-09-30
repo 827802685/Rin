@@ -8,6 +8,8 @@ import { errorHandler } from "./middlewares/error-handler.js";
 import { healthRouter } from "./routes/health.routes.js";
 import { siteRouter } from "./routes/site.routes.js";
 import { searchRouter } from "./routes/search.routes.js";
+// 评论提交挂在 /posts/:slug/comments，先于 siteRouter 注册，避免被详情页路由抢先匹配。
+import { commentsRouter } from "./routes/comments.routes.js";
 import { adminRouter } from "./routes/admin.routes.js";
 
 /** 应用组装：中间件顺序为 请求上下文 → 请求体解析 → 静态资源 → 会话 → 路由 → 404 → 错误处理器。 */
@@ -28,6 +30,7 @@ export function createApp() {
 
   app.use(healthRouter);
   app.use(searchRouter);
+  app.use(commentsRouter);
   app.use(siteRouter);
   app.use(adminRouter);
 
