@@ -30,13 +30,13 @@ router.get(
     const params = parseSearchParams(req.query);
     const { items: posts, ...result } = searchService.search({
       ...params,
-      pageSize: req.app.locals.site.pageSize,
+      pageSize: res.locals.site.pageSize,
     });
 
     await renderPage(res, "pages/search.ejs", {
       title: result.query ? `搜索：${result.query}` : "搜索",
       description: result.query
-        ? `在「${req.app.locals.site.title}」中搜索「${result.query}」`
+        ? `在「${res.locals.site.title}」中搜索「${result.query}」`
         : "按标题、摘要与正文搜索站内文章",
       ...result,
       posts,
@@ -59,7 +59,7 @@ router.get(
     const params = parseSearchParams(req.query);
     const { query, submitted, category, tag, items, pagination } = searchService.search({
       ...params,
-      pageSize: req.app.locals.site.pageSize,
+      pageSize: res.locals.site.pageSize,
     });
 
     res.json({

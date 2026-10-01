@@ -11,7 +11,7 @@
 | Day 3 | 分类与标签 | P1 | 分类/标签数据模型、文章归类、分类页与标签页 | ✅ 已完成 |
 | Day 4 | 搜索 | P1 | 关键词搜索页、搜索接口、结果高亮、空结果提示 | ✅ 已完成 |
 | Day 5 | 评论 | P2 | 游客评论提交、审核状态、后台审核、基础防灌水 | ✅ 已完成 |
-| Day 6 | 站点体验 | P2 | 归档页、RSS、sitemap、SEO meta、站点配置页 | ⬜ 待办 |
+| Day 6 | 站点体验 | P2 | 归档页、RSS、sitemap、SEO meta、站点配置页 | ✅ 已完成 |
 | Day 7 | 交付加固 | P1 | 限流、安全头、备份脚本、完整文档与测试补齐 | ⬜ 待办 |
 
 排期原则：先保证「能读」（Day 1），再保证「能写」（Day 2），随后依次补组织方式（Day 3）、检索（Day 4）、互动（Day 5），最后做体验与加固（Day 6-7）。
@@ -454,3 +454,123 @@ SQLite FTS5 + `trigram` 分词（对中文子串搜索友好），但会引入�
 ### 下一步（Day 6）
 
 站点体验：归档页（按年份/月份）、RSS、sitemap、SEO meta 与站点配置页。
+
+---
+
+## Day 6（2026-10-02）· 站点体验
+
+### 本次新增功能
+
+**归档页**
+
+- 新增 `/archive`：全部**已发布**文章按「年 → 月」倒序折叠，年份可点进 `/archive/:year`
+- 单次查询 + 内存分组，不是按年份分别查库；也不渲染 Markdown（归档只展示标题与日期），
+  因此几千篇规模也不会拖慢页面
+- 年份不是 4 位数字或超出合理区间 → 400；该年份一篇都没有 → 404（与分类页/标签页口径一致，
+  而不是渲染一个空壳页面）
+- 草稿不进归档：归档是给读者看的「内容地图」，里面每一篇都应该是点开就能读的
+
+**订阅与站点地图（`migrations/005_site_settings.sql` 只服务于配置，归档与订阅不建新表）**
+
+- `/feed.xml` 输出 RSS 2.0：频道信息 + `atom:link` 自引用 + 每篇的稳定 `guid`（规范链接）、
+  RFC 822 的 `pubDate`、`dc:creator`、分类与标签写成 `<category>`
+- RSS 正文两种模式：`SITE_FEED_MODE=full` 时把渲染后的 HTML **转义**后放进 `<description>`，
+  默认只放摘要
+- `/sitemap.xml` 覆盖首页、归档总览、各年份、分类总览、各分类、标签总览、各标签与全部已发布文章；
+  **只写 `<loc>` 与 `<lastmod>`**——`changefreq` / `priority` 已被主流搜索引擎明确忽略，
+  写出来只会让文件变大并制造「改了会有用」的错觉
+- `/robots.txt` 屏蔽 `/admin` 与 `/search` 并给出 sitemap 地址；开启 `SITE_ROBOTS_NOINDEX` 后整站 `Disallow: /`
+- 三者都按请求实时生成（5 分钟共享缓存），发布/转草稿/删除后下一次抓取就是新的，不需要构建步骤
+- 标题里的 `&` `<` `>` `"` `'` 全部转义：一个未转义的 `&` 就能让整个订阅源变成坏 XML
+
+**SEO meta**
+
+- 每个页面输出 canonical、Open Graph（type / site_name / title / description / url / locale）、
+  Twitter card、`robots`；文章页额外输出 `article:published_time` / `author` / `section` / `tag`
+- canonical 默认取**去掉查询串**的当前路径：`?page=2` 规范化到第一页，避免同一份内容被当成多个地址收录
+- 全站 `<link rel="alternate" type="application/rss+xml">`，让阅读器与爬虫能发现订阅源
+- 绝对地址优先级：后台「站点地址」→ `SITE_BASE_URL` → 请求地址；
+  用请求推断时**严格校验 Host 头**（伪造的 Host 不会写进 canonical，避免把 SEO 权重送给别人的站点）
+
+**后台站点配置页 `/admin/settings`**
+
+- 可在线改：站点标题、描述、默认作者、站点地址、每页文章数、RSS 输出条数、RSS 正文方式、是否禁止收录
+- 保存后**立即生效，无需重启**；校验失败 400 并逐项保留用户输入
+- 提供「恢复默认配置」，并提示当前有多少项被自定义
+
+**配置落地方式（关键设计）**
+
+- `site_settings` 是**键值对**表，只存**被后台改过的项**；表里没有的键回落到 `config.js` 的环境变量取值
+- 因此：① 加配置项不必改表结构，不需要再来一个迁移文件；
+  ② 「恢复默认」就是删记录，不会留下「默认值改了但库里旧快照还在」的隐患；
+  ③ 环境变量与后台配置不会互相对不上（后台没动过的项永远跟环境变量走）
+- `SITE_MAX_TAGS_PER_POST` 与 `SITE_SEARCH_MAX_LENGTH` 属于运行期资源约束，**刻意不放进**后台配置页
+
+### 主要文件
+
+| 文件 | 作用 |
+| --- | --- |
+| `migrations/005_site_settings.sql` | `site_settings` 键值对表（键非空 CHECK，全部 IF NOT EXISTS） |
+| `src/repositories/settings.repository.js` | 配置项的读写 SQL（查询 / upsert / 删除 / 清空） |
+| `src/services/settings.service.js` | 默认值、覆盖合并、类型解析与白名单校验 |
+| `src/validation/settings-input.js` | 配置表单 zod 校验，字段定义与页面共用同一份 |
+| `src/middlewares/site-settings.js` | 每请求注入生效配置与 `absoluteUrl()` 拼接函数 |
+| `src/lib/base-url.js` | 站点绝对地址解析（含 Host 头校验，防 canonical 劫持） |
+| `src/lib/xml.js` | XML 五字符转义、SQLite 时间按 UTC 解析、RFC 822 / ISO 8601 输出 |
+| `src/services/archive.service.js` | 已发布文章按年/月分组，年份参数校验 |
+| `src/services/feed.service.js` | RSS 2.0、sitemap、robots.txt 的生成 |
+| `src/routes/archive.routes.js`、`src/routes/feed.routes.js` | `/archive`、`/archive/:year`、`/feed.xml`、`/sitemap.xml`、`/robots.txt` |
+| `src/routes/admin.routes.js` | `/admin/settings` 的查看、保存、恢复默认 |
+| `src/views/pages/archive.ejs`、`src/views/pages/admin/settings.ejs` | 归档页与站点配置页 |
+| `src/views/layout.ejs`、`partials/header.ejs`、`partials/footer.ejs` | SEO meta 区块；归档入口；RSS / 站点地图入口 |
+| `src/repositories/posts.repository.js`、`src/services/posts.service.js` | 归档查询、站点地图轻量清单 `listPublishedRefs`；`paginatePublished` 每页上限对齐 SITE_PAGE_SIZE 的 1-100 |
+| `src/config.js`、`.env.example` | 新增 `SITE_BASE_URL` / `SITE_FEED_SIZE` / `SITE_FEED_MODE` / `SITE_ROBOTS_NOINDEX` 集中校验 |
+| `public/styles.css` | 归档年/月分组、页脚链接、后台配置页样式 |
+| `tests/archive.test.js`、`tests/feed.test.js`、`tests/seo.test.js`、`tests/settings.test.js`、`tests/xml.test.js`、`tests/base-url.test.js`、`tests/helpers/archive-fixtures.js` | 归档 7 + 订阅 6 + SEO 5 + 配置 7 + 纯函数 8 = 新增 33 个用例 |
+
+不引入任何新的第三方依赖：RSS 与 sitemap 手写拼装（结构各自二十来行），
+XML 转义、日期格式、Host 校验全部用内置能力，表单校验复用已有的 zod。
+
+### 验证结果
+
+- `npm run migrate` → `["001_init.sql","002_admin.sql","003_taxonomy.sql","004_comments.sql","005_site_settings.sql"]`，
+  连续执行两次结果一致（幂等）
+- `npm test` → **151 个用例全部通过**（Day 1 的 8 + Day 2 的 33 + Day 3 的 22 + Day 4 的 28 + Day 5 的 27 + Day 6 新增 33）
+- `npm start` 后 curl 冒烟 → **67 项检查全部通过**，覆盖：
+  首页/文章页/健康检查回归、canonical 与 OG/article meta、分页不污染 canonical、
+  归档页按年按月分组与篇数、单年归档页、无文章年份 404、非法年份 400、
+  RSS 的 Content-Type / 频道信息 / `atom:link` / guid / RFC 822 时间 / 条目数、
+  sitemap 覆盖首页·归档·年份·分类·文章与 ISO 8601 的 lastmod、robots 屏蔽后台并给出 sitemap 地址、
+  未登录 302、错误口令 401、正确口令 303 + `HttpOnly; SameSite=Lax` Cookie、
+  配置页渲染、保存后标题/每页条数/noindex/RSS 全文/robots 立即生效、
+  标题为空 400 且回填输入、非法站点地址 400、配置站点地址后 canonical 与 RSS 同步、
+  恢复默认后全部还原，以及草稿联动：新建草稿不进归档/RSS/sitemap，发布后三处同时出现
+- 关键端点真实状态（PORT=3112）：`/` 200、`/posts/hello-daily-blog` 200、`/archive` 200、
+  `/archive/2026` 200、`/archive/1999` 404、`/archive/not-a-year` 400、`/feed.xml` 200、
+  `/sitemap.xml` 200、`/robots.txt` 200、`/admin/settings` 未登录 302 / 已登录 200、
+  `POST /admin/login` 错误口令 401、`POST /admin/settings` 成功 303 / 标题为空 400、
+  `POST /admin/settings/reset` 303、`/health` 200、`/ready` 200
+- 反向验证（变异测试，逐个破坏后确认用例真的会红，再恢复）：
+  ① 去掉归档查询的 `status = 'published'` → 3 个用例失败（草稿泄漏进归档）；
+  ② 去掉 RSS 标题的 `escapeXml` → 1 个用例失败（XML 被特殊字符破坏）；
+  ③ 把 layout 的 robots meta 写死成 `index, follow` → 1 个用例失败（noindex 开关失效）；
+  ④ 让 `resolveBaseUrl` 忽略已配置的站点地址 → 2 个用例失败（canonical 回落到请求地址）；恢复后 151/151 全绿
+- 实现过程中修正的自身错误：冒烟脚本用 curl 的 cookie jar 断言 `SameSite`，
+  但 curl 并不持久化该属性，导致误报 —— 改为直接断言响应头的 `Set-Cookie`
+
+### 已知限制
+
+- 归档只有「年 → 月」两级，**没有按月归档页**（`/archive/2026/10`），也没有按作者归档
+- RSS 只提供 RSS 2.0 一种格式，**没有 Atom 与 JSON Feed**；也没有按分类/标签的独立订阅源
+- sitemap 是单个文件，**超过 5 万条会超出协议上限**（真到那个量级才需要 sitemap index）
+- `SITE_FEED_SIZE` 上限 100，且摘要模式下的描述不含正文，阅读器里的可读性取决于客户端
+- 站点配置**不做多语言、不做时区**；`SITE_BASE_URL` 只支持单个地址，不支持多域名分别 canonical
+- 后台写操作仍只依赖 `SameSite=Lax` Cookie，**尚未加 CSRF token**；登录接口也**没有限流**（均归入 Day 7）
+- 每请求都会查一次 `site_settings`（几行的表），没有做进程内缓存；
+  将来若加高频配置项再考虑「写入时失效」的缓存策略
+- `robots.txt` 屏蔽后台只是卫生习惯，**不是安全手段**（恶意爬虫不遵守），Day 7 仍要做限流与安全头
+
+### 下一步（Day 7）
+
+交付加固：全局限流、安全响应头、备份与恢复脚本、测试数据清理，
+以及把完整文档与测试补齐到可交付状态。

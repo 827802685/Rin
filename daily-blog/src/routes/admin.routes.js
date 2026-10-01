@@ -5,8 +5,10 @@ import { POST_STATUSES, postsService } from "../services/posts.service.js";
 import { COMMENT_STATUSES, commentsService } from "../services/comments.service.js";
 import { taxonomyService } from "../services/taxonomy.service.js";
 import { authService } from "../services/auth.service.js";
+import { settingsService } from "../services/settings.service.js";
 import { parsePostInput } from "../validation/post-input.js";
 import { parseCategoryInput, parseTagInput } from "../validation/taxonomy-input.js";
+import { parseSettingsInput } from "../validation/settings-input.js";
 import { renderPage } from "../views/render.js";
 import { asyncHandler } from "../middlewares/request-context.js";
 import {
@@ -40,15 +42,17 @@ const FLASH_MESSAGES = Object.freeze({
   "comment-approved": "评论已通过",
   "comment-rejected": "评论已拒绝",
   "comment-deleted": "评论已删除",
+  "settings-saved": "站点配置已保存，已立即生效",
+  "settings-reset": "已恢复默认配置",
 });
 
-function emptyFormValues() {
+function emptyFormValues(author) {
   return {
     title: "",
     slug: "",
     summary: "",
     content: "",
-    author: config.site.author,
+    author: author || config.site.author,
     status: "draft",
     categoryId: "",
     tags: "",
@@ -139,6 +143,39 @@ async function renderTaxonomy(
     activeForm,
     notice,
     flash,
+  });
+}
+
+/**
+ * 后台「站点配置」页。
+ * 表单值一律来自「当前生效值」，而不是直接拿环境变量——否则后台保存过一次之后，
+ * 页面显示的是环境变量的旧值，用户会在不知情的情况下把配置改回去。
+ */
+function settingsFormValues(effective) {
+  return {
+    siteTitle: effective.title,
+    siteDescription: effective.description,
+    siteAuthor: effective.author,
+    siteUrl: effective.baseUrl,
+    pageSize: effective.pageSize,
+    feedSize: effective.feedSize,
+    feedMode: effective.feedMode,
+    robotsNoindex: effective.robotsNoindex,
+  };
+}
+
+async function renderSettings(
+  res,
+  { status = 200, values = null, errors = {}, notice = null, flash = null } = {},
+) {
+  await renderPage(res.status(status), "pages/admin/settings.ejs", {
+    title: "站点配置",
+    wide: true,
+    values: values ?? settingsFormValues(settingsService.getEffective()),
+    errors,
+    notice,
+    flash,
+    overriddenCount: Object.keys(settingsService.getOverrides()).length,
   });
 }
 
@@ -419,6 +456,48 @@ router.post(
   }),
 );
 
+// ---------- Day 6：站点配置 ----------
+
+router.get(
+  "/admin/settings",
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    await renderSettings(res, { flash: FLASH_MESSAGES[req.query?.flash] ?? null });
+  }),
+);
+
+router.post(
+  "/admin/settings",
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const parsed = parseSettingsInput(req.body);
+    if (!parsed.ok) {
+      await renderSettings(res, {
+        status: 400,
+        values: parsed.values,
+        errors: parsed.errors,
+        notice: "请修正表单中标记的问题后重新提交",
+      });
+      return;
+    }
+
+    settingsService.update(parsed.data);
+    req.log.info("admin.settings.updated", { keys: Object.keys(parsed.data).sort() });
+    res.redirect(303, "/admin/settings?flash=settings-saved");
+  }),
+);
+
+/** 恢复默认：清空覆盖值即可，不需要写回一份默认快照。 */
+router.post(
+  "/admin/settings/reset",
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    settingsService.reset();
+    req.log.info("admin.settings.reset");
+    res.redirect(303, "/admin/settings?flash=settings-reset");
+  }),
+);
+
 // ---------- Day 5：评论审核 ----------
 
 function commentRedirect(res, flash, filter = null) {
@@ -493,7 +572,8 @@ router.get(
   "/admin/posts/new",
   requireAdmin,
   asyncHandler(async (req, res) => {
-    await renderEditor(res, { mode: "create", values: emptyFormValues() });
+    // 默认作者取「当前生效配置」：后台改过站点配置后，新建文章应预填新作者。
+    await renderEditor(res, { mode: "create", values: emptyFormValues(res.locals.site?.author) });
   }),
 );
 

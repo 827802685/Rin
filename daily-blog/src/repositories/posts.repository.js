@@ -391,6 +391,43 @@ export const postsRepository = {
 
   // ---------- Day 4：关键词搜索 ----------
 
+  // ---------- Day 6：归档 ----------
+
+  /**
+   * 归档用的已发布文章：只取列表展示需要的列，正文不参与（避免为整站归档渲染 Markdown）。
+   * 时间口径与列表页一致：published_at 缺失时回落 created_at。
+   */
+  findPublishedArchiveRows() {
+    return safeRun("findPublishedArchiveRows", () =>
+      getDb()
+        .prepare(
+          `SELECT id, slug, title, author,
+                  COALESCE(published_at, created_at) AS published_at
+           FROM posts
+           WHERE status = 'published'
+           ORDER BY COALESCE(published_at, created_at) DESC, id DESC`,
+        )
+        .all(),
+    );
+  },
+
+  /**
+   * 站点地图用：全部已发布文章的 slug 与发布时间。
+   * 不取正文、不渲染 Markdown，因此不需要分页上限。
+   */
+  findPublishedForSitemap() {
+    return safeRun("findPublishedForSitemap", () =>
+      getDb()
+        .prepare(
+          `SELECT slug, COALESCE(published_at, created_at) AS published_at
+           FROM posts
+           WHERE status = 'published'
+           ORDER BY COALESCE(published_at, created_at) DESC, id DESC`,
+        )
+        .all(),
+    );
+  },
+
   /** 搜索命中的已发布文章数。 */
   countPublishedBySearch(criteria) {
     return safeRun("countPublishedBySearch", () => {

@@ -1,0 +1,45 @@
+<section class="page-intro">
+  <h1><%= year ? `${year} 年归档` : "归档" %></h1>
+  <p class="page-intro__meta">共 <%= total %> 篇已发布文章</p>
+</section>
+
+<% if (groups.length === 0) { %>
+  <p class="empty-state">还没有已发布的文章，先运行 <code>npm run seed</code> 写入示例数据。</p>
+<% } else { %>
+  <% if (year) { %>
+    <p class="archive__back"><a href="/archive">← 返回全部归档</a></p>
+  <% } %>
+
+  <div class="archive">
+    <% groups.forEach(function (group) { %>
+      <section class="archive__year">
+        <h2 class="archive__year-title">
+          <% if (year) { %>
+            <%= group.year %> 年
+          <% } else { %>
+            <a href="/archive/<%= group.year %>"><%= group.year %> 年</a>
+          <% } %>
+          <span class="archive__count"><%= group.total %> 篇</span>
+        </h2>
+
+        <% group.months.forEach(function (month) { %>
+          <section class="archive__month">
+            <h3 class="archive__month-title">
+              <%= month.label %>
+              <span class="archive__count"><%= month.total %> 篇</span>
+            </h3>
+            <ul class="archive__list">
+              <% month.posts.forEach(function (post) { %>
+                <li class="archive__item">
+                  <span class="archive__date"><%= post.date %></span>
+                  <a class="archive__link" href="<%= post.url %>"><%= post.title %></a>
+                  <span class="archive__author"><%= post.author %></span>
+                </li>
+              <% }); %>
+            </ul>
+          </section>
+        <% }); %>
+      </section>
+    <% }); %>
+  </div>
+<% } %>

@@ -98,6 +98,31 @@ if (searchMaxLength < 8 || searchMaxLength > 200) {
   throw new Error(`配置项 SITE_SEARCH_MAX_LENGTH 必须在 8-200 之间，当前值：${searchMaxLength}`);
 }
 
+// ---------- Day 6：站点体验（归档 / RSS / sitemap / SEO） ----------
+
+// 站点对外地址：canonical、RSS 的 link 与 sitemap 的 loc 都必须是绝对 URL。
+// 留空时按请求头推断（见 src/lib/base-url.js）；反向代理后面必须显式配置，
+// 否则生成的地址会变成容器内部的 host。
+const siteBaseUrl = readString("SITE_BASE_URL", "");
+if (siteBaseUrl !== "" && !/^https?:\/\/[^\s/]+(:\d+)?$/.test(siteBaseUrl)) {
+  throw new Error(
+    `配置项 SITE_BASE_URL 必须是 http(s):// 开头的地址且不以 / 结尾，当前值：${siteBaseUrl}`,
+  );
+}
+
+// RSS 输出条数：订阅阅读器一次拉取太多条目没有意义，默认取最近 20 篇。
+const feedSize = readInt("SITE_FEED_SIZE", 20);
+if (feedSize < 1 || feedSize > 100) {
+  throw new Error(`配置项 SITE_FEED_SIZE 必须在 1-100 之间，当前值：${feedSize}`);
+}
+
+// RSS 正文输出方式：full 会把整篇渲染后的 HTML 放进 <description>，
+// 方便阅读器离线阅读，但会让订阅源变大；summary 只输出摘要。
+const feedMode = readEnum("SITE_FEED_MODE", ["summary", "full"], "summary");
+
+// 全站 noindex：站点还没正式上线时，用它避免被搜索引擎收录。
+const robotsNoindex = readBool("SITE_ROBOTS_NOINDEX", false);
+
 // ---------- Day 5：评论与基础防灌水 ----------
 
 // 评论正文长度上下限：下限挡住「顶」「沙发」这类无意义灌水，上限挡住长篇复制粘贴。
@@ -145,6 +170,11 @@ export const config = Object.freeze({
     pageSize: sitePageSize,
     maxTagsPerPost,
     searchMaxLength,
+    // 以下四项可在后台「站点配置」页覆盖（落到 site_settings 表）。
+    baseUrl: siteBaseUrl,
+    feedSize,
+    feedMode,
+    robotsNoindex,
   }),
   comments: Object.freeze({
     minLength: commentMinLength,

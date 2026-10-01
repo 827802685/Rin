@@ -56,6 +56,9 @@ npm test             # 运行全部测试（node:test + supertest）
 | `GET /admin/comments` | 评论审核列表，支持 `?status=pending\|approved\|rejected` 与 `?page=` |
 | `POST /admin/comments/:id/status` | 通过 / 拒绝评论（`status=approved\|rejected`） |
 | `POST /admin/comments/:id/delete` | 删除评论 |
+| `GET /admin/settings` | 站点配置页（标题、描述、作者、站点地址、每页条数、RSS、收录开关） |
+| `POST /admin/settings` | 保存站点配置，立即生效 |
+| `POST /admin/settings/reset` | 恢复默认配置（清空自定义项） |
 
 后台页面未登录时跳转登录页并带 `?next=`；`/admin/api/*` 未登录返回 401 JSON。
 
@@ -73,6 +76,46 @@ npm test             # 运行全部测试（node:test + supertest）
 | 端点 | 说明 |
 | --- | --- |
 | `POST /posts/:slug/comments` | 游客提交评论，成功跳回 `?comment=submitted#comments` |
+
+## 归档
+
+- `/archive` 按「年 → 月」倒序列出全部**已发布**文章，点年份进入 `/archive/:year` 只看那一年。
+- 草稿不进归档：归档是给读者看的内容地图，里面每一篇都应该是点开就能读的。
+- 年份不存在（那一篇都没有）返回 404；年份不是 4 位数字返回 400。
+
+| 端点 | 说明 |
+| --- | --- |
+| `GET /archive` | 全站归档（按年分组，年内按月分组） |
+| `GET /archive/:year` | 单年归档，例如 `/archive/2026` |
+
+## 订阅与 SEO
+
+- `/feed.xml` 是 RSS 2.0 订阅源，输出最近 `SITE_FEED_SIZE` 篇已发布文章（草稿绝不外泄）；
+  `SITE_FEED_MODE=full` 时输出渲染后的全文，默认只输出摘要。
+- `/sitemap.xml` 覆盖首页、归档（总览 + 各年份）、分类、标签与全部已发布文章；只写 `<loc>` 与 `<lastmod>`。
+- `/robots.txt` 屏蔽 `/admin` 与 `/search`，并给出 sitemap 地址；开启 `SITE_ROBOTS_NOINDEX` 后整站 `Disallow: /`。
+- 每个页面都输出 canonical、Open Graph、Twitter card；文章页额外输出 `article:published_time` / `article:tag`。
+- canonical 与订阅源的绝对地址优先级：后台「站点地址」→ `SITE_BASE_URL` → 请求地址（Host 头会被严格校验，
+  伪造的 Host 不会写进 canonical）。**反向代理后面部署必须显式配置站点地址**。
+
+| 端点 | 说明 |
+| --- | --- |
+| `GET /feed.xml` | RSS 2.0 订阅源（`application/rss+xml`） |
+| `GET /sitemap.xml` | 站点地图（`application/xml`） |
+| `GET /robots.txt` | 爬虫规则 + sitemap 地址 |
+
+## 站点配置
+
+- `/admin/settings` 可以在线改站点标题、描述、默认作者、站点地址、每页条数、RSS 条数与正文方式、是否禁止收录。
+- 保存后**立即生效，无需重启**；这些值存在 `site_settings` 表里，覆盖环境变量。
+- 「恢复默认配置」会清空这张表，全部回落到环境变量的取值（不会写回一份默认快照）。
+- `SITE_MAX_TAGS_PER_POST` 与 `SITE_SEARCH_MAX_LENGTH` 属于运行期资源约束，只由环境变量控制。
+
+| 端点 | 说明 |
+| --- | --- |
+| `GET /admin/settings` | 站点配置页 |
+| `POST /admin/settings` | 保存配置（校验失败 400 并回填输入） |
+| `POST /admin/settings/reset` | 恢复默认配置 |
 
 ## 分类与标签
 
@@ -122,7 +165,7 @@ daily-blog/
 │   ├── logger.js          # 结构化 JSON 日志（带 requestId）
 │   ├── errors.js          # 类型化错误体系
 │   ├── db/                # 数据库连接、迁移执行、事务助手、示例数据
-│   ├── lib/               # 通用小工具（Cookie 读写、slug 生成、LIKE 转义、搜索高亮、IP 摘要、评论正文处理）
+│   ├── lib/               # 通用小工具（Cookie 读写、slug 生成、LIKE 转义、搜索高亮、IP 摘要、评论正文处理、XML、绝对地址）
 │   ├── repositories/      # 数据访问层（只写 SQL）
 │   ├── services/          # 业务规则层（不依赖 HTTP 对象）
 │   ├── validation/        # 请求表单校验（zod）
@@ -147,6 +190,10 @@ daily-blog/
 | `SITE_PAGE_SIZE` | `10` | 列表每页文章数（1-100，首页 / 分类页 / 标签页共用） |
 | `SITE_MAX_TAGS_PER_POST` | `8` | 一篇文章最多可设置的标签数（1-50） |
 | `SITE_SEARCH_MAX_LENGTH` | `64` | 搜索关键词长度上限（8-200），超出返回 400 |
+| `SITE_BASE_URL` | `http://127.0.0.1:3000` | 站点对外地址（canonical / RSS / sitemap 用）；留空则按请求推断 |
+| `SITE_FEED_SIZE` | `20` | RSS 输出的已发布文章条数（1-100） |
+| `SITE_FEED_MODE` | `summary` | RSS 正文输出方式：`summary` / `full` |
+| `SITE_ROBOTS_NOINDEX` | `false` | 全站禁止搜索引擎收录（noindex + `Disallow: /`） |
 | `COMMENT_MIN_LENGTH` | `2` | 评论正文长度下限（1-100） |
 | `COMMENT_MAX_LENGTH` | `1000` | 评论正文长度上限（20-5000） |
 | `COMMENT_RATE_LIMIT` | `3` | 同一来源在窗口期内最多提交的评论数（1-50），超出 429 |

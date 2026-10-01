@@ -5,6 +5,7 @@ import { postsService } from "../services/posts.service.js";
 import { commentsService } from "../services/comments.service.js";
 import { parseCommentInput } from "../validation/comment-input.js";
 import { hashIp } from "../lib/ip.js";
+import { toIso8601 } from "../lib/xml.js";
 import { renderPage } from "../views/render.js";
 import { asyncHandler } from "../middlewares/request-context.js";
 
@@ -23,6 +24,15 @@ export async function renderPostPage(
   await renderPage(res.status(status), "pages/post.ejs", {
     title: post.title,
     description: post.summary,
+    canonicalPath: `/posts/${encodeURIComponent(post.slug)}`,
+    ogType: "article",
+    // 文章页额外输出 article:*，搜索引擎据此识别发布时间、作者与标签。
+    article: {
+      publishedTime: toIso8601(post.publishedAt),
+      author: post.author,
+      section: post.category?.name ?? null,
+      tags: (post.tags ?? []).map((tag) => tag.name),
+    },
     post,
     comments,
     commentForm: commentForm ?? emptyCommentForm(),

@@ -152,7 +152,8 @@ function loadTaxonomy(postId) {
  * 保证各处行为完全一致（超范围页码回落到最后一页、每页条数上下限一致）。
  */
 export function paginatePublished(page, pageSize, { count, fetchPage, decorateOptions = {} }) {
-  const safePageSize = Math.min(Math.max(Number.parseInt(pageSize, 10) || 10, 1), 50);
+  // 上限与 SITE_PAGE_SIZE 的校验范围（1-100）保持一致，避免配置允许 100 却在这里被悄悄削成 50。
+  const safePageSize = Math.min(Math.max(Number.parseInt(pageSize, 10) || 10, 1), 100);
   const safePage = Math.max(Number.parseInt(page, 10) || 1, 1);
   const total = count();
   const totalPages = Math.max(1, Math.ceil(total / safePageSize));
@@ -253,11 +254,27 @@ function normalizeInput(input = {}) {
  * 不依赖 HTTP 请求/响应对象。
  */
 export const postsService = {
-  listPublished({ page = 1, pageSize = 10 } = {}) {
+  /**
+   * 前台首页与订阅源共用的已发布列表。
+   * decorateOptions 透传给 decorate：RSS 需要正文化 HTML（withContent），首页不需要。
+   */
+  listPublished({ page = 1, pageSize = 10, decorateOptions = {} } = {}) {
     return paginatePublished(page, pageSize, {
       count: () => postsRepository.countPublished(),
       fetchPage: ({ limit, offset }) => postsRepository.findPublishedPage({ limit, offset }),
+      decorateOptions,
     });
+  },
+
+  /**
+   * 站点地图用的轻量清单：只要 slug 与时间，不渲染 Markdown。
+   * 站点地图要覆盖**全部**已发布文章，走分页列表既受每页条数限制、
+   * 又会为每篇渲染一遍正文（几千篇时能明显感到卡顿）。
+   */
+  listPublishedRefs() {
+    return postsRepository
+      .findPublishedForSitemap()
+      .map((row) => ({ slug: row.slug, publishedAt: row.published_at }));
   },
 
   getPublishedBySlug(slug) {

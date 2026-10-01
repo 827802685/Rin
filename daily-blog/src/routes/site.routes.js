@@ -13,10 +13,11 @@ router.get(
   asyncHandler(async (req, res) => {
     const { items, pagination } = postsService.listPublished({
       page: req.query.page,
-      pageSize: req.app.locals.site.pageSize,
+      pageSize: res.locals.site.pageSize,
     });
     await renderPage(res, "pages/home.ejs", {
       title: "首页",
+      canonicalPath: "/",
       posts: items,
       pagination,
     });
@@ -32,6 +33,7 @@ router.get(
     const categories = taxonomyService.listCategories({ publishedOnly: true });
     await renderPage(res, "pages/taxonomies.ejs", {
       title: "分类",
+      canonicalPath: "/categories",
       heading: "分类",
       items: categories,
       emptyHint: "还没有分类。管理员可在后台「分类与标签」中创建。",
@@ -45,11 +47,12 @@ router.get(
   asyncHandler(async (req, res) => {
     const data = postsService.listByCategorySlug(req.params.slug, {
       page: req.query.page,
-      pageSize: req.app.locals.site.pageSize,
+      pageSize: res.locals.site.pageSize,
     });
     await renderPage(res, "pages/taxonomy.ejs", {
       title: `分类：${data.category.name}`,
       description: data.category.description || undefined,
+      canonicalPath: `/categories/${encodeURIComponent(data.category.slug)}`,
       kind: "分类",
       listPath: "/categories",
       taxonomy: data.category,
@@ -67,6 +70,7 @@ router.get(
     const tags = taxonomyService.listTags({ publishedOnly: true });
     await renderPage(res, "pages/taxonomies.ejs", {
       title: "标签",
+      canonicalPath: "/tags",
       heading: "标签",
       items: tags,
       emptyHint: "还没有标签。写文章时在「标签」一栏填写即可自动创建。",
@@ -80,10 +84,11 @@ router.get(
   asyncHandler(async (req, res) => {
     const data = postsService.listByTagSlug(req.params.slug, {
       page: req.query.page,
-      pageSize: req.app.locals.site.pageSize,
+      pageSize: res.locals.site.pageSize,
     });
     await renderPage(res, "pages/taxonomy.ejs", {
       title: `标签：${data.tag.name}`,
+      canonicalPath: `/tags/${encodeURIComponent(data.tag.slug)}`,
       kind: "标签",
       listPath: "/tags",
       taxonomy: data.tag,
