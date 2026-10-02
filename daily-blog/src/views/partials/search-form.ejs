@@ -1,0 +1,41 @@
+<form class="search-form" method="get" action="/search" role="search">
+  <div class="search-form__row">
+    <input
+      class="field__input search-form__input"
+      type="search"
+      name="q"
+      value="<%= query %>"
+      maxlength="<%= searchMaxLength %>"
+      placeholder="输入关键词，多个关键词用空格分隔"
+      aria-label="搜索关键词"
+      autocomplete="off"
+    />
+    <button class="button" type="submit">搜索</button>
+  </div>
+
+  <div class="search-form__filters">
+    <label class="search-form__filter">
+      分类
+      <select class="field__input search-form__select" name="category">
+        <option value="">全部分类</option>
+        <% categories.forEach(function (item) { %>
+          <option value="<%= item.slug %>" <%= category && category.id === item.id ? "selected" : "" %>><%= item.name %></option>
+        <% }); %>
+      </select>
+    </label>
+
+    <label class="search-form__filter">
+      标签
+      <select class="field__input search-form__select" name="tag">
+        <option value="">全部标签</option>
+        <% tags.forEach(function (item) { %>
+          <option value="<%= item.slug %>" <%= tag && tag.id === item.id ? "selected" : "" %>><%= item.name %></option>
+        <% }); %>
+      </select>
+    </label>
+
+    <% if (category || tag) { %>
+      <a class="search-form__reset" href="/search<%= query ? '?q=' + encodeURIComponent(query) : '' %>">清除筛选</a>
+    <% } %>
+  </div>
+</form>

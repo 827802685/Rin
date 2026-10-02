@@ -1,0 +1,149 @@
+<article class="post">
+  <h1 class="post__title"><%= post.title %></h1>
+  <p class="post__meta">
+    <span><%= post.publishedAt %></span>
+    <span>·</span>
+    <span><%= post.author %></span>
+    <span>·</span>
+        <span>约 <%= post.readingMinutes %> 分钟</span>
+        <span>·</span>
+        <a href="#comments"><%= post.commentCount %> 条评论</a>
+  </p>
+  <% if (post.category || post.tags.length > 0) { %>
+    <p class="post__taxonomy">
+      <% if (post.category) { %>
+        <span class="post__taxonomy-label">分类</span>
+        <a class="chip chip--category" href="/categories/<%= encodeURIComponent(post.category.slug) %>"><%= post.category.name %></a>
+      <% } %>
+      <% if (post.tags.length > 0) { %>
+        <span class="post__taxonomy-label">标签</span>
+        <% post.tags.forEach(function (tag) { %>
+          <a class="chip" href="/tags/<%= encodeURIComponent(tag.slug) %>"><%= tag.name %></a>
+        <% }); %>
+      <% } %>
+    </p>
+  <% } %>
+  <div class="post__content markdown-body">
+    <%- post.contentHtml %>
+  </div>
+  <p class="post__back"><a href="/">← 返回文章列表</a></p>
+</article>
+
+<section class="comments" id="comments">
+  <h2 class="comments__title">
+    评论
+    <span class="comments__count"><%= comments.length %></span>
+  </h2>
+
+  <% if (commentResult === "submitted") { %>
+    <p class="alert alert--info">评论已提交，通过审核后会显示在这里。</p>
+  <% } %>
+  <% if (commentNotice) { %>
+    <p class="alert alert--warn"><%= commentNotice %></p>
+  <% } %>
+
+  <% if (comments.length === 0) { %>
+    <p class="empty-state">还没有评论，来说两句吧。</p>
+  <% } else { %>
+    <ul class="comment-list">
+      <% comments.forEach(function (comment) { %>
+        <li class="comment">
+          <p class="comment__meta">
+            <span class="comment__author">
+              <% if (comment.authorUrl) { %>
+                <a href="<%= comment.authorUrl %>" target="_blank" rel="noopener noreferrer"><%= comment.authorName %></a>
+              <% } else { %>
+                <%= comment.authorName %>
+              <% } %>
+            </span>
+            <span>·</span>
+            <span><%= comment.createdAt %></span>
+          </p>
+          <p class="comment__content"><%= comment.content %></p>
+        </li>
+      <% }); %>
+    </ul>
+  <% } %>
+
+  <form class="comment-form" method="post" action="/posts/<%= encodeURIComponent(post.slug) %>/comments">
+    <h3 class="comment-form__title">发表评论</h3>
+    <p class="comment-form__hint">
+      评论内容 <%= commentLimits.minLength %>-<%= commentLimits.maxLength %> 个字符<% if (commentLimits.maxLinks === 0) { %>，不允许包含链接<% } else { %>，最多 <%= commentLimits.maxLinks %> 条链接<% } %>；提交后进入待审，通过才会公开显示。
+    </p>
+
+    <div class="comment-form__row">
+      <label class="field <%= commentErrors.authorName ? 'field--invalid' : '' %>">
+        <span class="field__label">昵称 *</span>
+        <input
+          class="field__input"
+          type="text"
+          name="authorName"
+          maxlength="40"
+          value="<%= commentForm.authorName %>"
+          required
+        />
+        <% if (commentErrors.authorName) { %>
+          <span class="field__error"><%= commentErrors.authorName %></span>
+        <% } %>
+      </label>
+
+      <label class="field <%= commentErrors.authorEmail ? 'field--invalid' : '' %>">
+        <span class="field__label">邮箱（选填，不公开）</span>
+        <input
+          class="field__input"
+          type="text"
+          name="authorEmail"
+          maxlength="120"
+          value="<%= commentForm.authorEmail %>"
+        />
+        <% if (commentErrors.authorEmail) { %>
+          <span class="field__error"><%= commentErrors.authorEmail %></span>
+        <% } %>
+      </label>
+
+      <label class="field <%= commentErrors.authorUrl ? 'field--invalid' : '' %>">
+        <span class="field__label">网址（选填）</span>
+        <input
+          class="field__input"
+          type="text"
+          name="authorUrl"
+          maxlength="200"
+          placeholder="https://example.com"
+          value="<%= commentForm.authorUrl %>"
+        />
+        <% if (commentErrors.authorUrl) { %>
+          <span class="field__error"><%= commentErrors.authorUrl %></span>
+        <% } %>
+      </label>
+    </div>
+
+    <label class="field <%= commentErrors.content ? 'field--invalid' : '' %>">
+      <span class="field__label">评论内容 *</span>
+      <textarea
+        class="field__input comment-form__textarea"
+        name="content"
+        rows="5"
+        required
+      ><%= commentForm.content %></textarea>
+      <% if (commentErrors.content) { %>
+        <span class="field__error"><%= commentErrors.content %></span>
+      <% } %>
+    </label>
+
+    <%# 蜜罐字段：CSS 隐藏且对屏幕阅读器不可见，真人不会填写，填了即判定为脚本。 %>
+    <div class="comment-form__honeypot" aria-hidden="true">
+      <label for="comment-homepage">网站</label>
+      <input
+        id="comment-homepage"
+        name="homepage"
+        type="text"
+        tabindex="-1"
+        autocomplete="off"
+      />
+    </div>
+
+    <div class="form__actions">
+      <button class="button" type="submit">提交评论</button>
+    </div>
+  </form>
+</section>

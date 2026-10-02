@@ -1,0 +1,45 @@
+<section class="page-intro">
+  <h1><%= kind %>：<%= taxonomy.name %></h1>
+  <p class="page-intro__meta">
+    共 <%= pagination.total %> 篇已发布文章
+    <% if (taxonomy.description) { %> · <%= taxonomy.description %><% } %>
+  </p>
+</section>
+
+<% if (posts.length === 0) { %>
+  <p class="empty-state">这个<%= kind %>下还没有已发布的文章。</p>
+<% } else { %>
+  <ul class="post-list">
+    <% posts.forEach(function (post) { %>
+      <li class="post-card">
+        <h2 class="post-card__title">
+          <a href="/posts/<%= post.slug %>"><%= post.title %></a>
+        </h2>
+        <p class="post-card__meta">
+          <span><%= post.publishedAt %></span>
+          <span>·</span>
+          <span><%= post.author %></span>
+          <span>·</span>
+          <span>约 <%= post.readingMinutes %> 分钟</span>
+        </p>
+        <p class="post-card__summary"><%= post.summary %></p>
+      </li>
+    <% }); %>
+  </ul>
+
+  <nav class="pagination">
+    <% if (pagination.hasPrev) { %>
+      <a class="pagination__link" href="<%= basePath %>?page=<%= pagination.page - 1 %>">上一页</a>
+    <% } %>
+    <span class="pagination__current">第 <%= pagination.page %> / <%= pagination.totalPages %> 页</span>
+    <% if (pagination.hasNext) { %>
+      <a class="pagination__link" href="<%= basePath %>?page=<%= pagination.page + 1 %>">下一页</a>
+    <% } %>
+  </nav>
+<% } %>
+
+<p class="post__back">
+  <a href="<%= listPath %>">← 返回全部<%= kind %></a>
+  ·
+  <a href="/">返回首页</a>
+</p>

@@ -1,0 +1,125 @@
+<section class="admin-head">
+  <div>
+    <h1 class="admin-head__title">分类与标签</h1>
+    <p class="page-intro__meta">
+      分类 <%= categories.length %> 个 · 标签 <%= tags.length %> 个
+      · 分类决定文章归属，标签用于横向关联
+    </p>
+  </div>
+  <a class="link-muted" href="/admin">← 返回后台列表</a>
+</section>
+
+<% if (flash) { %>
+  <p class="alert alert--info"><%= flash %></p>
+<% } %>
+<% if (notice) { %>
+  <p class="alert alert--error"><%= notice %></p>
+<% } %>
+
+<div class="taxonomy-grid">
+  <!-- ---------- 分类 ---------- -->
+  <section class="panel">
+    <h2 class="panel__title">分类</h2>
+
+    <form class="form taxonomy-create" method="post" action="/admin/taxonomy/categories">
+      <label class="field <%= activeForm === 'category' && errors.name ? 'field--invalid' : '' %>">
+        <span class="field__label">名称 *</span>
+        <input class="field__input" type="text" name="name" maxlength="40" required
+               value="<%= activeForm === 'category' ? values.category.name : '' %>" />
+        <% if (activeForm === "category" && errors.name) { %><span class="field__error"><%= errors.name %></span><% } %>
+      </label>
+
+      <label class="field <%= activeForm === 'category' && errors.slug ? 'field--invalid' : '' %>">
+        <span class="field__label">slug（留空自动生成）</span>
+        <input class="field__input" type="text" name="slug" maxlength="60"
+               value="<%= activeForm === 'category' ? values.category.slug : '' %>" />
+        <% if (activeForm === "category" && errors.slug) { %><span class="field__error"><%= errors.slug %></span><% } %>
+      </label>
+
+      <label class="field <%= activeForm === 'category' && errors.description ? 'field--invalid' : '' %>">
+        <span class="field__label">描述</span>
+        <input class="field__input" type="text" name="description" maxlength="200"
+               value="<%= activeForm === 'category' ? values.category.description : '' %>" />
+        <% if (activeForm === "category" && errors.description) { %><span class="field__error"><%= errors.description %></span><% } %>
+      </label>
+
+      <div class="form__actions">
+        <button class="button" type="submit">新建分类</button>
+      </div>
+    </form>
+
+    <% if (categories.length === 0) { %>
+      <p class="empty-state">还没有分类。</p>
+    <% } else { %>
+      <ul class="taxonomy-list">
+        <% categories.forEach(function (category) { %>
+          <li class="taxonomy-item">
+            <form class="taxonomy-item__form" method="post" action="/admin/taxonomy/categories/<%= category.id %>">
+              <input class="field__input" type="text" name="name" value="<%= category.name %>" maxlength="40" required aria-label="分类名称" />
+              <input class="field__input" type="text" name="slug" value="<%= category.slug %>" maxlength="60" aria-label="分类 slug" />
+              <input class="field__input field__input--grow" type="text" name="description" value="<%= category.description %>" maxlength="200" placeholder="描述" aria-label="分类描述" />
+              <button class="link-button" type="submit">保存</button>
+            </form>
+            <div class="taxonomy-item__meta">
+              <span><%= category.postCount %> 篇文章</span>
+              <a class="link-muted" href="<%= category.url %>" target="_blank" rel="noopener">前台查看</a>
+              <form method="post" action="/admin/taxonomy/categories/<%= category.id %>/delete"
+                    onsubmit="return confirm('确定删除该分类？分类下仍有文章时无法删除。');">
+                <button class="link-button link-button--danger" type="submit">删除</button>
+              </form>
+            </div>
+          </li>
+        <% }); %>
+      </ul>
+    <% } %>
+  </section>
+
+  <!-- ---------- 标签 ---------- -->
+  <section class="panel">
+    <h2 class="panel__title">标签</h2>
+
+    <form class="form taxonomy-create" method="post" action="/admin/taxonomy/tags">
+      <label class="field <%= activeForm === 'tag' && errors.name ? 'field--invalid' : '' %>">
+        <span class="field__label">名称 *</span>
+        <input class="field__input" type="text" name="name" maxlength="40" required
+               value="<%= activeForm === 'tag' ? values.tag.name : '' %>" />
+        <% if (activeForm === "tag" && errors.name) { %><span class="field__error"><%= errors.name %></span><% } %>
+      </label>
+
+      <label class="field <%= activeForm === 'tag' && errors.slug ? 'field--invalid' : '' %>">
+        <span class="field__label">slug（留空自动生成）</span>
+        <input class="field__input" type="text" name="slug" maxlength="60"
+               value="<%= activeForm === 'tag' ? values.tag.slug : '' %>" />
+        <% if (activeForm === "tag" && errors.slug) { %><span class="field__error"><%= errors.slug %></span><% } %>
+      </label>
+
+      <div class="form__actions">
+        <button class="button" type="submit">新建标签</button>
+      </div>
+    </form>
+
+    <% if (tags.length === 0) { %>
+      <p class="empty-state">还没有标签，也可以在写文章时直接填写。</p>
+    <% } else { %>
+      <ul class="taxonomy-list">
+        <% tags.forEach(function (tag) { %>
+          <li class="taxonomy-item">
+            <form class="taxonomy-item__form" method="post" action="/admin/taxonomy/tags/<%= tag.id %>">
+              <input class="field__input" type="text" name="name" value="<%= tag.name %>" maxlength="40" required aria-label="标签名称" />
+              <input class="field__input" type="text" name="slug" value="<%= tag.slug %>" maxlength="60" aria-label="标签 slug" />
+              <button class="link-button" type="submit">保存</button>
+            </form>
+            <div class="taxonomy-item__meta">
+              <span><%= tag.postCount %> 篇文章</span>
+              <a class="link-muted" href="<%= tag.url %>" target="_blank" rel="noopener">前台查看</a>
+              <form method="post" action="/admin/taxonomy/tags/<%= tag.id %>/delete"
+                    onsubmit="return confirm('确定删除该标签？文章本身不会被删除，只会解除该标签。');">
+                <button class="link-button link-button--danger" type="submit">删除</button>
+              </form>
+            </div>
+          </li>
+        <% }); %>
+      </ul>
+    <% } %>
+  </section>
+</div>

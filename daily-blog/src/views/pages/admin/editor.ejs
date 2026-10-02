@@ -1,0 +1,145 @@
+<section class="admin-head">
+  <div>
+    <h1 class="admin-head__title"><%= mode === "create" ? "新建文章" : "编辑文章" %></h1>
+    <p class="page-intro__meta">
+      <% if (mode === "edit") { %>
+        ID <%= postId %> · 前台链接 /posts/<%= values.slug %>
+      <% } else { %>
+        保存后可在后台列表切换为「已发布」，发布后前台才可见
+      <% } %>
+    </p>
+  </div>
+  <a class="link-muted" href="/admin">← 返回后台列表</a>
+</section>
+
+<% const errorMessages = Object.values(errors || {}); %>
+<% if (notice || errorMessages.length > 0) { %>
+  <div class="alert alert--error">
+    <% if (notice) { %><p class="alert__text"><%= notice %></p><% } %>
+    <% if (errorMessages.length > 0) { %>
+      <ul class="alert__list">
+        <% errorMessages.forEach(function (message) { %>
+          <li><%= message %></li>
+        <% }); %>
+      </ul>
+    <% } %>
+  </div>
+<% } %>
+
+<form class="editor-form" method="post" action="<%= action %>" data-editor-form>
+  <div class="editor-grid">
+    <div class="editor-grid__main">
+      <label class="field <%= errors.title ? 'field--invalid' : '' %>">
+        <span class="field__label">标题 *</span>
+        <input
+          class="field__input"
+          type="text"
+          name="title"
+          value="<%= values.title %>"
+          maxlength="200"
+          required
+          data-editor-title
+        />
+        <% if (errors.title) { %><span class="field__error"><%= errors.title %></span><% } %>
+      </label>
+
+      <label class="field <%= errors.content ? 'field--invalid' : '' %>">
+        <span class="field__label">正文（Markdown）*</span>
+        <textarea
+          class="field__input field__textarea"
+          name="content"
+          rows="20"
+          required
+          data-editor-input
+        ><%= values.content %></textarea>
+        <% if (errors.content) { %><span class="field__error"><%= errors.content %></span><% } %>
+      </label>
+    </div>
+
+    <aside class="editor-grid__side">
+      <div class="panel">
+        <h2 class="panel__title">发布设置</h2>
+
+        <label class="field <%= errors.status ? 'field--invalid' : '' %>">
+          <span class="field__label">状态</span>
+          <select class="field__input" name="status">
+            <option value="draft" <%= values.status === "draft" ? "selected" : "" %>>草稿（前台不可见）</option>
+            <option value="published" <%= values.status === "published" ? "selected" : "" %>>已发布（前台可见）</option>
+          </select>
+          <% if (errors.status) { %><span class="field__error"><%= errors.status %></span><% } %>
+        </label>
+
+        <label class="field <%= errors.categoryId ? 'field--invalid' : '' %>">
+          <span class="field__label">分类</span>
+          <select class="field__input" name="categoryId">
+            <option value="" <%= values.categoryId === "" ? "selected" : "" %>>（不设分类）</option>
+            <% categories.forEach(function (category) { %>
+              <option value="<%= category.id %>" <%= String(category.id) === values.categoryId ? "selected" : "" %>><%= category.name %></option>
+            <% }); %>
+          </select>
+          <% if (errors.categoryId) { %><span class="field__error"><%= errors.categoryId %></span><% } %>
+          <span class="field__hint">
+            没有想要的分类？到 <a href="/admin/taxonomy">分类与标签</a> 里新建。
+          </span>
+        </label>
+
+        <label class="field <%= errors.tags ? 'field--invalid' : '' %>">
+          <span class="field__label">标签（逗号分隔）</span>
+          <input
+            class="field__input"
+            type="text"
+            name="tags"
+            value="<%= values.tags %>"
+            maxlength="300"
+            list="tag-suggestions"
+            placeholder="例如：迭代, 工程实践"
+          />
+          <datalist id="tag-suggestions">
+            <% allTags.forEach(function (tag) { %>
+              <option value="<%= tag.name %>"></option>
+            <% }); %>
+          </datalist>
+          <% if (errors.tags) { %><span class="field__error"><%= errors.tags %></span><% } %>
+          <span class="field__hint">标签不存在会自动创建，最多 <%= maxTags %> 个。</span>
+        </label>
+
+        <label class="field <%= errors.slug ? 'field--invalid' : '' %>">
+          <span class="field__label">slug（留空自动生成）</span>
+          <input class="field__input" type="text" name="slug" value="<%= values.slug %>" maxlength="120" />
+          <% if (errors.slug) { %><span class="field__error"><%= errors.slug %></span><% } %>
+        </label>
+
+        <label class="field <%= errors.author ? 'field--invalid' : '' %>">
+          <span class="field__label">作者</span>
+          <input class="field__input" type="text" name="author" value="<%= values.author %>" maxlength="60" />
+          <% if (errors.author) { %><span class="field__error"><%= errors.author %></span><% } %>
+        </label>
+
+        <label class="field <%= errors.summary ? 'field--invalid' : '' %>">
+          <span class="field__label">摘要（留空自动截取正文）</span>
+          <textarea class="field__input field__textarea" name="summary" rows="4" maxlength="300"><%= values.summary %></textarea>
+          <% if (errors.summary) { %><span class="field__error"><%= errors.summary %></span><% } %>
+        </label>
+      </div>
+
+      <div class="panel">
+        <h2 class="panel__title">实时预览</h2>
+        <div
+          class="markdown-body preview-body"
+          data-editor-preview
+          data-preview-endpoint="/admin/api/preview"
+        >
+          <p class="muted">正文输入后自动预览（与前台渲染、清洗规则一致）。</p>
+        </div>
+      </div>
+    </aside>
+  </div>
+
+  <div class="editor-toolbar">
+    <button class="button" type="submit"><%= mode === "create" ? "创建文章" : "保存修改" %></button>
+    <a class="link-muted" href="/admin">取消</a>
+    <span class="editor-toolbar__hint">Ctrl / Cmd + S 保存</span>
+  </div>
+</form>
+
+<script src="/assets/admin-editor.js" defer></script>

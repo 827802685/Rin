@@ -1,0 +1,97 @@
+<section class="admin-head">
+  <div>
+    <h1 class="admin-head__title">后台管理</h1>
+    <p class="page-intro__meta">
+      共 <%= counts.total %> 篇 · 已发布 <%= counts.published %> · 草稿 <%= counts.draft %>
+      <% if (adminUser && adminUser.lastLoginAt) { %>
+        · 最近登录 <%= adminUser.lastLoginAt %>
+      <% } %>
+    </p>
+  </div>
+  <div class="admin-head__actions">
+    <a class="link-muted" href="/admin/comments">
+      评论审核<% if (commentCounts && commentCounts.pending > 0) { %>（<%= commentCounts.pending %> 待审）<% } %>
+    </a>
+    <a class="link-muted" href="/admin/taxonomy">分类与标签</a>
+    <a class="link-muted" href="/admin/settings">站点配置</a>
+    <a class="button" href="/admin/posts/new">新建文章</a>
+  </div>
+</section>
+
+<% if (flash) { %>
+  <p class="alert alert--<%= flashType %>"><%= flash %></p>
+<% } %>
+
+<nav class="filter-tabs">
+  <a class="filter-tabs__item <%= statusFilter ? '' : 'is-active' %>" href="/admin">全部</a>
+  <a class="filter-tabs__item <%= statusFilter === 'published' ? 'is-active' : '' %>" href="/admin?status=published">已发布</a>
+  <a class="filter-tabs__item <%= statusFilter === 'draft' ? 'is-active' : '' %>" href="/admin?status=draft">草稿</a>
+</nav>
+
+<% if (items.length === 0) { %>
+  <p class="empty-state">这里还没有文章，点右上角「新建文章」写下第一篇。</p>
+<% } else { %>
+  <table class="admin-table admin-table--posts">
+    <thead>
+      <tr>
+        <th>标题</th>
+        <th>状态</th>
+        <th>更新时间</th>
+        <th>操作</th>
+      </tr>
+    </thead>
+    <tbody>
+      <% items.forEach(function (post) { %>
+        <tr>
+          <td>
+            <a class="admin-table__title" href="/admin/posts/<%= post.id %>/edit"><%= post.title %></a>
+            <p class="admin-table__meta">/<%= post.slug %> · <%= post.author %><% if (post.category) { %> · <%= post.category.name %><% } %><% if (post.tags.length > 0) { %> · #<%= post.tags.map(function (tag) { return tag.name; }).join(" · #") %><% } %></p>
+          </td>
+          <td>
+            <span class="badge badge--<%= post.status %>"><%= post.statusLabel %></span>
+          </td>
+          <td class="admin-table__time"><%= post.updatedAt %></td>
+          <td>
+            <div class="admin-table__actions">
+              <a class="link-muted" href="/admin/posts/<%= post.id %>/edit">编辑</a>
+
+              <% if (post.isDraft) { %>
+                <form method="post" action="/admin/posts/<%= post.id %>/status">
+                  <input type="hidden" name="status" value="published" />
+                  <% if (statusFilter) { %><input type="hidden" name="filter" value="<%= statusFilter %>" /><% } %>
+                  <button class="link-button" type="submit">发布</button>
+                </form>
+              <% } else { %>
+                <a class="link-muted" href="/posts/<%= post.slug %>" target="_blank" rel="noopener">查看</a>
+                <form method="post" action="/admin/posts/<%= post.id %>/status">
+                  <input type="hidden" name="status" value="draft" />
+                  <% if (statusFilter) { %><input type="hidden" name="filter" value="<%= statusFilter %>" /><% } %>
+                  <button class="link-button" type="submit">转为草稿</button>
+                </form>
+              <% } %>
+
+              <form
+                method="post"
+                action="/admin/posts/<%= post.id %>/delete"
+                onsubmit="return confirm('确定删除这篇文章？该操作不可撤销。');"
+              >
+                <% if (statusFilter) { %><input type="hidden" name="filter" value="<%= statusFilter %>" /><% } %>
+                <button class="link-button link-button--danger" type="submit">删除</button>
+              </form>
+            </div>
+          </td>
+        </tr>
+      <% }); %>
+    </tbody>
+  </table>
+
+  <nav class="pagination">
+    <% if (pagination.hasPrev) { %>
+      <a class="pagination__link" href="/admin?page=<%= pagination.page - 1 %><%= statusFilter ? '&status=' + statusFilter : '' %>">上一页</a>
+    <% } %>
+    <span class="pagination__current">第 <%= pagination.page %> / <%= pagination.totalPages %> 页</span>
+    <% if (pagination.hasNext) { %>
+      <a class="pagination__link" href="/admin?page=<%= pagination.page + 1 %><%= statusFilter ? '&status=' + statusFilter : '' %>">下一页</a>
+    <% } %>
+  </nav>
+<% } %>
