@@ -14,6 +14,9 @@ const { app, db } = await createIsolatedApp({
     COMMENT_RATE_LIMIT: "2",
     COMMENT_RATE_WINDOW_MINUTES: "10",
     COMMENT_MAX_LINKS: "1",
+    // Day 7 之后每个写请求都要先取表单令牌。本文件验证的是防灌水规则，
+    // 让每个用例都先跑一遍「取令牌」只会把断言主体挤走；CSRF 自身有 tests/csrf.test.js 覆盖。
+    CSRF_ENABLED: "false",
   },
 });
 

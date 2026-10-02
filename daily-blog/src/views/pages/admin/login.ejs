@@ -13,6 +13,7 @@
   <% } %>
 
   <form class="form" method="post" action="/admin/login">
+    <%- include("../../partials/csrf-field.ejs") %>
     <input type="hidden" name="next" value="<%= next %>" />
 
     <label class="field">

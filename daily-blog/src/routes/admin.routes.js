@@ -6,6 +6,8 @@ import { COMMENT_STATUSES, commentsService } from "../services/comments.service.
 import { taxonomyService } from "../services/taxonomy.service.js";
 import { authService } from "../services/auth.service.js";
 import { settingsService } from "../services/settings.service.js";
+import { rateLimitService } from "../services/rate-limit.service.js";
+import { hashIp } from "../lib/ip.js";
 import { parsePostInput } from "../validation/post-input.js";
 import { parseCategoryInput, parseTagInput } from "../validation/taxonomy-input.js";
 import { parseSettingsInput } from "../validation/settings-input.js";
@@ -243,6 +245,8 @@ router.post(
         userAgent: req.get("user-agent") ?? "",
       });
       setSessionCookie(res, token, maxAgeSeconds);
+      // 登录成功即清零该来源的失败计数：额度是挡暴力破解的，不该惩罚刚进来的人。
+      rateLimitService.resetLoginAttempts(hashIp(req.ip));
       req.log.info("auth.login.succeeded", { username: user.username });
       res.redirect(303, next);
     } catch (error) {

@@ -158,6 +158,56 @@ if (commentMaxLinks < 0 || commentMaxLinks > 10) {
   throw new Error(`配置项 COMMENT_MAX_LINKS 必须在 0-10 之间，当前值：${commentMaxLinks}`);
 }
 
+// ---------- Day 7：交付加固（限流 / 安全头 / CSRF / 备份） ----------
+
+// 全局限流：按来源（IP 摘要）在窗口内的请求数。默认额度刻意留得比正常浏览宽，
+// 目的是挡住脚本扫站与暴力尝试，而不是给正常访问添麻烦。
+const rateLimitEnabled = readBool("RATE_LIMIT_ENABLED", true);
+const rateLimitMax = readInt("RATE_LIMIT_MAX", 300);
+if (rateLimitMax < 1 || rateLimitMax > 100000) {
+  throw new Error(`配置项 RATE_LIMIT_MAX 必须在 1-100000 之间，当前值：${rateLimitMax}`);
+}
+const rateLimitWindowSeconds = readInt("RATE_LIMIT_WINDOW_SECONDS", 60);
+if (rateLimitWindowSeconds < 1 || rateLimitWindowSeconds > 86400) {
+  throw new Error(
+    `配置项 RATE_LIMIT_WINDOW_SECONDS 必须在 1-86400 之间，当前值：${rateLimitWindowSeconds}`,
+  );
+}
+
+// 登录是唯一「猜对了就能进后台」的入口，额度必须单独给、单独收紧。
+const loginRateMax = readInt("LOGIN_RATE_MAX", 10);
+if (loginRateMax < 1 || loginRateMax > 1000) {
+  throw new Error(`配置项 LOGIN_RATE_MAX 必须在 1-1000 之间，当前值：${loginRateMax}`);
+}
+const loginRateWindowMinutes = readInt("LOGIN_RATE_WINDOW_MINUTES", 10);
+if (loginRateWindowMinutes < 1 || loginRateWindowMinutes > 1440) {
+  throw new Error(
+    `配置项 LOGIN_RATE_WINDOW_MINUTES 必须在 1-1440 之间，当前值：${loginRateWindowMinutes}`,
+  );
+}
+
+// 安全响应头：本地调试特殊场景可能需要关掉（例如用 iframe 嵌后台），默认全开。
+const securityHeadersEnabled = readBool("SECURITY_HEADERS_ENABLED", true);
+
+// HSTS 只有在确实走 HTTPS 时才发送（见 middlewares/security-headers.js），
+// 默认关闭：本地 HTTP 开发一旦被浏览器记住 max-age，短期内会强制跳 HTTPS。
+const securityHstsMaxAge = readInt("SECURITY_HSTS_MAX_AGE", 0);
+if (securityHstsMaxAge < 0 || securityHstsMaxAge > 63072000) {
+  throw new Error(
+    `配置项 SECURITY_HSTS_MAX_AGE 必须在 0-63072000 之间，当前值：${securityHstsMaxAge}`,
+  );
+}
+
+// CSRF：默认开启。唯一建议关闭的场景是自动化测试，
+// 因为每个写请求都要先取表单令牌，会淹没业务断言（Day 5 的限流同样是这个处理口径）。
+const csrfEnabled = readBool("CSRF_ENABLED", true);
+
+const backupDir = readString("BACKUP_DIR", "./backups");
+const backupKeep = readInt("BACKUP_KEEP", 10);
+if (backupKeep < 1 || backupKeep > 500) {
+  throw new Error(`配置项 BACKUP_KEEP 必须在 1-500 之间，当前值：${backupKeep}`);
+}
+
 export const config = Object.freeze({
   env,
   port,
@@ -193,6 +243,27 @@ export const config = Object.freeze({
     ttlHours: sessionTtlHours,
     // 生产环境默认要求 HTTPS 才发送 Cookie；本地 HTTP 调试可显式关闭。
     secureCookie: readBool("SESSION_COOKIE_SECURE", env === "production"),
+  }),
+  rateLimit: Object.freeze({
+    enabled: rateLimitEnabled,
+    max: rateLimitMax,
+    windowSeconds: rateLimitWindowSeconds,
+    loginMax: loginRateMax,
+    loginWindowMinutes: loginRateWindowMinutes,
+  }),
+  security: Object.freeze({
+    headersEnabled: securityHeadersEnabled,
+    hstsMaxAge: securityHstsMaxAge,
+  }),
+  csrf: Object.freeze({
+    enabled: csrfEnabled,
+    cookieName: readString("CSRF_COOKIE_NAME", "daily_blog_csrf"),
+    fieldName: "_csrf",
+    headerName: "x-csrf-token",
+  }),
+  backup: Object.freeze({
+    dir: backupDir,
+    keep: backupKeep,
   }),
   logLevel: readEnum("LOG_LEVEL", ["debug", "info", "warn", "error"], "info"),
 });

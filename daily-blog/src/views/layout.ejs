@@ -44,7 +44,12 @@
       <% }); %>
     <% } %>
 
+    <%# Day 7：CSRF 令牌。Cookie 是 HttpOnly 的，脚本只能从这里读， %>
+    <%# 用于后台预览这类 fetch 请求回传 X-CSRF-Token 头。 %>
+    <meta name="csrf-token" content="<%= typeof csrfToken !== 'undefined' ? csrfToken : '' %>" />
+
     <link rel="stylesheet" href="/assets/styles.css" />
+    <script src="/assets/confirm-submit.js" defer></script>
   </head>
   <body>
     <%- include("partials/header.ejs") %>

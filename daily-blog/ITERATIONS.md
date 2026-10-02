@@ -12,7 +12,7 @@
 | Day 4 | 搜索 | P1 | 关键词搜索页、搜索接口、结果高亮、空结果提示 | ✅ 已完成 |
 | Day 5 | 评论 | P2 | 游客评论提交、审核状态、后台审核、基础防灌水 | ✅ 已完成 |
 | Day 6 | 站点体验 | P2 | 归档页、RSS、sitemap、SEO meta、站点配置页 | ✅ 已完成 |
-| Day 7 | 交付加固 | P1 | 限流、安全头、备份脚本、完整文档与测试补齐 | ⬜ 待办 |
+| Day 7 | 交付加固 | P1 | 限流、安全头、CSRF、备份脚本、完整文档与测试补齐 | ✅ 已完成 |
 
 排期原则：先保证「能读」（Day 1），再保证「能写」（Day 2），随后依次补组织方式（Day 3）、检索（Day 4）、互动（Day 5），最后做体验与加固（Day 6-7）。
 
@@ -574,3 +574,137 @@ XML 转义、日期格式、Host 校验全部用内置能力，表单校验复�
 
 交付加固：全局限流、安全响应头、备份与恢复脚本、测试数据清理，
 以及把完整文档与测试补齐到可交付状态。
+
+---
+
+## Day 7（2026-10-03）· 交付加固
+
+### 本次新增功能
+
+**安全响应头（默认全开，`SECURITY_HEADERS_ENABLED` 可关）**
+
+- `nosniff`、`X-Frame-Options: DENY`、`Referrer-Policy`、`Permissions-Policy`（关闭摄像头/麦克风/
+  定位/支付）、`Cross-Origin-Opener-Policy`、`Cross-Origin-Resource-Policy`，并去掉 `X-Powered-By`
+- 严格 CSP：`default-src 'self'`、`object-src 'none'`、`frame-ancestors 'none'`、`base-uri 'self'`、
+  `form-action 'self'`，**没有 `unsafe-inline` 也没有 `unsafe-eval`**
+- 为了能上严格 CSP，把 Day 2-6 写在标签上的 `onsubmit="return confirm(...)"`
+  **全部改成 `data-confirm` 属性 + 外部脚本**（`public/confirm-submit.js`）。
+  内联事件处理属性在严格 CSP 下会被静默拒绝执行——不改的话删除确认会悄悄失效
+- `Strict-Transport-Security` 只在**确认是 HTTPS 请求**（`req.secure` 或 `X-Forwarded-Proto: https`）
+  时发送，且需要先配 `SECURITY_HSTS_MAX_AGE`（默认 0 = 不发）。本地 HTTP 一旦被浏览器记住 max-age，
+  短期内就再也访问不了 127.0.0.1
+- 安全头中间件挂在**最前面**，因此 404 / 500 的错误页同样带全套头
+
+**CSRF 防护（默认开启，`CSRF_ENABLED` 可关）**
+
+- 双提交 Cookie：中间件按请求签发 32 字节随机令牌写入 **HttpOnly** Cookie，
+  表单回传同一个值（`_csrf` 隐藏字段）或用 `X-CSRF-Token` 头，比较用**恒定时间**的 `timingSafeEqual`
+- 选双提交而不是「令牌绑会话」的原因：评论表单是**匿名**的，没有会话可绑；
+  而令牌在 HttpOnly Cookie 里，攻击者读不到也写不进受害者的浏览器，凑不出能匹配的表单
+- 18 个会改变状态的表单全部注入令牌（第 19 个是 GET 搜索表单，不需要）
+- 后台预览是 fetch，改用 `X-CSRF-Token` 头；令牌值从 layout 的 `<meta name="csrf-token">` 取
+- 游客的评论提交同样受保护（冒烟第 7 节实测：无令牌 403）
+- 验证失败 → 403 `表单已过期或来源不可信，请刷新页面后重试`，并记 `csrf.rejected` 日志
+
+**限流（默认开启，两个桶）**
+
+- `general` 全站 300 次 / 60 秒；`login` 仅 `POST /admin/login`，10 次 / 10 分钟，额度独立收紧
+- 命中 429 + `Retry-After`；常规响应带 `RateLimit-Limit` / `Remaining` / `Reset`
+- 计数落 SQLite（`migrations/006_rate_limit.sql`），**重启不清零**——否则持续触发重启就能绕过
+- 来源只存加盐 SHA-256 摘要（复用 Day 5 的 `hashIp`），库里没有明文 IP
+- **静态资源不计入额度**：样式与脚本在限流之前挂载，否则打开一个后台页就耗掉十几次，
+  被限流时用户会看到一个全裸的 HTML 页面
+- 登录成功即**清零该来源的失败计数**：额度是挡暴力破解的，不该惩罚刚登录成功的人
+- 过期行定期清理（每 64 次命中一次全表清理 + 每次按来源清理），表不会随来源数无限增长
+- 限流自身出故障（表被锁等）时**放行并告警**，不让一个辅助功能把整站拖垮
+
+**备份与恢复**
+
+- `npm run backup` 用 SQLite 的 `VACUUM INTO` 生成 `backups/blog-YYYYMMDD-HHMMSS.db`。
+  **不用 `cp data/blog.db`**：WAL 模式下最新数据还在 `-wal` 里，直接复制主库拿到的是旧快照
+- 超过 `BACKUP_KEEP`（默认 10）份自动删最旧的；同一秒重复备份自动加序号，不会互相覆盖
+- `npm run restore -- <文件> --yes` 的顺序是**安全的**：先校验完整性 → 再给当前库存一份
+  `pre-restore-*` 快照 → 最后才覆盖。坏文件根本碰不到生产库，没加 `--yes` 只打印用法
+- 校验不止「打不打得开」：还跑 `PRAGMA integrity_check` 并要求存在 `posts` 表，
+  避免把别的项目的库或截断的文件当成备份
+
+**测试数据清理**
+
+- `npm run cleanup`：删 `data/test-*.db`（`--only=rate-limit` 时只清过期限流行，`--dry-run` 预演）
+- 测试进程退出时**自行删除自己的库文件**：Day 1-6 累积下来 `data/` 里堆了 300 多个孤儿文件
+
+### 主要文件
+
+| 文件 | 作用 |
+| --- | --- |
+| `migrations/006_rate_limit.sql` | 限流命中表 `rate_limit_hits` 与两个索引 |
+| `src/middlewares/security-headers.js` | 安全响应头与严格 CSP（含 HTTPS 判定） |
+| `src/middlewares/rate-limit.js` | 限流中间件，general / login 分桶、429 与速率头 |
+| `src/middlewares/csrf.js` | CSRF 中间件：签发令牌、恒定时间校验、403 |
+| `src/lib/csrf.js` | 令牌生成、格式校验、恒定时间比较 |
+| `src/lib/backup.js` | 备份 / 恢复 / 校验 / 保留策略的核心逻辑（可被测试直接调用） |
+| `src/repositories/rate-limit.repository.js` | 限流计数与清理的 SQL |
+| `src/services/rate-limit.service.js` | 额度与窗口取值、恢复时刻估算、清理时机 |
+| `scripts/backup.js`、`scripts/restore.js`、`scripts/cleanup.js` | 三个运维脚本（新增 npm scripts） |
+| `src/config.js`、`.env.example` | 新增 `RATE_LIMIT_*` / `LOGIN_RATE_*` / `CSRF_*` / `SECURITY_*` / `BACKUP_*` 集中校验 |
+| `src/app.js` | 中间件顺序：请求上下文 → 安全头 → 站点配置 → 请求体 → 静态资源 → 限流 → CSRF → 会话 → 路由 |
+| `src/views/render.js` | **修复**：向页面片段显式透传 `csrfToken` |
+| `src/views/partials/csrf-field.ejs`、`layout.ejs` | 令牌隐藏字段与 `<meta name="csrf-token">` |
+| `src/views/pages/admin/*.ejs`、`post.ejs`、`partials/header.ejs` | 18 个表单注入令牌；4 处 `onsubmit` 改 `data-confirm` |
+| `public/confirm-submit.js`、`public/admin-editor.js` | 确认对话框外部脚本；预览请求带 `X-CSRF-Token` |
+| `src/routes/admin.routes.js` | 登录成功后清零登录额度 |
+| `tests/helpers/app.js`、`isolated-app.js` | 测试进程退出时自行清理库文件 |
+| `tests/security-headers.test.js`、`security-headers-off.test.js`、`rate-limit.test.js`、`csrf.test.js`、`backup.test.js` | 新增 36 个用例 |
+| `README.md`、`.gitignore` | 安全与限流、备份与恢复章节；环境变量表；`backups/` 忽略 |
+
+不引入任何新的第三方依赖：令牌与限流摘要用 `node:crypto`，备份用 `better-sqlite3` 自带的
+`VACUUM INTO`，脚本参数解析手写十行。
+
+### 验证结果
+
+- `npm run migrate` → `["001_init.sql" … "006_rate_limit.sql"]`，重复执行不重跑（幂等）
+- `npm test` → **187 个用例全部通过**（Day 1-6 的 151 + Day 7 新增 36）
+- 启动服务后 curl 冒烟（PORT=3117，**CSRF / 限流 / 安全头全部保持默认开启**）→ **41 项检查全部通过**：
+  首页 200 与速率头、6 类安全头、CSP 不含 `unsafe-inline`、明文 HTTP 不发 HSTS、
+  登录页下发 43 字符令牌且隐藏字段与 meta 一致、令牌 Cookie `HttpOnly`、
+  无令牌登录 403 + 中文提示、带令牌登录 303、新建草稿 303 且前台 404、发布 303 且前台 200 并渲染 `<h2>`、
+  无令牌评论 403、登录桶「401 / 401 / 429」三连、全局压测出现 200 后转 429、
+  `rate_limit.blocked` 与 `csrf.rejected` 日志落盘、备份脚本退出码 0 且产出文件、
+  无参数恢复退出码 1、清理脚本退出码 0
+- 备份 / 恢复脚本单独实跑：`npm run backup` 连跑两次生成两份不同文件（同秒不覆盖）、
+  坏文件被拒（`file is not a database`）、`npm run cleanup` 清掉 268 个遗留测试库
+- 反向验证（变异测试，逐个破坏后确认用例真的会红，再恢复）：
+  ① 去掉 CSRF 校验 → 3 个用例失败；② 摘掉安全头中间件 → 7 个失败；
+  ③ 限流恒放行 → 6 个失败；④ 去掉 render 的 `csrfToken` 透传 → 1 个失败；
+  ⑤ 跳过 `integrity_check` → 1 个失败；恢复后 187/187 全绿
+- 实现过程中发现并修复的**真实缺陷**（都是用例逼出来的，不是自查发现的）：
+  ① `renderPage` 先单独渲染页面片段、那时 `res.locals` 还没参与，导致表单里的 `_csrf`
+  **渲染成空值**——页面看着有令牌、实际提交必被 403；
+  ② `pre-restore-*` 快照在同一秒内第二次恢复时文件名撞车，`VACUUM INTO` 直接报
+  `output file already exists`（已加重名避让）；
+  ③ 测试进程退出时删库文件，Windows 上 SQLite 文件仍被占用，`rmSync` 抛 EBUSY 会让
+  **整个测试文件被判失败**（改为先 `closeDb()` 再删，且异常不外溢）
+
+### 已知限制
+
+- 限流按 `req.ip` 分来源，**反向代理后面取到的是代理地址**：需要配 `TRUST_PROXY` 才会看
+  `X-Forwarded-For`，当前未实现，代理后面部署需自行确认
+- 限流记在进程内 SQLite，多实例部署时各实例独立计数（真正的共享限流需要 Redis 之类）
+- 全局额度按来源不按用户：同一 NAT / 代理出口下的正常用户会被一起限流
+- HSTS 默认关闭，且只在 HTTPS 请求下发送；首次部署需要手动确认后再打开
+- CSP 允许 `img-src https:`：文章正文引用外链图是正常使用方式，代价是外链图不受同源限制
+- 没有账号锁定与验证码：登录限流是「按来源减速」，不是「锁定某个账号」，
+  分布式慢速爆破仍能绕过
+- 备份是**本地文件**，没有异地/云端；`npm run backup` 需要自己接定时任务（cron / 计划任务）
+- 恢复脚本会覆盖当前库，虽然有 `pre-restore` 快照兜底，但仍建议先在非生产环境演练一次
+- 测试库清理只匹配 `data/test-*.db`；历史遗留的 `smoke-day4.db` 这类文件不在匹配范围内
+- Day 2-6 遗留、本轮**仍未解决**的：评论无限楼与通知、FTS5 全文检索、多分类、
+  按月归档、测试库之外的运维可观测性（无指标端点、无告警）
+
+### 下一步（Day 8 及以后）
+
+路线图 7 天已全部完成。若要继续，优先级建议：
+① 反向代理与多实例支持（`TRUST_PROXY` + 共享限流存储）；
+② 运维可观测性（指标端点、结构化告警、备份定时化与异地留存）；
+③ 内容能力（评论楼中楼、附件上传与图床、FTS5 全文检索）；
+④ 多用户与角色权限（当前只有一个 `.env` 里的管理员）。

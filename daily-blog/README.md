@@ -21,6 +21,9 @@ npm start            # 启动服务，默认 http://127.0.0.1:3000
 ```bash
 npm run dev          # 开发模式（文件变化自动重启）
 npm run reset        # 删除本地库文件并重新迁移 + 填充示例数据 + 同步管理员账号
+npm run backup       # 备份数据库到 backups/（VACUUM INTO，含 WAL 未合并的内容）
+npm run restore -- <备份文件名> --yes   # 从备份恢复（会先给当前库存一份快照）
+npm run cleanup      # 清理测试遗留的 data/test-*.db 与过期的限流记录
 npm test             # 运行全部测试（node:test + supertest）
 ```
 
@@ -151,6 +154,43 @@ npm test             # 运行全部测试（node:test + supertest）
 | `GET /search` | 搜索页，参数 `?q=`（关键词）、`?page=`、`?category=`、`?tag=` |
 | `GET /api/search` | 搜索接口，返回 JSON（含 `titleHtml` / `excerptHtml` 高亮片段） |
 
+## 安全与限流（Day 7）
+
+**写请求必须有 CSRF 令牌。** 令牌由中间件按请求签发、写入 HttpOnly Cookie，
+表单里回传同一个值（`<input type="hidden" name="_csrf">`），或用 `X-CSRF-Token` 头
+（后台预览这类 fetch 走头）。三者不一致即 403：`表单已过期或来源不可信`。
+游客的评论表单同样受保护——攻击者读不到也写不进受害者的 Cookie，构造不出能匹配的表单。
+
+**响应头默认全开**：`nosniff`、`X-Frame-Options: DENY`、严格 CSP、
+`Referrer-Policy`、`Permissions-Policy`、COOP/CORP，并去掉 `X-Powered-By`。
+CSP 里**没有** `unsafe-inline`：为此 Day 2-6 写在标签上的 `onsubmit="return confirm(...)"`
+全部改成了 `data-confirm` 属性 + 外部脚本。
+`Strict-Transport-Security` 只在请求确实走 HTTPS（含 `X-Forwarded-Proto: https`）时发送，
+且需要先配置 `SECURITY_HSTS_MAX_AGE`。
+
+**限流分两个桶**，命中一律 429 + `Retry-After`：
+
+| 桶 | 覆盖范围 | 默认额度 | 说明 |
+| --- | --- | --- | --- |
+| `general` | 全站（静态资源除外） | 300 次 / 60 秒 | 挡脚本扫站；样式与脚本**不**占额度，否则打开一个后台页就耗掉十几次 |
+| `login` | `POST /admin/login` | 10 次 / 10 分钟 | 登录成功会清零该来源的失败计数，不惩罚刚登录成功的人 |
+
+计数落在 SQLite（`rate_limit_hits`），重启不清零；来源只存加盐 SHA-256 摘要，库里没有明文 IP。
+响应带 `RateLimit-Limit` / `RateLimit-Remaining` / `RateLimit-Reset`。
+
+## 备份与恢复
+
+- `npm run backup` 用 SQLite 的 `VACUUM INTO` 生成 `backups/blog-YYYYMMDD-HHMMSS.db`。
+  **不用 `cp data/blog.db`**：WAL 模式下最新数据还在 `-wal` 里，直接复制主库拿到的是旧快照。
+- 超过 `BACKUP_KEEP`（默认 10）份会自动删掉最旧的；同一秒重复备份会自动加序号，不会互相覆盖。
+- `npm run restore -- <文件名> --yes` 的**执行顺序是安全的**：
+  先校验备份完整性（坏文件根本碰不到生产库）→ 再给当前库存一份 `pre-restore-*` 快照 → 最后才覆盖。
+  没加 `--yes` 时只打印用法和可用备份，不动任何文件。
+- 备份产物目录 `backups/` 已被 gitignore。
+
+`npm run cleanup` 负责清理测试遗留的 `data/test-*.db`（测试进程退出时也会自行删除）
+与过期的限流记录；加 `--dry-run` 可先看会删什么。
+
 ## 目录结构
 
 ```text
@@ -165,12 +205,12 @@ daily-blog/
 │   ├── logger.js          # 结构化 JSON 日志（带 requestId）
 │   ├── errors.js          # 类型化错误体系
 │   ├── db/                # 数据库连接、迁移执行、事务助手、示例数据
-│   ├── lib/               # 通用小工具（Cookie 读写、slug 生成、LIKE 转义、搜索高亮、IP 摘要、评论正文处理、XML、绝对地址）
+│   ├── lib/               # 通用小工具（Cookie 读写、slug 生成、LIKE 转义、搜索高亮、IP 摘要、评论正文处理、XML、绝对地址、CSRF 令牌、备份与恢复）
 │   ├── repositories/      # 数据访问层（只写 SQL）
 │   ├── services/          # 业务规则层（不依赖 HTTP 对象）
 │   ├── validation/        # 请求表单校验（zod）
 │   ├── routes/            # 路由层（解析请求 → 调用服务 → 渲染）
-│   ├── middlewares/       # 请求上下文、会话与鉴权、404、全局错误处理
+│   ├── middlewares/       # 请求上下文、安全响应头、限流、CSRF、会话与鉴权、404、全局错误处理
 │   └── views/             # EJS 模板（layout + pages + partials）
 └── tests/                 # node:test 测试用例
 ```
@@ -199,6 +239,17 @@ daily-blog/
 | `COMMENT_RATE_LIMIT` | `3` | 同一来源在窗口期内最多提交的评论数（1-50），超出 429 |
 | `COMMENT_RATE_WINDOW_MINUTES` | `10` | 频率限制窗口（1-1440 分钟） |
 | `COMMENT_MAX_LINKS` | `3` | 单条评论允许的外链数（0-10），超出 400 |
+| `RATE_LIMIT_ENABLED` | `true` | 是否启用全局限流 |
+| `RATE_LIMIT_MAX` | `300` | 全局额度：同一来源在窗口内的请求数（1-100000） |
+| `RATE_LIMIT_WINDOW_SECONDS` | `60` | 全局限流窗口（1-86400 秒） |
+| `LOGIN_RATE_MAX` | `10` | 登录额度：同一来源在窗口内的登录尝试数（1-1000） |
+| `LOGIN_RATE_WINDOW_MINUTES` | `10` | 登录限流窗口（1-1440 分钟），登录成功即清零 |
+| `SECURITY_HEADERS_ENABLED` | `true` | 安全响应头总开关（关掉后一个都不发） |
+| `SECURITY_HSTS_MAX_AGE` | `0` | HSTS 的 max-age（秒），0 = 不发送；仅 HTTPS 请求下生效 |
+| `CSRF_ENABLED` | `true` | CSRF 防护开关（自动化测试可关） |
+| `CSRF_COOKIE_NAME` | `daily_blog_csrf` | 令牌 Cookie 名 |
+| `BACKUP_DIR` | `./backups` | 备份产物目录 |
+| `BACKUP_KEEP` | `10` | 备份保留份数（1-500），超出删最旧的 |
 | `ADMIN_USERNAME` | `admin` | 管理员用户名，3-32 位字母/数字/`_.-` |
 | `ADMIN_PASSWORD` | 空 | 管理员口令，**至少 8 位**；留空则后台登录关闭 |
 | `SESSION_COOKIE_NAME` | `daily_blog_admin` | 会话 Cookie 名 |

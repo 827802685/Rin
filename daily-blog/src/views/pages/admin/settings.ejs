@@ -16,6 +16,7 @@
 <% } %>
 
 <form class="form settings-form" method="post" action="/admin/settings">
+  <%- include("../../partials/csrf-field.ejs") %>
   <fieldset class="settings-group">
     <legend class="settings-group__legend">站点身份</legend>
 
@@ -107,7 +108,8 @@
 </form>
 
 <form class="form settings-reset" method="post" action="/admin/settings/reset"
-      onsubmit="return confirm('确定恢复默认配置？将清空本站全部自定义配置，改用环境变量的取值。');">
+      data-confirm="确定恢复默认配置？将清空本站全部自定义配置，改用环境变量的取值。">
+  <%- include("../../partials/csrf-field.ejs") %>
   <div class="form__actions">
     <button class="button button--ghost" type="submit">恢复默认配置</button>
     <span class="field__hint">当前有 <%= overriddenCount %> 项已被自定义。</span>

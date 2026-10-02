@@ -11,6 +11,7 @@
       <% if (typeof currentAdmin !== "undefined" && currentAdmin) { %>
         <a href="/admin">后台管理</a>
         <form class="nav-inline-form" method="post" action="/admin/logout">
+          <%- include("../partials/csrf-field.ejs") %>
           <button class="link-button" type="submit" title="退出登录">
             退出（<%= currentAdmin.username %>）
           </button>

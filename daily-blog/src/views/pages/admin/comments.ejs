@@ -63,6 +63,7 @@
         <div class="comment-admin__actions">
           <% if (comment.status !== 'approved') { %>
             <form method="post" action="/admin/comments/<%= comment.id %>/status">
+              <%- include("../../partials/csrf-field.ejs") %>
               <input type="hidden" name="status" value="approved" />
               <% if (statusFilter) { %><input type="hidden" name="filter" value="<%= statusFilter %>" /><% } %>
               <button class="link-button" type="submit">通过</button>
@@ -70,6 +71,7 @@
           <% } %>
           <% if (comment.status !== 'rejected') { %>
             <form method="post" action="/admin/comments/<%= comment.id %>/status">
+              <%- include("../../partials/csrf-field.ejs") %>
               <input type="hidden" name="status" value="rejected" />
               <% if (statusFilter) { %><input type="hidden" name="filter" value="<%= statusFilter %>" /><% } %>
               <button class="link-button" type="submit">拒绝</button>
@@ -78,8 +80,9 @@
           <form
             method="post"
             action="/admin/comments/<%= comment.id %>/delete"
-            onsubmit="return confirm('确定删除这条评论？该操作不可撤销。');"
+            data-confirm="确定删除这条评论？该操作不可撤销。"
           >
+            <%- include("../../partials/csrf-field.ejs") %>
             <% if (statusFilter) { %><input type="hidden" name="filter" value="<%= statusFilter %>" /><% } %>
             <button class="link-button link-button--danger" type="submit">删除</button>
           </form>
