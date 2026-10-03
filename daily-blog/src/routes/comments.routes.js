@@ -4,7 +4,7 @@ import { isAppError } from "../errors.js";
 import { postsService } from "../services/posts.service.js";
 import { commentsService } from "../services/comments.service.js";
 import { parseCommentInput } from "../validation/comment-input.js";
-import { hashIp } from "../lib/ip.js";
+import { clientSubject } from "../lib/client-ip.js";
 import { toIso8601 } from "../lib/xml.js";
 import { renderPage } from "../views/render.js";
 import { asyncHandler } from "../middlewares/request-context.js";
@@ -51,11 +51,6 @@ function emptyCommentForm() {
   return { authorName: "", authorEmail: "", authorUrl: "", content: "" };
 }
 
-/** 取客户端 IP 只用于生成不可逆的限流标识，不做地理位置等用途。 */
-function clientIp(req) {
-  return req.ip ?? req.socket?.remoteAddress ?? "";
-}
-
 /**
  * 游客提交评论。
  * 成功一律跳回详情页并带上 `?comment=submitted#comments`，
@@ -85,7 +80,9 @@ router.post(
       const result = commentsService.submit(
         { postId: post.id, ...parsed.data, honeypot: parsed.data.homepage },
         {
-          ipHash: hashIp(clientIp(req)),
+          // 用归一化后的地址做摘要（见 src/lib/client-ip.js）：
+          // 与全局限流中间件同一个口径，否则「评论限流」和「全局限流」会把同一个人算成两个来源。
+          ipHash: clientSubject(req),
           userAgent: req.get("user-agent") ?? "",
         },
       );

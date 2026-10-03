@@ -2,7 +2,7 @@
 
 以「每天一个可交付小目标」的方式构建的个人博客。技术栈：Node.js 22 + Express 5 + SQLite（better-sqlite3）+ EJS 服务端渲染。
 
-- 分支纪律：**全程只使用一个分支 `iter/2026-09-25`**，所有提交都放在这个分支里。
+- 分支纪律：**全程只使用滚动工作分支 `iter`**，所有迭代提交都放在这个分支（每 5 个迭代日合并进 `main` 一次）。
 - 迭代记录：见 [ITERATIONS.md](./ITERATIONS.md)。
 
 ## 快速开始
@@ -178,6 +178,53 @@ CSP 里**没有** `unsafe-inline`：为此 Day 2-6 写在标签上的 `onsubmit=
 计数落在 SQLite（`rate_limit_hits`），重启不清零；来源只存加盐 SHA-256 摘要，库里没有明文 IP。
 响应带 `RateLimit-Limit` / `RateLimit-Remaining` / `RateLimit-Reset`。
 
+## 反向代理与多实例（Day 8）
+
+**部署在代理后面必须配 `TRUST_PROXY`，否则限流会把所有访客算成同一个来源**（代理地址），
+一个人的额度耗尽，所有人一起 429。
+
+| 取值 | 含义 | 何时用 |
+| --- | --- | --- |
+| 留空 / `false` / `0` | 不信任任何代理（默认） | 直接暴露在公网、本机开发 |
+| `1`、`2`… | 信任这么多跳 | **推荐**：一层 Nginx / Caddy 填 `1`，两层填 `2` |
+| `127.0.0.1,10.0.0.0/8,loopback` | 只信任列表里的地址 | 代理地址固定时最精确 |
+| `true` | 信任 `X-Forwarded-For` 最左侧 | 只在确认前置网关会覆写客户端自带的 XFF 时用 |
+
+跳数要**等于代理层数**：`X-Forwarded-For: 客户端, 代理1` 配 `1` 只拿到 `代理1`。
+客户端自己加一段伪造地址骗不过跳数（多出来的那段会被忽略），但 `true` 会认最左侧，因此可被伪造。
+
+配完之后用 `curl /health` 现场确认，它会回传本实例的解析结果：
+
+```jsonc
+{
+  "status": "ok",
+  "instanceId": "web-1",          // 多实例时区分进程
+  "trustProxy": { "enabled": true, "mode": "hops", "label": "1 跳" },
+  "clientIp": "203.0.113.9",      // 本请求被解析成哪个客户端
+  "rateLimit": { "store": "sqlite", "shared": true, "dbPath": "./data/rate-limit.db" }
+}
+```
+
+多实例部署还需要两件事：
+
+1. **共享限流额度**：把 `RATE_LIMIT_DB_PATH` 指向同一个库文件（同一主机上的多个实例即可共享；
+   SQLite 的跨进程锁负责并发写）。`RATE_LIMIT_STORE=memory` 则退回进程内计数，重启清零、实例间不共享。
+2. **会话与配置**：会话、站点配置、文章数据都在库里，多实例天然一致；CSRF 用双提交 Cookie，无服务端状态。
+
+Nginx 参考：
+
+```nginx
+location / {
+  proxy_pass http://127.0.0.1:3000;
+  proxy_set_header Host              $host;
+  proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+  proxy_set_header X-Forwarded-Proto $scheme;
+}
+```
+
+同时建议显式设置 `SITE_BASE_URL`（canonical / RSS / sitemap 用），
+不要靠请求头推断——容器内部地址会被写进站点地图。
+
 ## 备份与恢复
 
 - `npm run backup` 用 SQLite 的 `VACUUM INTO` 生成 `backups/blog-YYYYMMDD-HHMMSS.db`。
@@ -205,7 +252,7 @@ daily-blog/
 │   ├── logger.js          # 结构化 JSON 日志（带 requestId）
 │   ├── errors.js          # 类型化错误体系
 │   ├── db/                # 数据库连接、迁移执行、事务助手、示例数据
-│   ├── lib/               # 通用小工具（Cookie 读写、slug 生成、LIKE 转义、搜索高亮、IP 摘要、评论正文处理、XML、绝对地址、CSRF 令牌、备份与恢复）
+│   ├── lib/               # 通用小工具（Cookie 读写、slug 生成、LIKE 转义、搜索高亮、IP 摘要与客户端地址、评论正文处理、XML、绝对地址、CSRF 令牌、备份与恢复、限流存储）
 │   ├── repositories/      # 数据访问层（只写 SQL）
 │   ├── services/          # 业务规则层（不依赖 HTTP 对象）
 │   ├── validation/        # 请求表单校验（zod）
@@ -231,6 +278,10 @@ daily-blog/
 | `SITE_MAX_TAGS_PER_POST` | `8` | 一篇文章最多可设置的标签数（1-50） |
 | `SITE_SEARCH_MAX_LENGTH` | `64` | 搜索关键词长度上限（8-200），超出返回 400 |
 | `SITE_BASE_URL` | `http://127.0.0.1:3000` | 站点对外地址（canonical / RSS / sitemap 用）；留空则按请求推断 |
+| `TRUST_PROXY` | 空 | 信任的代理跳数 / 可信地址列表（默认不信任，见「反向代理与多实例」） |
+| `INSTANCE_ID` | `pid-<进程号>` | 实例标识，多实例部署时区分进程（日志与 `/health`） |
+| `RATE_LIMIT_STORE` | `sqlite` | 限流存储：`sqlite` / `memory`（进程内，不共享） |
+| `RATE_LIMIT_DB_PATH` | 空 | 限流独立库文件；留空用主库，多实例指向同一文件即共享额度 |
 | `SITE_FEED_SIZE` | `20` | RSS 输出的已发布文章条数（1-100） |
 | `SITE_FEED_MODE` | `summary` | RSS 正文输出方式：`summary` / `full` |
 | `SITE_ROBOTS_NOINDEX` | `false` | 全站禁止搜索引擎收录（noindex + `Disallow: /`） |
@@ -239,7 +290,7 @@ daily-blog/
 | `COMMENT_RATE_LIMIT` | `3` | 同一来源在窗口期内最多提交的评论数（1-50），超出 429 |
 | `COMMENT_RATE_WINDOW_MINUTES` | `10` | 频率限制窗口（1-1440 分钟） |
 | `COMMENT_MAX_LINKS` | `3` | 单条评论允许的外链数（0-10），超出 400 |
-| `RATE_LIMIT_ENABLED` | `true` | 是否启用全局限流 |
+| `RATE_LIMIT_ENABLED` | `true` | 是否启用全局限流（限流按 `req.ip` 分来源，代理后面请配 `TRUST_PROXY`） |
 | `RATE_LIMIT_MAX` | `300` | 全局额度：同一来源在窗口内的请求数（1-100000） |
 | `RATE_LIMIT_WINDOW_SECONDS` | `60` | 全局限流窗口（1-86400 秒） |
 | `LOGIN_RATE_MAX` | `10` | 登录额度：同一来源在窗口内的登录尝试数（1-1000） |

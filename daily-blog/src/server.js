@@ -2,6 +2,7 @@ import { createApp } from "./app.js";
 import { config } from "./config.js";
 import { getDb, closeDb } from "./db/index.js";
 import { authService } from "./services/auth.service.js";
+import { getRateLimitStore } from "./lib/rate-limit-store.js";
 import { logger, setLogLevel } from "./logger.js";
 
 setLogLevel(config.logLevel);
@@ -23,12 +24,24 @@ if (adminBootstrap.enabled) {
   });
 }
 
+// TRUST_PROXY=all 等于「相信 X-Forwarded-For 的最左侧」：只要前置代理没有覆写掉
+// 客户端自带的那一段，任何人都能伪造来源身份，限流与评论防灌水会一起失效。
+// 不是错误（有些网关确实只能这么配），但必须在启动日志里留下痕迹。
+if (config.trustProxy.mode === "all") {
+  logger.warn("trust_proxy.all", {
+    message: "TRUST_PROXY=all 信任 X-Forwarded-For 最左侧，客户端可伪造来源；建议改为跳数（如 1）或可信地址列表",
+  });
+}
+
 const app = createApp();
 const server = app.listen(config.port, config.host, () => {
   logger.info("server.started", {
     url: `http://${config.host}:${config.port}`,
     env: config.env,
     dbPath: config.dbPath,
+    instanceId: config.instanceId,
+    trustProxy: config.trustProxy.label,
+    rateLimit: getRateLimitStore().describe(),
   });
 });
 

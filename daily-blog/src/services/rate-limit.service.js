@@ -1,5 +1,5 @@
 import { config } from "../config.js";
-import { rateLimitRepository } from "../repositories/rate-limit.repository.js";
+import { getRateLimitStore } from "../lib/rate-limit-store.js";
 
 /**
  * 限流业务规则：窗口与额度的取值、恢复时刻的估算、过期行的清理时机。
@@ -48,22 +48,22 @@ function resolvePolicy(bucket) {
 export function consume(bucket, subject) {
   const { limit, windowSeconds } = resolvePolicy(bucket);
 
-  rateLimitRepository.record(bucket, subject);
-  rateLimitRepository.pruneSubject(bucket, subject, windowSeconds);
+  const store = getRateLimitStore();
+
+  store.record(bucket, subject);
+  store.pruneSubject(bucket, subject, windowSeconds);
 
   if (++sincePrune >= PRUNE_EVERY) {
     sincePrune = 0;
-    rateLimitRepository.pruneStale(Math.max(windowSeconds, config.rateLimit.windowSeconds));
+    store.pruneStale(Math.max(windowSeconds, config.rateLimit.windowSeconds));
   }
 
-  const used = rateLimitRepository.countRecent(bucket, subject, windowSeconds);
+  const used = store.countRecent(bucket, subject, windowSeconds);
   const allowed = used <= limit;
 
   let retryAfterSeconds = 0;
   if (!allowed) {
-    const oldest = parseSqliteTime(
-      rateLimitRepository.oldestRecent(bucket, subject, windowSeconds),
-    );
+    const oldest = parseSqliteTime(store.oldestRecent(bucket, subject, windowSeconds));
     retryAfterSeconds = oldest
       ? Math.max(1, Math.ceil((oldest + windowSeconds * 1000 - Date.now()) / 1000))
       : windowSeconds;
@@ -81,7 +81,7 @@ export function consume(bucket, subject) {
 /** 只查询、不记数：用于给响应头提供当前余量。 */
 export function peek(bucket, subject) {
   const { limit, windowSeconds } = resolvePolicy(bucket);
-  const used = rateLimitRepository.countRecent(bucket, subject, windowSeconds);
+  const used = getRateLimitStore().countRecent(bucket, subject, windowSeconds);
   return {
     limit,
     remaining: Math.max(0, limit - used),
@@ -91,11 +91,22 @@ export function peek(bucket, subject) {
 
 /** 登录成功后清零该来源的失败计数：额度是挡暴力破解的，不该惩罚刚登录成功的人。 */
 export function resetLoginAttempts(subject) {
-  return rateLimitRepository.clear(RATE_BUCKETS.login, subject);
+  return getRateLimitStore().clear(RATE_BUCKETS.login, subject);
 }
 
 export function pruneStale(windowSeconds = 86400) {
-  return rateLimitRepository.pruneStale(windowSeconds);
+  return getRateLimitStore().pruneStale(windowSeconds);
 }
 
-export const rateLimitService = { consume, peek, resetLoginAttempts, pruneStale };
+/** 只数不删：清理脚本的预演模式用它报告「会删掉多少行」。 */
+export function countStale(windowSeconds = 86400) {
+  return getRateLimitStore().countStale(windowSeconds);
+}
+
+export const rateLimitService = {
+  consume,
+  peek,
+  resetLoginAttempts,
+  pruneStale,
+  countStale,
+};

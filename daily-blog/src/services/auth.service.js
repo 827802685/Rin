@@ -92,22 +92,27 @@ export const authService = {
     }
 
     const username = config.admin.username;
+    // 先看一眼，用来判断「要不要做 scrypt」和「这次算新建还是更新」。
+    // 真正的写入交给 upsert：多实例同时启动时，这里的判断可能已经过期。
     const existing = usersRepository.findByUsername(username);
 
-    if (!existing) {
-      const id = usersRepository.insert({
-        username,
-        passwordHash: hashPassword(config.admin.password),
-      });
-      return { created: true, updated: false, enabled: true, id, username };
-    }
-
-    if (verifyPassword(config.admin.password, existing.password_hash)) {
+    if (existing && verifyPassword(config.admin.password, existing.password_hash)) {
       return { created: false, updated: false, enabled: true, id: existing.id, username };
     }
 
-    usersRepository.updatePasswordHash(existing.id, hashPassword(config.admin.password));
-    return { created: false, updated: true, enabled: true, id: existing.id, username };
+    const id = usersRepository.upsert({
+      username,
+      passwordHash: hashPassword(config.admin.password),
+    });
+    // 并发启动时 created 可能是乐观的（另一个实例刚插完），只影响这条日志的措辞；
+    // 真正要保证的是「账号存在且口令与 .env 一致」，这一点由 upsert 保证。
+    return {
+      created: !existing,
+      updated: Boolean(existing),
+      enabled: true,
+      id: id ?? existing?.id ?? null,
+      username,
+    };
   },
 
   /** 校验用户名密码，失败统一抛 401，不区分「用户不存在」与「密码错误」。 */

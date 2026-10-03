@@ -1,4 +1,5 @@
 import "dotenv/config";
+import { parseTrustProxy } from "./lib/trust-proxy.js";
 
 /**
  * 集中配置：所有配置来自环境变量，启动时一次性校验，缺失即快速失败。
@@ -202,6 +203,24 @@ if (securityHstsMaxAge < 0 || securityHstsMaxAge > 63072000) {
 // 因为每个写请求都要先取表单令牌，会淹没业务断言（Day 5 的限流同样是这个处理口径）。
 const csrfEnabled = readBool("CSRF_ENABLED", true);
 
+// ---------- Day 8：反向代理与多实例 ----------
+
+// 是否信任反向代理的转发头，决定 req.ip 是「代理地址」还是「真实客户端」。
+// 默认不信任：不在代理后面却开着它，任何人都能用 X-Forwarded-For 伪造来源身份，
+// 限流与评论防灌水会一起失效。取值含义见 src/lib/trust-proxy.js。
+const trustProxy = parseTrustProxy(readString("TRUST_PROXY", ""));
+
+// 实例标识：多实例部署时用它区分「这条日志/这个响应来自哪个进程」。
+// 留空则由进程号兜底；反向代理后面排查问题（某个实例卡了、某个实例配错了）全靠它。
+const instanceId = readString("INSTANCE_ID", "") || `pid-${process.pid}`;
+
+// 限流存储：sqlite（默认，可指向独立共享库）或 memory（进程内，不共享）。
+const rateLimitStore = readEnum("RATE_LIMIT_STORE", ["sqlite", "memory"], "sqlite");
+
+// 限流专用库文件。留空 = 用主库；指向独立文件时，同一主机上的多个实例
+// 共享同一份额度（SQLite 的跨进程锁负责并发写）。
+const rateLimitDbPath = readString("RATE_LIMIT_DB_PATH", "");
+
 const backupDir = readString("BACKUP_DIR", "./backups");
 const backupKeep = readInt("BACKUP_KEEP", 10);
 if (backupKeep < 1 || backupKeep > 500) {
@@ -213,6 +232,8 @@ export const config = Object.freeze({
   port,
   host: readString("HOST", "127.0.0.1"),
   dbPath: readString("DB_PATH", "./data/blog.db"),
+  instanceId,
+  trustProxy: Object.freeze(trustProxy),
   site: Object.freeze({
     title: readString("SITE_TITLE", "每日迭代博客"),
     description: readString("SITE_DESCRIPTION", "以每日迭代方式构建的个人博客"),
@@ -250,6 +271,8 @@ export const config = Object.freeze({
     windowSeconds: rateLimitWindowSeconds,
     loginMax: loginRateMax,
     loginWindowMinutes: loginRateWindowMinutes,
+    store: rateLimitStore,
+    dbPath: rateLimitDbPath,
   }),
   security: Object.freeze({
     headersEnabled: securityHeadersEnabled,

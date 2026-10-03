@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { config } from "../src/config.js";
 import { logger } from "../src/logger.js";
-import { getDb, closeDb } from "../src/db/index.js";
+import { closeDb } from "../src/db/index.js";
 import { rateLimitService } from "../src/services/rate-limit.service.js";
 
 /**
@@ -25,37 +25,43 @@ if (only && !["test-db", "rate-limit"].includes(only)) {
   throw new Error(`--only 只支持 test-db / rate-limit，当前值：${only}`);
 }
 
-const dataDir = path.dirname(config.dbPath);
+// 测试库可能散在两个目录：主库目录 + 限流共享库目录（Day 8 起可分开配）。
+const dataDirs = [
+  ...new Set(
+    [config.dbPath, config.rateLimit.dbPath]
+      .filter(Boolean)
+      .map((file) => path.dirname(file)),
+  ),
+];
 let removedFiles = [];
 let removedBytes = 0;
 
-if (only !== "rate-limit" && fs.existsSync(dataDir)) {
-  const candidates = fs
-    .readdirSync(dataDir)
-    .filter((name) => /^test-.*\.db(-wal|-shm)?$/.test(name));
+if (only !== "rate-limit") {
+  for (const dataDir of dataDirs) {
+    if (!fs.existsSync(dataDir)) {
+      continue;
+    }
+    const candidates = fs
+      .readdirSync(dataDir)
+      .filter((name) => /^test-.*\.db(-wal|-shm)?$/.test(name));
 
-  for (const name of candidates) {
-    const full = path.join(dataDir, name);
-    const stat = fs.statSync(full);
-    removedBytes += stat.size;
-    removedFiles.push(name);
-    if (!dryRun) {
-      fs.rmSync(full, { force: true });
+    for (const name of candidates) {
+      const full = path.join(dataDir, name);
+      const stat = fs.statSync(full);
+      removedBytes += stat.size;
+      removedFiles.push(name);
+      if (!dryRun) {
+        fs.rmSync(full, { force: true });
+      }
     }
   }
 }
 
 let prunedRows = 0;
 if (only !== "test-db") {
-  const db = getDb();
   // 用 24 小时兜底：正常的窗口最多几十分钟，能活过一天的说明服务没在清。
-  prunedRows = dryRun
-    ? db
-        .prepare(
-          "SELECT COUNT(*) AS total FROM rate_limit_hits WHERE created_at < datetime('now', '-86400 seconds')",
-        )
-        .get().total
-    : rateLimitService.pruneStale(86400);
+  // 走服务层而不是直接查主库——限流计数可能落在独立的共享库里（RATE_LIMIT_DB_PATH）。
+  prunedRows = dryRun ? rateLimitService.countStale(86400) : rateLimitService.pruneStale(86400);
   closeDb();
 }
 

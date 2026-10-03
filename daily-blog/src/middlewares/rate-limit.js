@@ -1,6 +1,6 @@
 import { config } from "../config.js";
 import { TooManyRequestsError } from "../errors.js";
-import { hashIp } from "../lib/ip.js";
+import { clientSubject } from "../lib/client-ip.js";
 import { RATE_BUCKETS, rateLimitService } from "../services/rate-limit.service.js";
 
 /**
@@ -10,8 +10,8 @@ import { RATE_BUCKETS, rateLimitService } from "../services/rate-limit.service.j
  * - `login` 只覆盖 POST /admin/login，额度单独收紧——它是唯一「猜中即通关」的入口。
  *
  * 来源用 IP 摘要而不是明文（与评论限流同一口径），库里没有可反查的地址。
- * 注意：`req.ip` 在反向代理后面取到的是代理地址，需要配 `TRUST_PROXY` 才会看
- * X-Forwarded-For；当前实现不做这个，见「已知限制」。
+ * `req.ip` 由 Express 按 `TRUST_PROXY` 解析（见 src/lib/trust-proxy.js）：
+ * 反向代理后面必须配跳数或可信地址列表，否则所有请求都会被算成同一个来源（代理自己）。
  */
 
 /** 登录路径单独分桶：它已经在全局桶里计过一次，这里不再重复计数。 */
@@ -27,7 +27,7 @@ export function rateLimitGuard(req, res, next) {
   }
 
   const bucket = bucketFor(req);
-  const subject = hashIp(req.ip);
+  const subject = clientSubject(req);
 
   let result;
   try {

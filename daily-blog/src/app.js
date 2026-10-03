@@ -41,6 +41,10 @@ export function createApp() {
   app.set("views", path.join(import.meta.dirname, "views"));
   app.locals.site = config.site;
 
+  // 必须在任何中间件之前设置：`req.ip` 怎么解析（要不要看 X-Forwarded-For）
+  // 决定了限流与评论防灌水把请求算成「谁」，晚一步就会有请求按错误的来源处理。
+  app.set("trust proxy", config.trustProxy.value);
+
   app.use(requestContext);
   app.use(securityHeaders);
   app.use(siteSettings);

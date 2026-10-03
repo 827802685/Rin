@@ -1,6 +1,9 @@
 # 迭代记录
 
-单分支开发：所有迭代提交都放在 `iter/2026-09-25` 分支。每天结束时必须满足验收标准：**能启动、页面可访问、核心操作流程走通**。
+每天结束时必须满足验收标准：**能启动、页面可访问、核心操作流程走通**。
+
+分支纪律（2026-10-03 起）：全仓库只有 `main`（主干）与 `iter`（滚动工作分支）两个分支，
+所有迭代提交放在 `iter`，每完成 5 个迭代日合并进 `main` 一次。
 
 ## 整体路线图
 
@@ -13,8 +16,9 @@
 | Day 5 | 评论 | P2 | 游客评论提交、审核状态、后台审核、基础防灌水 | ✅ 已完成 |
 | Day 6 | 站点体验 | P2 | 归档页、RSS、sitemap、SEO meta、站点配置页 | ✅ 已完成 |
 | Day 7 | 交付加固 | P1 | 限流、安全头、CSRF、备份脚本、完整文档与测试补齐 | ✅ 已完成 |
+| Day 8 | 反向代理与多实例 | P1 | `TRUST_PROXY` 真实客户端地址、限流存储可插拔与共享、实例标识与健康检查、多实例启动竞态修复 | ✅ 已完成 |
 
-排期原则：先保证「能读」（Day 1），再保证「能写」（Day 2），随后依次补组织方式（Day 3）、检索（Day 4）、互动（Day 5），最后做体验与加固（Day 6-7）。
+排期原则：先保证「能读」（Day 1），再保证「能写」（Day 2），随后依次补组织方式（Day 3）、检索（Day 4）、互动（Day 5），最后做体验与加固（Day 6-7）与部署形态（Day 8）。
 
 ---
 
@@ -704,7 +708,110 @@ XML 转义、日期格式、Host 校验全部用内置能力，表单校验复�
 ### 下一步（Day 8 及以后）
 
 路线图 7 天已全部完成。若要继续，优先级建议：
-① 反向代理与多实例支持（`TRUST_PROXY` + 共享限流存储）；
+① 反向代理与多实例支持（`TRUST_PROXY` + 共享限流存储）← **本次已完成，见下方 Day 8**；
 ② 运维可观测性（指标端点、结构化告警、备份定时化与异地留存）；
 ③ 内容能力（评论楼中楼、附件上传与图床、FTS5 全文检索）；
 ④ 多用户与角色权限（当前只有一个 `.env` 里的管理员）。
+
+---
+
+## Day 8（2026-10-04）· 反向代理与多实例
+
+### 本次新增功能
+
+**`TRUST_PROXY`：客户端地址解析**
+
+- 新增 `src/lib/trust-proxy.js`，把环境变量解析成 Express 的 `trust proxy` 设置，四种取值：
+  留空 / `false` / `0`（默认不信任）、`true`（信任 XFF 最左侧）、**数字跳数**（推荐，一层代理填 1）、
+  逗号分隔的可信地址列表（支持 IP / CIDR / `loopback`、`linklocal`、`uniquelocal`）
+- 非法取值在**启动阶段直接抛错**：这类配置写错不会报错，只会「悄悄把所有人当成同一个来源」
+  或「谁都能伪造来源」，必须 fail fast
+- `TRUST_PROXY=true` 时启动日志打 `trust_proxy.all` 警告——最左侧由客户端控制，可被伪造
+- 新增 `src/lib/client-ip.js`：把 `::ffff:127.0.0.1`（IPv4 映射）与 `::1`（IPv6 回环）归一化成同一个来源。
+  双栈监听下同一个人可能被记成两种形态，不归一化就能拿到**双倍额度**；
+  限流中间件与评论防灌水现在共用同一个 `clientSubject(req)` 口径
+
+**限流存储可插拔 + 多实例共享**
+
+- `src/lib/rate-limit-store.js` 提供两种实现，由 `RATE_LIMIT_STORE` 选择：
+  `sqlite`（默认）与 `memory`（进程内 Map，重启清零）。两者跑同一份接口契约测试
+- 新增 `RATE_LIMIT_DB_PATH`：指向独立库文件时，**同一主机上的多个实例共享同一份额度**
+  （SQLite 的跨进程锁 + `busy_timeout` 负责并发写）；留空则仍落在主库，行为与 Day 7 一致
+- 限流专用库只应用 `006_rate_limit.sql`（`runMigrations(db, { only })`），不会把文章表也建一遍
+- 仓储层从单例改成 `createRateLimitRepository(dbGetter)` 工厂：换存储不用改服务层与中间件
+- `/health` 回传 `instanceId` / `trustProxy` / `clientIp` / `rateLimit`：
+  「我配的 TRUST_PROXY 到底生效了没有」从此可以 `curl` 一眼确认，不用翻日志
+
+**多实例启动竞态（冒烟里真实踩到并修复）**
+
+- **管理员账号引导崩溃**：两个实例同时首启时都查到「账号不存在」，抢着 INSERT，
+  后到的那个撞 `UNIQUE constraint failed: admin_users.username` 直接崩在启动阶段
+  （B 实例就是这么起不来的）。改为 `INSERT ... ON CONFLICT(username) DO UPDATE` 的 upsert，
+  由数据库裁决谁先谁后
+- **迁移并发加固**：迁移事务改用 `BEGIN IMMEDIATE`（立刻拿写锁）并在事务内复查版本记录；
+  锁竞争（`SQLITE_BUSY` / `database is locked`）最多重试 3 次。迁移幂等，重跑一轮不会出问题
+
+### 主要文件
+
+| 文件 | 作用 |
+| --- | --- |
+| `src/lib/trust-proxy.js` | `TRUST_PROXY` 取值解析（跳数 / 地址列表 / 关键字）与启动期校验 |
+| `src/lib/client-ip.js` | 客户端地址归一化与来源摘要（限流、评论防灌水共用） |
+| `src/lib/rate-limit-store.js` | 限流存储工厂：sqlite（可指向共享库）/ memory，含接口契约 |
+| `src/repositories/rate-limit.repository.js` | 改为工厂 `createRateLimitRepository(dbGetter)`；新增 `countStale` |
+| `src/repositories/users.repository.js` | `insert` → `upsert`（`ON CONFLICT`），修掉多实例并发建号崩溃 |
+| `src/db/index.js` | 抽出 `openDatabase`（WAL + `busy_timeout`）；新增 `getRateLimitDb()`；`closeDb` 关两个连接 |
+| `src/db/migrations.js` | 新增 `only` 过滤、`BEGIN IMMEDIATE`、事务内复查版本、锁竞争重试 |
+| `src/services/rate-limit.service.js` | 全部改走存储接口；新增 `countStale`（清理脚本预演用） |
+| `src/services/auth.service.js` | `ensureAdminFromEnv` 改用 upsert，注释说明并发下的语义 |
+| `src/middlewares/rate-limit.js`、`src/routes/admin.routes.js`、`comments.routes.js` | 来源标识统一走 `clientSubject(req)` |
+| `src/routes/health.routes.js` | `/health`、`/ready` 回传运行形态（实例标识 / 代理配置 / 客户端地址 / 限流存储） |
+| `src/app.js`、`src/server.js` | `app.set("trust proxy", ...)` 挂在中间件之前；启动日志记录实例与存储形态 |
+| `src/config.js`、`.env.example` | 新增 `TRUST_PROXY` / `INSTANCE_ID` / `RATE_LIMIT_STORE` / `RATE_LIMIT_DB_PATH` |
+| `scripts/cleanup.js` | 清理脚本覆盖限流库目录，预演改走 `countStale`（不再直接查主库） |
+| `tests/trust-proxy.test.js`、`trust-proxy-bucket.test.js`、`rate-limit-store.test.js`、`runtime-config.test.js`、`multi-instance.test.js` | 新增 40 个用例（配置解析、四种代理口径、限流分桶、存储契约、多进程启动） |
+| `README.md`、`ITERATIONS.md` | 「反向代理与多实例」章节、Nginx 配置片段、环境变量表 |
+
+不引入任何新的第三方依赖：跳数解析、地址校验、内存存储、并发重试全部用内置能力。
+
+### 验证结果
+
+- `npm run migrate` → `["001_init.sql" … "006_rate_limit.sql"]`，重复执行不重跑（幂等）
+- `npm test` → **228 个用例全部通过**（Day 1-7 的 188 + Day 8 新增 40）
+- 双实例冒烟（PORT=3121 / 3122，`TRUST_PROXY=1`，共享 `RATE_LIMIT_DB_PATH`，**CSRF 与限流全开**）→ **32 项检查全部通过**：
+  - `/health` 200 且回传 `instanceId: smoke-a` / `smoke-b`、`trustProxy.mode=hops`、`rateLimit.shared=true`、共享库路径；`/ready` 200
+  - `X-Forwarded-For: 203.0.113.9` → `clientIp` 取到真实客户端；两段 XFF 只配 1 跳时取到中间代理
+  - 首页 / 详情页 / 归档 / RSS / sitemap / robots / 搜索页全部 200
+  - 后台全流程（登录页 200 + CSRF 令牌 → 登录 303 → `/admin` `/admin/settings` `/admin/comments` `/admin/taxonomy` 200）
+  - **A 实例连续 6 次 → `200 200 200 200 200 429`；同一来源打 B 实例 → 429（额度共享）；换一个来源打 B → 200（额度独立）**
+  - 共享限流库已落盘，且库里只有 `rate_limit_hits`，没有文章表
+- 反向验证（变异测试，逐个破坏后确认用例真的会红，再恢复）：
+  ① 不把 `TRUST_PROXY` 落到 Express → 2 个用例失败；
+  ② 去掉 IPv6 映射归一化 → 3 个失败（回环地址被算成两个来源）；
+  ③ 忽略 `RATE_LIMIT_STORE` 配置 → 3 个失败；
+  ④ upsert 退回裸 INSERT → 2 个失败（多实例建号崩溃复现）；恢复后 228/228 全绿
+- 实现过程中发现并修复的**真实缺陷**（不是自查发现的，是双实例冒烟逼出来的）：
+  两个实例同时启动时 B 实例崩在 `UNIQUE constraint failed: admin_users.username`——
+  单实例跑一万次也碰不到，只有真起两个进程才会暴露
+
+### 已知限制
+
+- 跳数必须**等于代理层数**，配少了会取到中间代理（冒烟第 2 节就是这个现场）；
+  配多了（`true`）则客户端可伪造来源，`/health` 与启动日志会提示但不会阻止
+- 共享限流只在**同一台主机**上有效（同一个库文件）；跨主机的共享需要 Redis 之类的外部存储，
+  当前只提供了存储接口，没有实现对应适配器
+- `RATE_LIMIT_STORE=memory` 不落盘、不共享：它解决的是「只读文件系统 / 临时实例」场景，
+  不是多实例方案；`/health` 会明确标注 `shared: false`
+- 限流仍按来源地址分桶，同一 NAT / 代理出口下的正常用户会被一起限流
+- 迁移的并发竞态窗口很小（实测两个进程几乎总是错开），`BEGIN IMMEDIATE` + 重试属于预防性加固；
+  真正稳定触发并被用例覆盖的是管理员账号引导那处
+- 限流专用库只应用 `006_rate_limit.sql`：将来若有迁移改动 `rate_limit_hits`，
+  必须同步更新 `RATE_LIMIT_MIGRATION_FILES`
+- `/health` 会回传请求方的 `clientIp`；它是排查代理配置用的，若不想暴露可自行去掉该字段
+- Day 2-7 遗留、本轮**仍未解决**的：评论无限楼与通知、FTS5 全文检索、多分类、按月归档、异地备份
+
+### 下一步（Day 9 及以后）
+
+优先级建议：① 运维可观测性（指标端点、结构化告警、备份定时化与异地留存）；
+② 内容能力（评论楼中楼、附件上传与图床、FTS5 全文检索）；
+③ 多用户与角色权限；④ 跨主机共享限流（接外部存储适配器）。
