@@ -1,6 +1,9 @@
 /**
  * 后台编辑页交互：Markdown 实时预览（服务端渲染，保证与前台一致）+ Ctrl/Cmd+S 保存。
  * 无构建步骤，直接作为静态资源加载。
+ *
+ * Day 7：预览是 POST 请求，必须带上 CSRF 令牌。
+ * 令牌 Cookie 是 HttpOnly 的，脚本读不到，只能从 layout 的 <meta name="csrf-token"> 取。
  */
 (function () {
   "use strict";
@@ -18,6 +21,11 @@
   var sequence = 0;
   var PREVIEW_DELAY_MS = 400;
 
+  function csrfToken() {
+    var meta = document.querySelector('meta[name="csrf-token"]');
+    return meta ? meta.getAttribute("content") : "";
+  }
+
   function showMessage(text) {
     var paragraph = document.createElement("p");
     paragraph.className = "muted";
@@ -32,13 +40,19 @@
 
     fetch(endpoint, {
       method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        "X-CSRF-Token": csrfToken(),
+      },
       body: body.toString(),
       credentials: "same-origin",
     })
       .then(function (response) {
         if (response.status === 401) {
           throw new Error("登录状态已失效，请重新登录后刷新页面");
+        }
+        if (response.status === 403) {
+          throw new Error("页面已过期，请刷新编辑器后重试");
         }
         if (!response.ok) {
           throw new Error("服务端返回 " + response.status);

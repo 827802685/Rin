@@ -27,6 +27,7 @@
 <% } %>
 
 <form class="editor-form" method="post" action="<%= action %>" data-editor-form>
+  <%- include("../../partials/csrf-field.ejs") %>
   <div class="editor-grid">
     <div class="editor-grid__main">
       <label class="field <%= errors.title ? 'field--invalid' : '' %>">

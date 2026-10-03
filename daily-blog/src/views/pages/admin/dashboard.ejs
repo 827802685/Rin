@@ -57,6 +57,7 @@
 
               <% if (post.isDraft) { %>
                 <form method="post" action="/admin/posts/<%= post.id %>/status">
+                  <%- include("../../partials/csrf-field.ejs") %>
                   <input type="hidden" name="status" value="published" />
                   <% if (statusFilter) { %><input type="hidden" name="filter" value="<%= statusFilter %>" /><% } %>
                   <button class="link-button" type="submit">发布</button>
@@ -64,6 +65,7 @@
               <% } else { %>
                 <a class="link-muted" href="/posts/<%= post.slug %>" target="_blank" rel="noopener">查看</a>
                 <form method="post" action="/admin/posts/<%= post.id %>/status">
+                  <%- include("../../partials/csrf-field.ejs") %>
                   <input type="hidden" name="status" value="draft" />
                   <% if (statusFilter) { %><input type="hidden" name="filter" value="<%= statusFilter %>" /><% } %>
                   <button class="link-button" type="submit">转为草稿</button>
@@ -73,8 +75,9 @@
               <form
                 method="post"
                 action="/admin/posts/<%= post.id %>/delete"
-                onsubmit="return confirm('确定删除这篇文章？该操作不可撤销。');"
+                data-confirm="确定删除这篇文章？该操作不可撤销。"
               >
+                <%- include("../../partials/csrf-field.ejs") %>
                 <% if (statusFilter) { %><input type="hidden" name="filter" value="<%= statusFilter %>" /><% } %>
                 <button class="link-button link-button--danger" type="submit">删除</button>
               </form>

@@ -29,6 +29,20 @@ export async function createIsolatedApp({ tag, env = {}, withSeed = false } = {}
   const { createApp } = await import("../../src/app.js");
   const { getDb } = await import("../../src/db/index.js");
 
+  // 退出前关连接再删文件（Windows 上 SQLite 文件被占用时 rmSync 会抛 EBUSY，
+  // 而异常发生在 exit 钩子里会让整个测试文件被判失败）。
+  const { closeDb } = await import("../../src/db/index.js");
+  process.on("exit", () => {
+    try {
+      closeDb();
+    } catch {}
+    for (const suffix of ["", "-wal", "-shm"]) {
+      try {
+        fs.rmSync(`${dbPath}${suffix}`, { force: true });
+      } catch {}
+    }
+  });
+
   const db = getDb();
   if (withSeed) {
     const { seed } = await import("../../src/db/seed.js");

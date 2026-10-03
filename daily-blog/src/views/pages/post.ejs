@@ -66,6 +66,7 @@
   <% } %>
 
   <form class="comment-form" method="post" action="/posts/<%= encodeURIComponent(post.slug) %>/comments">
+    <%- include("../partials/csrf-field.ejs") %>
     <h3 class="comment-form__title">发表评论</h3>
     <p class="comment-form__hint">
       评论内容 <%= commentLimits.minLength %>-<%= commentLimits.maxLength %> 个字符<% if (commentLimits.maxLinks === 0) { %>，不允许包含链接<% } else { %>，最多 <%= commentLimits.maxLinks %> 条链接<% } %>；提交后进入待审，通过才会公开显示。
