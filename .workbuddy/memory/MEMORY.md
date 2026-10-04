@@ -31,14 +31,24 @@
 
 ## 提交前验证门禁（必跑，失败不提交）
 
+bun（2026-10-04 装回，`--version` 已验证 1.4.2）：
+`C:\Users\Administrator\.workbuddy\binaries\bun\node_modules\@oven\bun-windows-x64\bin\bun.exe`
+
 ```bash
-cd server      && <bun> run tsc --noEmit && <bun> test
-cd client      && <bun> run tsc --noEmit && <bun> run vitest run
-cd packages/api && <bun> test
+cd server      && "$BUN" run tsc --noEmit && "$BUN" test
+cd client      && "$BUN" run tsc --noEmit && "$BUN" run vitest run
+cd packages/api && "$BUN" test
 ```
 
-基线：server 430 pass / 0 fail，client 125 pass / 0 fail，api 19 pass / 0 fail。
-失败数增多即为回归，必须查清。
+基线（2026-10-04 实测，脚本与包名以当前仓库为准）：
+
+- `packages/api`：19 pass / 0 fail。
+- `server`：430 tests，421 pass / **9 fail** —— 这 9 条全是 S3/R2 存储用例的 5000ms 超时
+  （RSSService 7 条 + FaviconService 2 条）；本机到不了 `test.r2.cloudflarestorage.com`，属**已知环境型失败**。
+- `client`：16 个测试文件全过（110~117 pass / 0 fail），但 vitest 以 exit 1 结束 —— 原因是
+  WorkBuddy 注入的 `node-brokered-fs-shim.cjs` 在临时目录写文件时抛 `EPERM`，属**宿主环境异常**，与代码无关。
+
+判定口径：**除上面两类环境型失败之外，任何新增失败都算回归，必须查清，不许留着。**
 
 ## 环境陷阱
 
