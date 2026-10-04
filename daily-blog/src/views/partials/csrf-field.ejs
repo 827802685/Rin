@@ -1,4 +1,0 @@
-<%# Day 7：CSRF 令牌隐藏字段。 %>
-<%# 每个会改变状态的表单都必须带上它，否则会被中间件判为跨站请求并拒绝（403）。 %>
-<%# 令牌由中间件按请求签发并写入 HttpOnly Cookie，这里只负责回传。 %>
-<input type="hidden" name="_csrf" value="<%= typeof csrfToken !== 'undefined' ? csrfToken : '' %>" />
