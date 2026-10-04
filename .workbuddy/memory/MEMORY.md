@@ -1,20 +1,33 @@
 # Rin 项目长期约定
 
-## 分支策略（2026-09-21 起生效）
+## 分支策略（2026-10-04 起生效）
 
-- **唯一工作分支：`dev`** —— 所有迭代都在 `dev` 上提交，**不再按日期新建 `iter/YYYY-MM-DD` 分支**。
-  用户明确要求分支收敛，本地不再保留一堆迭代分支。
-- `main` 是主干（跟踪 `origin/main`），**不直接在其上开发，不 push**。
-- 上游分支 `release/*`、`agent/developer/*` 是 `upstream` 远程的跟踪分支，不改动。
-- 远程旧分支 `origin/iter/2026-09-20`、`origin/iter/2026-09-21`、`origin/workbuddy/main-f7c3f4a1`
-  仍存在但已废弃，本地对应分支已删除；需要清理时须用户授权（涉及 push）。
+- **全仓库只有一个分支：`main`**。本地与远端都只保留 `main`；`dev`、`iter`、`iter/YYYY-MM-DD`、
+  `release/*`、`agent/developer/*` 等本地分支一律不再保留（2026-10-03 删一轮，2026-10-04 收敛到单分支）。
+- **所有迭代提交直接落在 `main` 上**，不做分支切换、不做合并。每日迭代交付后即推送 `origin/main`。
+- `main` 是主干（跟踪 `origin/main`）。
+- 上游 `release/*`、`agent/developer/*` 属于 `upstream` 远程，本地不保留对应分支，也不改动。
 
 ## 提交与推送
 
-- 禁止 push 到远程（除非用户当次明确授权）。
+- **允许并期望推送到 `origin/main`**（用户 2026-10-04 明确授权「通过密钥推送」，此后长期有效）；
+  `upstream` 远程一律不推送。
 - 禁止 `git push --force` / `git reset --hard`。
 - 禁止把 token、密钥写入文件或 commit。
 - 提交信息用 conventional commits，**说明用中文**。
+
+## 推送前置条件（2026-10-04 实测，两项都缺，push 目前不可执行）
+
+- **本机没有到 github.com 的网络路径**：`https_proxy=127.0.0.1:53730` 对 github.com 返回
+  `CONNECT tunnel failed, response 502`；去掉代理直连 `github.com:443` 超时（DNS 解析到 20.205.243.166）；
+  仓库端点 `…/Rin.git/info/refs` 恒为 HTTP 000。同机 `baidu.com` 走同一代理为 200 →
+  属域名级放行策略，不是整机断网。
+- **本机没有 GitHub 凭据**：无 `gh`、无 `~/.ssh`、无 `~/.git-credentials`；`credential.helper=helper-selector`
+  中无 github 条目，`git credential fill` 报 `could not read Username for 'https://github.com'`。
+- WorkBuddy 的 GitHub 连接器（账号 `827802685`，即本仓库 owner）可用，但它走后端 API，
+  **不能执行 `git push`，也不能删除远端分支**。
+- 补齐办法：给 git 一条可达 github.com 的通道（代理放行或用可用端口）+ 一份 PAT/SSH key，
+  然后 `git push origin main` 与 `git push origin --delete <branch>` 即可完成云端收敛。
 
 ## 提交前验证门禁（必跑，失败不提交）
 
@@ -29,16 +42,27 @@ cd packages/api && <bun> test
 
 ## 环境陷阱
 
-- **bun 必须用 baseline 版**：`C:\Users\Administrator\.bun\bin\bun-windows-x64-baseline\bun.exe`
-  （另一个 `bun-windows-x64/bun.exe` 在本机会段错误，完全不可用）。
+- **bun 已不在本机**：`C:\Users\Administrator\.bun` 于 2026-10-03 确认不存在，`bun` 与 baseline 版均无法调用，
+  server / client / packages/api 的 bun 系门禁（tsc / bun test / vitest）当前**无法实跑**，不得声明其通过。
+  仍可用的替代：`node_modules/.bin/tsc.exe`、`node_modules/.bin/vitest.exe`；
+  managed node：`C:\Users\Administrator\.workbuddy\binaries\node\versions\22.22.2-5\node.exe`；
+  daily-blog 用 `node --test tests/*.test.js`（纯 Node，可跑）。
 - bash 必须先 `export PATH="/usr/bin:/bin:$PATH"`，否则 ls/find/grep/dirname 全部 command not found。
 - PowerShell 工具不返回 stdout，一律用 Bash。
 - 源码是 **CRLF 行尾**，正则处理内容时必须用 `\r?\n`。
 - 不要动 `bun.lock`（本机镜像会写脏，需要时 `git checkout -- bun.lock`）。
 - `F:/Documents/GitHub/Rin` 的 `node_modules` 有 pnpm 残留的 `hono@4.13.2`（顶层是 4.12.2），
-  会导致那里的 `tsc` 报 `string | undefined` 误报；C: worktree 干净，以 C: 的验证结果为准。
+  会导致那里的 `tsc` 报 `string | undefined` 误报。
 
-## 两个工作区
+## 工作区
 
-- `C:/Users/Administrator/WorkBuddy/Worktrees/Rin/main-f7c3f4a1` —— AI 迭代用 worktree，当前在 `dev`。
-- `F:/Documents/GitHub/Rin` —— 用户主项目目录，当前 checkout 在 `release/v0.3.0`（用户自己切的）。
+- `F:/Documents/GitHub/Rin` —— 唯一工作区，checkout 在 `main`。
+- 旧 AI worktree `C:/Users/Administrator/WorkBuddy/Worktrees/Rin/main-f7c3f4a1` 目录已不存在，worktree 记录已 prune。
+
+## 已发生的事故记录（避免重犯）
+
+- 2026-10-04 11:53 用户在本机产生提交 `c0c7c59 "update"`：一次性删掉 428 个文件——包括
+  `daily-blog` 的 Day 7 / Day 8 全部实现与用例（27 个文件）、`models/`（约 95MB Live2D 资源）、
+  `theme/`、`.zcode/`、`.workbuddy/`，并把 `.github/ISSUE_TEMPLATE` 换成 upstream 版本。
+  该提交**未并入 `main`**（已丢弃）。教训：不要用整棵树替换类命令（如 `git checkout <ref> -- .`）
+  同步上游，它会静默删除本地独有目录与已交付功能。
