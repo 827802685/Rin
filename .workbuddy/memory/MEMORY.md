@@ -16,18 +16,20 @@
 - 禁止把 token、密钥写入文件或 commit。
 - 提交信息用 conventional commits，**说明用中文**。
 
-## 推送前置条件（2026-10-04 实测，两项都缺，push 目前不可执行）
+## 推送前置条件（2026-10-04 实测）
 
-- **本机没有到 github.com 的网络路径**：`https_proxy=127.0.0.1:53730` 对 github.com 返回
-  `CONNECT tunnel failed, response 502`；去掉代理直连 `github.com:443` 超时（DNS 解析到 20.205.243.166）；
-  仓库端点 `…/Rin.git/info/refs` 恒为 HTTP 000。同机 `baidu.com` 走同一代理为 200 →
-  属域名级放行策略，不是整机断网。
-- **本机没有 GitHub 凭据**：无 `gh`、无 `~/.ssh`、无 `~/.git-credentials`；`credential.helper=helper-selector`
-  中无 github 条目，`git credential fill` 报 `could not read Username for 'https://github.com'`。
+- **凭据缺失是首要阻塞**：本机无 `gh`、无 `~/.ssh`、无 `~/.git-credentials`；`credential.helper=helper-selector`
+  中无 github 条目。`git push origin main` 的结果是
+  `fatal: could not read Username for 'https://github.com': terminal prompts disabled`
+  —— 即已经走到认证环节，但拿不到任何凭据。
+- **网络到 github.com 时通时不通**：多数尝试失败（`CONNECT tunnel failed, response 502`，或直连
+  `github.com:443` 21 秒超时），但 2026-10-04 12:42 那次推送确实连上了并卡在认证。
+  同机 `baidu.com` 稳定 200 → 是域名级放行策略 + 链路不稳，不是整机断网。
 - WorkBuddy 的 GitHub 连接器（账号 `827802685`，即本仓库 owner）可用，但它走后端 API，
-  **不能执行 `git push`，也不能删除远端分支**。
-- 补齐办法：给 git 一条可达 github.com 的通道（代理放行或用可用端口）+ 一份 PAT/SSH key，
-  然后 `git push origin main` 与 `git push origin --delete <branch>` 即可完成云端收敛。
+  **不能执行 `git push`，也不能删除远端分支**；`push_files` 只能按文件内容建新提交，
+  会让云端 main 与本地 main 成为同内容的两个不同 SHA 提交（分歧），不采用。
+- 补齐办法：给 git 一份可达的凭据（PAT 或 SSH key）+ 一条稳定的 github.com 通道，然后
+  `git push origin main`、必要时 `git push origin --delete <branch>` 即可完成云端收敛。
 
 ## 提交前验证门禁（必跑，失败不提交）
 
