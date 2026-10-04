@@ -42,15 +42,28 @@ cd client      && "$BUN" run tsc --noEmit && "$BUN" run vitest run
 cd packages/api && "$BUN" test
 ```
 
-基线（2026-10-04 实测，脚本与包名以当前仓库为准）：
+基线（2026-10-05 02:0x 实测，脚本与包名以当前仓库为准）：
 
 - `packages/api`：19 pass / 0 fail。
-- `server`：430 tests，421 pass / **9 fail** —— 这 9 条全是 S3/R2 存储用例的 5000ms 超时
-  （RSSService 7 条 + FaviconService 2 条）；本机到不了 `test.r2.cloudflarestorage.com`，属**已知环境型失败**。
-- `client`：16 个测试文件全过（110~117 pass / 0 fail），但 vitest 以 exit 1 结束 —— 原因是
-  WorkBuddy 注入的 `node-brokered-fs-shim.cjs` 在临时目录写文件时抛 `EPERM`，属**宿主环境异常**，与代码无关。
+- `server`：`bun test` **458 pass / 0 fail**（37 个文件）。
+  `bun run tsc --noEmit` **恒定 18 条 error TS2345/TS2741/TS2352** —— 根因是
+  `server/node_modules/hono` 是 pnpm 残留的 **4.13.2**（根级 `node_modules/hono` 是 4.12.2），
+  报的是 `string | undefined` 与 `fetch` 缺 `preconnect`。**与代码无关，不要去修**，
+  只要错误条数不增加。
+- `client`：`tsc --noEmit` 0 错；`vitest run` 17 个文件 **125 pass / 0 fail**，exit 0。
 
-判定口径：**除上面两类环境型失败之外，任何新增失败都算回归，必须查清，不许留着。**
+已知偶发（不算回归）：沙箱到不了 `test.r2.cloudflarestorage.com` 时 `rss.test.ts` /
+`favicon.test.ts` 的 S3 用例会 5000ms 超时，网络通时自己会过。
+
+判定口径：**除上面两类环境型噪声之外，任何新增失败都算回归，必须查清，不许留着。**
+
+## 变异测试纪律
+
+- **不要用 `git checkout -- <file>` 还原变异**：它会连带抹掉尚未提交的修复。
+  2026-10-05 实际踩到（UV 修复被还原）。要么先提交再变异，要么手工备份再还原。
+- Python 处理 CRLF 源码必须 `io.open(p, encoding='utf-8', newline='')`，
+  默认 universal newlines 会把 `\r\n` 吃掉，导致 `str.replace` 静默匹配不到。
+- 断言「少 1」这类 off-by-one 时，容差 `±1` 会正好放过 bug，小基数区间要断言精确值。
 
 ## 环境陷阱
 
