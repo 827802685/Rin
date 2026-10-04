@@ -262,13 +262,17 @@ export function FeedService(): Hono<{
 
             if (!stats) {
                 // Create new stats record
+                // 创建首条统计：必须把当前访客一并写进 HLL，
+                // 否则这个访客永远不计入 UV，之后每次估算都少 1
+                const hll = new HyperLogLog();
+                hll.add(visitorKey);
                 await profileAsync(c, 'feed_detail_stats_insert', () => db.insert(visitStats).values({
                     feedId: feed.id,
                     pv: 1,
-                    hllData: new HyperLogLog().serialize()
+                    hllData: hll.serialize()
                 }));
                 pv = 1;
-                uv = 1;
+                uv = Math.round(hll.count());
             } else {
                 // Update existing stats
                 const hll = new HyperLogLog(stats.hllData);
