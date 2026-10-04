@@ -12,25 +12,33 @@
 继续迭代 Rin 博客源码，以「完善现有功能」为主，不要为了新增而新增。
 
 ## 环境陷阱（必读，否则会浪费大量时间）
-- 仓库路径：C:\Users\Administrator\WorkBuddy\Worktrees\Rin\main-f7c3f4a1
-- **bun 必须用 baseline 版**：C:\Users\Administrator\.bun\bin\bun-windows-x64-baseline\bun.exe（1.3.13）。另一个 bun-windows-x64/bun.exe 在本机会段错误，完全不可用。
+- 仓库路径（唯一工作区，分支 `main`）：F:\Documents\GitHub\Rin
+- **bun 1.4.2**：`C:\Users\Administrator\.workbuddy\binaries\bun\node_modules\@oven\bun-windows-x64\bin\bun.exe`。
+  旧的 `C:\Users\Administrator\.bun\` 已不存在。
 - **bash 必须先执行** `export PATH="/usr/bin:/bin:$PATH"`，否则 ls/find/grep/dirname 全部 command not found。
 - PowerShell 工具在本环境不返回 stdout，用 Bash。
 - 源码是 **CRLF 行尾**，写正则处理文件内容时必须用 `\r?\n`，否则匹配不到。
+  Python 读写要 `io.open(p, encoding='utf-8', newline='')`，默认 universal newlines 会把 `\r\n` 吃掉。
 - 不要动 bun.lock（本机镜像会把它写脏，需要时 `git checkout -- bun.lock`）。
-- 不要删 .workbuddy 目录。不要 push 到远程。
-- `vite build` 偶发失败于环境删除工具（genie-trash.exe 超时，发生在清空 dist 阶段），与代码无关，重试即可。
-- 构建一次约 5–8 分钟，用后台任务跑，不要在前台空等。
+- 不要删 .workbuddy 目录。
+- 全仓库只有 `main` 一个分支，改动直接落 `main`；交付后 `git push origin main`（授权已给，
+  失败多是本机到不了 github.com 或缺凭据，属已知环境限制，**只试一次，不要反复重试**）。
 
 ## 验证命令（每个改动都要跑）
 ```
-cd server      && <bun> run tsc --noEmit && <bun> test            # 387 pass / 0 fail
-cd client      && <bun> run tsc --noEmit && <bun> run vitest run   # 102 pass / 0 fail
+cd server      && <bun> run tsc --noEmit && <bun> test            # 458 pass / 0 fail
+cd client      && <bun> run tsc --noEmit && <bun> run vitest run   # 125 pass / 0 fail
 cd packages/api && <bun> test                                      # 19 pass
-cd packages/ui && <bun> run typecheck
 ```
-**基线是 0 失败**。唯一已知偶发失败是 `rss.test.ts`：沙箱访问不了
-test.r2.cloudflarestorage.com 时会 5 秒超时，与代码无关，网络通时它自己会过。
+（2026-10-05 02:0x 实测）
+
+**基线是 0 失败**，但有两处已知的环境型噪声，不算回归：
+1. `rss.test.ts` / `favicon.test.ts` 的 S3 用例：沙箱访问不了 test.r2.cloudflarestorage.com
+   时会 5 秒超时，与代码无关，网络通时它自己会过。
+2. `server` 的 `tsc --noEmit` 恒定 18 条 `error TS2345/TS2741/TS2352`（`string | undefined`、
+   `fetch` 缺 `preconnect`）：根因是 `server/node_modules/hono` 是 pnpm 残留的 4.13.2，
+   而根 `node_modules/hono` 是 4.12.2。**与代码无关，不要去"修"这些报错**，
+   只要错误条数不增加即可。
 **除此之外任何失败都算回归，必须查清，不许留着。**
 
 ## 已完成（不要重复，也不要撤销）
@@ -47,13 +55,21 @@ test.r2.cloudflarestorage.com 时会 5 秒超时，与代码无关，网络通�
 - 质量：i18n 四语言一致且有校验测试；useSettingsDraft 合并三个设置页状态机；
   字段样式收敛到 @rin/ui；迁移覆盖测试（schema 每列都要有迁移创建）
 - 性能：路由级 lazy + monaco 组件级 lazy，首屏 gzip 1.91MB → 657KB
+- 访客统计：修复「首个访客不写进 HLL 导致该文章 UV 永久少 1」（`services/feed.ts`
+  的 `GET /:id` 创建分支漏了 `hll.add(visitorKey)`，`uv` 还硬编码成 1）；
+  HyperLogLog（226 行，此前零覆盖）补 22 条用例，server 测试 430 → 458
 
 ## 待办（按优先级，一次挑 1~2 项做完，不要贪多）
-1. **客户端页面级组件测试**：102 个测试集中在 utils/hooks，页面组件几乎零覆盖。
-   历史经验是「补测试 = 挖真 bug」（搜索 % 500、缓存串扰、定时任务无隔离都是
-   这么发现的）。优先高频且逻辑密集的：feed_card、markdown 渲染、分页。
+1. **客户端页面级组件测试**：125 个测试集中在 utils/hooks，页面组件覆盖仍薄。
+   历史经验是「补测试 = 挖真 bug」（搜索 % 500、缓存串扰、定时任务无隔离、
+   UV 少计 1 都是这么发现的）。feed_card / markdown 已有基础用例，
+   下一步优先：分页组件、评论列表、设置页表单提交路径。
 2. 找出下一个零覆盖的高风险模块：仿照 image-upload（279 行零覆盖）的做法，扫
    client/src/utils 与 server/src 下没有对应测试的大文件。
+   已扫过一轮，server/src 下仍零覆盖的（按行数）：`services/config-health.ts`(404)、
+   `core/error-handler.ts`(183)、`core/hono-middleware.ts`(163)、
+   `services/config-compat-tasks.ts`(160)、`services/config-queue-status.ts`(147)、
+   `utils/oauth.ts`(121，安全相关)、`utils/db-config.ts`(91)。
 3. 前端 bundle 进一步优化：主包 2.08MB（gzip 657KB），markdown_editor chunk
    3.98MB 仅在编辑时加载。可考虑再拆或换轻量编辑器，先评估收益。
 4. 后台 6 页（settings / settings-theme / tools-admin / health / queue-status /
@@ -72,5 +88,8 @@ test.r2.cloudflarestorage.com 时会 5 秒超时，与代码无关，网络通�
 - `mock.module` 的路径必须与被测模块的解析结果一致；测试若在 `__tests__/` 下要
   多退一级，写错会静默失效（表现为调用次数 0）。
 - UI 改动必须与现有视觉风格一致，不做大幅改版。
-- 完成后用 git commit（conventional commits，中文说明），不要 push。
+- 完成后用 git commit（conventional commits，中文说明，一次提交讲清一件事），
+  然后 `git push origin main`（失败只报一次，不重试、不绕道）。
+- **变异测试不要用 `git checkout -- <file>` 还原**：会把尚未提交的修复一起抹掉。
+  要么先提交再做变异，要么手工备份文件再还原。
 - 最后把做了什么、验证了什么、还剩什么，追加到 .workbuddy/memory/当天日期.md。
