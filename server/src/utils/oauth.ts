@@ -63,6 +63,18 @@ export function createOAuthPlugin(providers: Record<string, OAuthProvider>): OAu
                 state: state,
             });
 
+            // `authorize` below sends `redirect_uri` whenever the provider declares
+            // one, so the browser redirect must carry exactly the same value.
+            // Sending it on only one leg makes providers reject the exchange with
+            // a redirect_uri mismatch.
+            if (provider.redirectUri) {
+                params.set("redirect_uri", provider.redirectUri);
+            }
+
+            if (Array.isArray(provider.scopes) && provider.scopes.length > 0) {
+                params.set("scope", provider.scopes.join(","));
+            }
+
             return `${provider.authorizeUrl}?${params.toString()}`;
         },
 
@@ -100,12 +112,28 @@ export function createOAuthPlugin(providers: Record<string, OAuthProvider>): OAu
             }
 
             const data = await response.json() as {
-                access_token: string;
+                access_token?: string;
                 token_type?: string;
                 scope?: string;
                 expires_in?: number;
                 refresh_token?: string;
+                error?: string;
+                error_description?: string;
             };
+
+            // A rejected code is reported as HTTP 200 with an `error` field, which
+            // used to be read as a successful token with an undefined access token.
+            if (data.error) {
+                throw new Error(
+                    `Failed to exchange code for token: ${data.error}${data.error_description ? ` - ${data.error_description}` : ""}`,
+                );
+            }
+
+            if (!data.access_token) {
+                throw new Error(
+                    "Failed to exchange code for token: response did not include an access_token",
+                );
+            }
 
             return {
                 accessToken: data.access_token,
