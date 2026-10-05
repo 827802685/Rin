@@ -26,11 +26,11 @@
 
 ## 验证命令（每个改动都要跑）
 ```
-cd server      && <bun> run tsc --noEmit && <bun> test            # 458 pass / 0 fail
+cd server      && <bun> run tsc --noEmit && <bun> test            # 480 pass / 0 fail
 cd client      && <bun> run tsc --noEmit && <bun> run vitest run   # 125 pass / 0 fail
 cd packages/api && <bun> test                                      # 19 pass
 ```
-（2026-10-05 02:0x 实测）
+（2026-10-06 02:1x 实测）
 
 **基线是 0 失败**，但有两处已知的环境型噪声，不算回归：
 1. `rss.test.ts` / `favicon.test.ts` 的 S3 用例：沙箱访问不了 test.r2.cloudflarestorage.com
@@ -58,6 +58,15 @@ cd packages/api && <bun> test                                      # 19 pass
 - 访客统计：修复「首个访客不写进 HLL 导致该文章 UV 永久少 1」（`services/feed.ts`
   的 `GET /:id` 创建分支漏了 `hll.add(visitorKey)`，`uv` 还硬编码成 1）；
   HyperLogLog（226 行，此前零覆盖）补 22 条用例，server 测试 430 → 458
+- OAuth（`utils/oauth.ts`，121 行，此前零覆盖）补 21 条用例，并修出 3 个缺陷：
+  ① 授权 URL 从不发送 provider 声明的 `scopes`（GitHub 的 `read:user` 形同虚设）
+  ② 授权 URL 不发 `redirect_uri`、而换取 token 发，配了会 `redirect_uri_mismatch`
+  ③ 把「HTTP 200 + `{error}`」和「缺 `access_token`」当成成功，返回
+     `accessToken: undefined` 的 token 让下游拿着坏凭据继续调 API
+- 登录链路：`services/user.ts` 的 `/user/github/callback` 取
+  `api.github.com/user` 不看 `response.ok`，上游 401 时被当正常 profile 解析，
+  `openid`/`username` 取到 `undefined` 后撞 `users.openid` NOT NULL 报 500；
+  现在抛 `BadRequestError`。server 测试 458 → 480
 
 ## 待办（按优先级，一次挑 1~2 项做完，不要贪多）
 1. **客户端页面级组件测试**：125 个测试集中在 utils/hooks，页面组件覆盖仍薄。
@@ -66,10 +75,15 @@ cd packages/api && <bun> test                                      # 19 pass
    下一步优先：分页组件、评论列表、设置页表单提交路径。
 2. 找出下一个零覆盖的高风险模块：仿照 image-upload（279 行零覆盖）的做法，扫
    client/src/utils 与 server/src 下没有对应测试的大文件。
-   已扫过一轮，server/src 下仍零覆盖的（按行数）：`services/config-health.ts`(404)、
-   `core/error-handler.ts`(183)、`core/hono-middleware.ts`(163)、
-   `services/config-compat-tasks.ts`(160)、`services/config-queue-status.ts`(147)、
-   `utils/oauth.ts`(121，安全相关)、`utils/db-config.ts`(91)。
+   已扫过一轮，`utils/oauth.ts`(121) 已于 2026-10-06 覆盖完毕；
+   server/src 下仍零覆盖的（按行数）：`services/config-health.ts`(404)、
+   `core/hono-middleware.ts`(163)、`services/config-compat-tasks.ts`(160)、
+   `services/config-queue-status.ts`(147)、`utils/db-config.ts`(91)。
+   **`core/error-handler.ts`(183) 不用补测** —— 2026-10-06 全仓库 grep 确认
+   它零引用（`generateRequestId` / `handleError` / `createNotFoundHandler` /
+   `ErrorLogger` / `safeAsync` / `asyncHandler` 均无调用点），是死代码。
+   给死代码补测只会固化它；先由用户决定「删」还是「真正接进 app 装配」
+   （它比现有 `app.onError` 多做了 CORS 头透传，删之前先确认 404 路径不需要）。
 3. 前端 bundle 进一步优化：主包 2.08MB（gzip 657KB），markdown_editor chunk
    3.98MB 仅在编辑时加载。可考虑再拆或换轻量编辑器，先评估收益。
 4. 后台 6 页（settings / settings-theme / tools-admin / health / queue-status /

@@ -42,10 +42,10 @@ cd client      && "$BUN" run tsc --noEmit && "$BUN" run vitest run
 cd packages/api && "$BUN" test
 ```
 
-基线（2026-10-05 02:0x 实测，脚本与包名以当前仓库为准）：
+基线（2026-10-06 02:1x 实测，脚本与包名以当前仓库为准）：
 
 - `packages/api`：19 pass / 0 fail。
-- `server`：`bun test` **458 pass / 0 fail**（37 个文件）。
+- `server`：`bun test` **480 pass / 0 fail**（38 个文件）。
   `bun run tsc --noEmit` **恒定 18 条 error TS2345/TS2741/TS2352** —— 根因是
   `server/node_modules/hono` 是 pnpm 残留的 **4.13.2**（根级 `node_modules/hono` 是 4.12.2），
   报的是 `string | undefined` 与 `fetch` 缺 `preconnect`。**与代码无关，不要去修**，

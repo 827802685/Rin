@@ -2,6 +2,38 @@
 
 > 2026-10-04 起迭代目标已从 daily-blog 子项目切回 Rin 本体（daily-blog 已从主干移除）。
 
+## 2026-10-06 02:01 第 2 次执行
+
+- 目标：待办 2「零覆盖高风险模块」→ `server/src/utils/oauth.ts`（121 行，安全相关）。
+- 结果：2 个提交落在 `main`：`9433446`（OAuth 三项修复 + 21 条新用例）、
+  `8a75e3f`（登录回调 `response.ok` 检查 + 1 条用例）。workspace 干净。
+- 挖到的真 bug（4 个）：
+  ① 授权 URL 从不发送 provider 的 `scopes`，`read:user` 形同虚设；
+  ② 授权 URL 不发 `redirect_uri` 而换取 token 发 → `redirect_uri_mismatch`；
+  ③ `authorize` 把「HTTP 200 + `{error}`」和「缺 `access_token`」当成功，
+     返回 `accessToken: undefined` 的 token；
+  ④ `services/user.ts` 的 `/user/github/callback` 不检查上游 `response.ok`，
+     401 时被当正常 profile，撞 `users.openid` NOT NULL 报 500。
+- 门禁（bun 1.4.2 实测）：server tsc **18 条**（与基线一致）／server test
+  **480 pass / 0 fail**（458 → 480）／client tsc 0 错／client vitest 125 pass／
+  packages/api 19 pass。基线已回写 MEMORY.md。
+- 反向验证：5 处变异全部变红（2/3/1/1/1 fail），恢复后 38 pass / 0 fail。
+- 已知限制：`core/error-handler.ts`(183 行) 全仓库零引用 = 死代码，未删也未补测；
+  `git push origin main` 因网络被重置失败（只试一次）。
+- 下一目标：① error-handler 死代码处置 ② `services/config-health.ts`(404) 等
+  仍零覆盖模块 ③ 客户端页面级组件测试（分页 / 评论列表 / 设置页表单）。
+- 经验（供后续复用）：
+  ① **按行块删代码做变异时，必须连 `if (...) {` 起始行和结尾 `}` 一起删**。
+     本轮首跑留了悬空 `}`，整文件语法错误、测试加载失败，只报「1 fail」——
+     这是假变异，什么都没证明。判据：总用例数骤降（38 → 18）就是语法错误，不是红。
+  ② 先 commit 再做变异，`git checkout --` 才安全（沿用上轮教训，本轮未踩）。
+  ③ `global.fetch = async () => new Response(...)` 缺 `preconnect`，
+     会让 server tsc 从 18 涨到 19；要写 `as unknown as typeof fetch`。
+  ④ 全仓库查死代码要 `grep -rn ... --include=*.ts --include=*.tsx .`，
+     但 Rin 仓库根有 48069 个 node_modules 文件，前台会超时，要放后台。
+
+---
+
 ## 2026-10-05 02:02 第 1 次执行（目标切换后）
 
 - 目标：待办 2「零覆盖高风险模块补测」+ 顺带修出的真实缺陷。
