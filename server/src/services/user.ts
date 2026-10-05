@@ -89,6 +89,12 @@ export function UserService(): Hono {
             },
         }));
 
+        // GitHub answers a rejected token with an error body, which would otherwise
+        // be read as a profile with no openid and blow up on the NOT NULL insert.
+        if (!response.ok) {
+            throw new BadRequestError('Failed to fetch GitHub user info');
+        }
+
         const user: any = await profileAsync(c, 'user_github_parse', () => response.json());
         const profile: {
             openid: string;

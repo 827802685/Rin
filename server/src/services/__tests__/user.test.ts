@@ -184,6 +184,33 @@ describe('UserService', () => {
             const data = await res.json() as { error: { message: string } };
             expect(data.error.message).toBe('Invalid state parameter');
         });
+
+        it('should not register a user when GitHub rejects the access token', async () => {
+            const originalFetch = global.fetch;
+            global.fetch = (async () => {
+                return new Response(JSON.stringify({ message: 'Bad credentials' }), { status: 401 });
+            }) as unknown as typeof fetch;
+
+            try {
+                const res = await app.request('/github/callback?code=valid_code&state=mock_state', {
+                    method: 'GET',
+                    headers: {
+                        'Cookie': 'state=mock_state; redirect_to=http://localhost:5173/callback'
+                    }
+                }, env);
+
+                // A rejected upstream token is a caller-facing failure, not a crash
+                // and definitely not a successful login.
+                expect(res.status).toBe(400);
+                const data = await res.json() as { error: { message: string } };
+                expect(data.error.message).toBe('Failed to fetch GitHub user info');
+
+                const row = sqlite.query('SELECT COUNT(*) AS count FROM users').get() as { count: number };
+                expect(row.count).toBe(2);
+            } finally {
+                global.fetch = originalFetch;
+            }
+        });
     });
 
     describe('GET /profile - Get user profile', () => {
