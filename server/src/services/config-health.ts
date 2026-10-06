@@ -1,5 +1,6 @@
 import { WEBHOOK_URL_KEY } from "@rin/config";
 import { getAIConfig } from "../utils/db-config";
+import { normalizeOptionalString } from "./config-helpers";
 
 type HealthStatus = "success" | "warning" | "danger";
 type HealthTextValues = Record<string, string | number | boolean>;
@@ -52,6 +53,7 @@ export async function buildHealthCheckResponse(
     siteName,
     siteAvatar,
     webhookUrl,
+    legacyWebhookUrl,
     friendCrontab,
     aiConfig,
   ] = await Promise.all([
@@ -59,6 +61,7 @@ export async function buildHealthCheckResponse(
     clientConfig.getOrDefault("rss", false),
     clientConfig.get("site.name"),
     clientConfig.get("site.avatar"),
+    serverConfig.get("webhook_url"),
     serverConfig.get(WEBHOOK_URL_KEY),
     serverConfig.getOrDefault("friend_crontab", true),
     getAIConfig(serverConfig),
@@ -186,7 +189,6 @@ export async function buildHealthCheckResponse(
         ["S3_SECRET_ACCESS_KEY", env.S3_SECRET_ACCESS_KEY],
       ] as const);
   const missingStorageKeys = requiredStorageKeys.filter(([, value]) => !value).map(([key]) => key);
-  const hasAccessHost = Boolean(env.S3_ACCESS_HOST);
 
   if (missingStorageKeys.length === 0) {
     items.push(
@@ -303,7 +305,11 @@ export async function buildHealthCheckResponse(
     );
   }
 
-  const webhookValue = (webhookUrl || env.WEBHOOK_URL || "").toString();
+  const webhookValue =
+    normalizeOptionalString(webhookUrl) ??
+    normalizeOptionalString(legacyWebhookUrl) ??
+    normalizeOptionalString(env.WEBHOOK_URL) ??
+    "";
   items.push(
     createItem(
       webhookValue

@@ -86,7 +86,7 @@ export function isAIConfigKey(key: string): boolean {
   return AI_CONFIG_KEYS.some((candidate) => candidate === key) || key.startsWith("ai_summary.");
 }
 
-function normalizeOptionalString(value: unknown) {
+export function normalizeOptionalString(value: unknown) {
   if (typeof value !== "string") {
     return undefined;
   }
