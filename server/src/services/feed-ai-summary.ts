@@ -9,6 +9,15 @@ type ConfigReader = {
   get(key: string): Promise<unknown>;
 };
 
+export interface FeedAISummaryQueueResult {
+  /** The status written to the feed row. */
+  status: FeedAISummaryStatus;
+  /** Whether the task actually reached the queue. */
+  queued: boolean;
+  /** Populated when the task was marked as failed. */
+  error?: string;
+}
+
 function buildStatusUpdate(
   status: FeedAISummaryStatus,
   overrides?: Partial<{
@@ -83,7 +92,7 @@ export async function syncFeedAISummaryQueueState(
     updatedAt: Date;
     resetSummary?: boolean;
   },
-) {
+): Promise<FeedAISummaryQueueResult> {
   const aiConfig = await getAIConfig(serverConfig);
   const shouldQueue = aiConfig.enabled && !options.draft;
 
@@ -94,7 +103,7 @@ export async function syncFeedAISummaryQueueState(
         buildStatusUpdate("idle", options.resetSummary ? { ai_summary: "" } : undefined),
       )
       .where(eq(feeds.id, feedId));
-    return;
+    return { status: "idle", queued: false };
   }
 
   await db
@@ -116,7 +125,11 @@ export async function syncFeedAISummaryQueueState(
         }),
       )
       .where(eq(feeds.id, feedId));
+
+    return { status: "failed", queued: false, error: enqueueResult.error };
   }
+
+  return { status: "pending", queued: true };
 }
 
 export async function processFeedAISummaryTask(

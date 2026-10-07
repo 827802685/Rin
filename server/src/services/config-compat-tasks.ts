@@ -92,6 +92,7 @@ export async function runCompatAISummaryBackfill(
 
   let queued = 0;
   let skipped = 0;
+  let failed = 0;
 
   for (const item of items) {
     const eligible = force
@@ -103,18 +104,28 @@ export async function runCompatAISummaryBackfill(
       continue;
     }
 
-    await syncFeedAISummaryQueueState(db, serverConfig, env, item.id, {
+    const result = await syncFeedAISummaryQueueState(db, serverConfig, env, item.id, {
       draft: false,
       updatedAt: item.updatedAt,
       resetSummary: true,
     });
     await clearFeedCache(cache, item.id, item.alias, item.alias);
-    queued += 1;
+
+    // Only count what really reached the queue, otherwise the UI reports a
+    // successful backfill for feeds that were marked as failed again.
+    if (result.queued) {
+      queued += 1;
+    } else if (result.status === "failed") {
+      failed += 1;
+    } else {
+      skipped += 1;
+    }
   }
 
   return {
     queued,
     skipped,
+    failed,
     forced: force,
   };
 }

@@ -110,6 +110,8 @@ export interface CompatTasksResponse {
 export interface CompatAISummaryActionResponse {
   queued: number;
   skipped: number;
+  /** Feeds that were marked as failed again because the queue rejected them. */
+  failed?: number;
   forced: boolean;
 }
 
