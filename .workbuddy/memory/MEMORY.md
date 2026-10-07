@@ -1,11 +1,11 @@
 # Rin 项目长期约定
 
-## 分支策略（2026-10-04 起生效）
+## 分支策略
 
-- **全仓库只有一个分支：`main`**。本地与远端都只保留 `main`；`dev`、`iter`、`iter/YYYY-MM-DD`、
-  `release/*`、`agent/developer/*` 等本地分支一律不再保留（2026-10-03 删一轮，2026-10-04 收敛到单分支）。
-- **所有迭代提交直接落在 `main` 上**，不做分支切换、不做合并。每日迭代交付后即推送 `origin/main`。
-- `main` 是主干（跟踪 `origin/main`）。
+- **2026-10-07 起：自动化迭代改用 `auto` 分支**（自动化任务硬要求）。`auto` 从 `main` 创建，
+  每 5 次成功迭代合并回 `main`（合并提交，保留历史），`main` 只接收合并、不直接开发。
+- 2026-10-04 ~ 2026-10-06 期间的约定是「全仓库只有一个分支 `main`」，已被上面的 `auto` 策略取代；
+  `dev`、`iter`、`iter/YYYY-MM-DD`、`release/*`、`agent/developer/*` 等旧本地分支不再保留。
 - 上游 `release/*`、`agent/developer/*` 属于 `upstream` 远程，本地不保留对应分支，也不改动。
 
 ## 提交与推送
@@ -42,10 +42,10 @@ cd client      && "$BUN" run tsc --noEmit && "$BUN" run vitest run
 cd packages/api && "$BUN" test
 ```
 
-基线（2026-10-06 02:1x 实测，脚本与包名以当前仓库为准）：
+基线（2026-10-08 02:1x 实测，脚本与包名以当前仓库为准）：
 
 - `packages/api`：19 pass / 0 fail。
-- `server`：`bun test` **480 pass / 0 fail**（38 个文件）。
+- `server`：`bun test` **529 pass / 0 fail**（40 个文件）。
   `bun run tsc --noEmit` **恒定 18 条 error TS2345/TS2741/TS2352** —— 根因是
   `server/node_modules/hono` 是 pnpm 残留的 **4.13.2**（根级 `node_modules/hono` 是 4.12.2），
   报的是 `string | undefined` 与 `fetch` 缺 `preconnect`。**与代码无关，不要去修**，
@@ -56,6 +56,20 @@ cd packages/api && "$BUN" test
 `favicon.test.ts` 的 S3 用例会 5000ms 超时，网络通时自己会过。
 
 判定口径：**除上面两类环境型噪声之外，任何新增失败都算回归，必须查清，不许留着。**
+
+## 构建（bun run build）
+
+- **client 侧可过**（vite，约 3.5 分钟）。但 `bun run build` 直接跑会被
+  WorkBuddy 的 safe-delete shim 拦住：vite 清空 `dist/client/assets`（218 文件）
+  超过 50 个的批量删除阈值，报 `[safe-delete][SAFE_DELETE_BULK_CONFIRM_REQUIRED]`。
+  **这不是编译错误**。绕法：`cd client && bun x vite build --outDir dist/verify-build`
+  （全新目录无需清空）。
+- **server 侧恒失败且属既有环境问题**：`wrangler deploy --dry-run` 报
+  `The detected framework ("Hono") cannot be automatically configured` ——
+  `server/` 下没有 wrangler 配置文件，workspace 内 wrangler 自动配置受限。
+  2026-10-07 已在父提交的临时 worktree 上复现同样失败，**不要当成回归去修**。
+- 另注：`bun run build:server` 里的 `bunx` 不在 PATH（bun 是绝对路径调用的），
+  必须写成 `bun x wrangler ...`。
 
 ## 变异测试纪律
 

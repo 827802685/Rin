@@ -1,6 +1,68 @@
 # 自动化执行记录：Rin 博客本体每日迭代（client/ + server/ + packages/api）
 
 > 2026-10-04 起迭代目标已从 daily-blog 子项目切回 Rin 本体（daily-blog 已从主干移除）。
+> 2026-10-07 起改为在 `auto` 分支上迭代，每 5 次成功迭代合并回 `main`（当前进度 M=1/5）。
+
+## 2026-10-08 02:01 第 4 次执行（auto 分支第 2 次迭代）
+
+- 目标：待办 ③「零覆盖模块」→ `config-queue-status.ts`(147) + `config-compat-tasks.ts`(160)。
+- 结果：1 个提交落在 `auto`：`da27175`。workspace 干净。未触发合并（M=2/5）。
+- **挖到的真 bug**：`syncFeedAISummaryQueueState` 入队失败只写库、不返回结果 →
+  ① `retryQueueStatusTask` 无条件返回，路由恒回 `{success:true}`，TASK_QUEUE 缺失或
+  send 抛错时任务被标回 failed、界面却弹「重试成功」；② compat 回填把被拒的文章也计入
+  `queued`，看着像回填成功。
+- 修复：该函数改返回 `{status, queued, error}`（三处调用方行为不变）；retry 在 failed 时
+  抛队列错误 → 路由 400 带真因；回填按 `queued/failed/skipped` 分别计数，
+  客户端类型补 `failed?: number`。
+- 新增 `server/src/services/__tests__/config-queue-status.test.ts`（14 条，走
+  `setupTestApp(ConfigService)` + 真 sqlite）。
+- 门禁（bun 1.4.2）：server tsc 18 条（持平）／server test **529 pass / 0 fail**
+  （515 → 529）／client tsc 0 错／client vitest 125 pass／packages/api 19 pass。
+- 变异 3/3 killed（关 retry 的 throw → 2 红／回填无条件 queued → 1 红／
+  sync 谎报 queued:true → 3 红），恢复后 14 pass。
+- 构建：client 通过；server wrangler 失败**已在父提交 e11331d 的 worktree 复现**
+  → 既有环境问题。
+- 经验（供后续复用）：
+  ① **client `bun run build` 会被 safe-delete shim 拦**（清 dist/client/assets 218 个文件
+     超 50 阈值），不是编译错误；绕法 `bun x vite build --outDir dist/verify-build`。
+  ② 判定「既有失败 vs 回归」继续用 `git worktree add --detach /tmp/rin-base <父提交>`
+     跑同一命令（本轮 server 构建就是这样定性的），用完 `worktree remove --force`。
+  ③ `setupTestApp(ConfigService, { TASK_QUEUE: undefined })` 可以造出「队列未配置」的
+     env；AI 开关直接用 `await serverConfig.set("ai_summary.enabled","true")`，
+     比走一遍 `POST /server` 快得多。
+- 下一目标：① `core/error-handler.ts`(183) / `errors/index.ts`(275) 死代码处置
+  ② `utils/storage.ts`(179) / `utils/s3.ts`(134) 补测（`getStoragePublicUrl` 在
+  S3_ACCESS_HOST 分支不编码 key，与 blob 分支不对称）③ 客户端页面级组件测试。
+
+---
+
+## 2026-10-07 02:01 第 3 次执行（auto 分支第 1 次迭代）
+
+- 目标：待办 2「零覆盖高风险模块」→ `server/src/services/config-health.ts`（404 行）。
+- 结果：1 个提交落在 `auto`：`e11331d`。workspace 干净。未触发合并（M=1/5）。
+- **挖到的真 bug**：健康检查只读旧键 `WEBHOOK_URL` + `env.WEBHOOK_URL`，漏读当前主键
+  `webhook_url`；而设置页写的正是 `webhook_url`，`resolveWebhookConfig` 也以它为最高优先级
+  → 管理员配好 webhook 后 `/config/health` 仍报 warning「未配置」，假告警。
+- 修复：按 `webhook_url` → `WEBHOOK_URL` → `env.WEBHOOK_URL` 取，空白串视为未配置；
+  `normalizeOptionalString` 从 config-helpers 导出复用；删死变量 `hasAccessHost`。
+- 新增 `server/src/services/__tests__/config-health.test.ts`（35 条，覆盖 7 个检查项全部分支）。
+- 门禁（bun 1.4.2 实测）：server tsc 18 条（基线持平）／server test **515 pass / 0 fail**
+  （480 → 515）／client tsc 0 错／client vitest 125 pass／packages/api 19 pass。
+- 变异测试 6/6 killed（webhook 主键 / env 兜底 / 存储全缺判定 / 默认口令 / 站点名 trim /
+  汇总计数），恢复后 35 pass。
+- 构建：client 通过；server `wrangler deploy --dry-run` 失败，已在父提交 worktree 复现
+  → **既有环境问题**（server/ 无 wrangler 配置），非回归。
+- 经验（供后续复用）：
+  ① **先 commit 再变异**——本轮沿用，未踩还原坑。
+  ② 断言「配置项归属」要看清是 clientConfig 还是 serverConfig：本轮
+     `friend_crontab` 误放在 client 侧导致用例假红（它属于 serverConfig）。
+  ③ 判断「既有失败 vs 回归」最省事的办法：`git worktree add --detach /tmp/base <父提交>`
+     在父提交上跑同一命令，同错即为既有问题（wrangler 这轮就是这样定性的）。
+  ④ `bunx` 不在 PATH，脚本里要用 `bun x`。
+- 下一目标：① `core/error-handler.ts`(183 行) 死代码处置 ② 客户端页面级组件测试
+  （分页 / 评论列表 / 设置页表单）③ 继续补 config-queue-status 等零覆盖模块。
+
+---
 
 ## 2026-10-06 02:01 第 2 次执行
 
