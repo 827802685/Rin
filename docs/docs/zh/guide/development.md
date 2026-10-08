@@ -107,18 +107,37 @@ bun run build
 # 清理生成的文件
 bun run clean
 
-# 运行类型检查
+# 运行类型检查（turbo check，覆盖 client/、server/、cli/）
 bun run check
+
+# 共享包用的是 typecheck 而不是 check，需要单独检查
+cd packages/api && bun run typecheck
+cd packages/ui && bun run typecheck
+cd packages/config && bun run typecheck
+
+# 运行测试（按工作区，注意下面的说明）
+cd server && bun run test
+cd client && bun run test
+bun run test:server         # 在根目录只跑服务端测试
+
+# 运行测试并生成覆盖率（按工作区；客户端还需安装 @vitest/coverage-v8）
+cd server && bun run test:coverage
+cd client && bun run test:coverage
 
 # 格式化代码
 bun run format:write
 bun run format:check
-
-# 运行测试
-bun run test              # 运行所有测试
-bun run test:server       # 仅运行服务端测试
- bun run test:coverage     # 运行测试并生成覆盖率报告
 ```
+
+上面有三条命令需要特别说明，都是当前代码库实测结果：
+
+- **不要在仓库根目录跑 `bun test`。** 根目录的 `test` / `test:coverage` 脚本就是 `bun test`，它会扫描
+  所有工作区，并在没有 jsdom 的情况下执行客户端的 Vitest 文件：收集 781 条用例、失败 24 条，而这些用例
+  在 `cd client && bun run test` 下全部通过。
+- **`bun run check` 覆盖不到共享包。** Turbo 只执行名为 `check` 的脚本，它只存在于 `client/`、`server/`、
+  `cli/`；`@rin/api`、`@rin/ui`、`@rin/config` 用的是 `typecheck`，要用上面的单包命令检查。
+- **`format:write` / `format:check` 目前是空转。** 它们展开为 `turbo format:*`，没有任何工作区定义 `format`
+  脚本，prettier 也不在依赖中，turbo 会报告“0 tasks”并以 0 退出。在此之前请用编辑器格式化。
 
 ## 开发工作流
 
@@ -126,9 +145,15 @@ bun run test:server       # 仅运行服务端测试
 
 1. Fork 项目仓库
 2. 克隆到本地
-3. 安装依赖：`bun install`
-4. 配置 `.env.local`
-5. 运行 `bun run dev`
+3. 安装依赖：`bun install`（本仓库只支持 Bun——只有 `bun.lock`，没有 npm/pnpm 的 lockfile）
+4. 创建并编辑本地环境变量文件：`cp .env.example .env.local`
+5. 运行 `bun run dev`：它会先用 `.env.local` 重新生成 `wrangler.toml`、`.dev.vars`、`client/.env`，
+   再执行本地待应用的迁移（`server/sql/*.sql`，进度记录在 `info` 表），然后同时启动 Worker（11499）
+   和 Vite（11498，`/api` 反向代理到 Worker）
+
+需要单独跑一边时用 `bun run dev:client` 或 `bun run dev:server`（注意 `dev:client` 不会执行迁移，
+且两者都要求 11498/11499 端口空闲）。只想要配置文件的生成步骤，执行 `bun run dev:setup` 即可，
+改完 `.env.local` 又不想启动整个技术栈时很方便。
 
 ### 日常开发
 

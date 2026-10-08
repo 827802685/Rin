@@ -13,7 +13,7 @@
 
 ## 项目简介
 
-Rin 是一个基于 Cloudflare 开发者平台构建的现代化、无服务器博客系统，完全利用 Cloudflare Pages 托管、Workers 提供无服务器函数、D1 作为 SQLite 数据库、R2 进行对象存储。仅需一个指向 Cloudflare 的域名即可部署你的个人博客，无需服务器运维。
+Rin 是一个基于 Cloudflare 开发者平台构建的现代化、无服务器博客系统：一个 Worker 同时承载 API 与作为静态资源打包的前端，D1 作为 SQLite 数据库，R2（或任意兼容 S3 的存储）负责对象存储。仅需一个指向 Cloudflare 的域名即可部署你的个人博客，无需服务器运维。
 
 ## 在线演示
 
@@ -55,36 +55,46 @@ cp .env.example .env.local
 bun run dev
 ```
 
-访问 http://localhost:5173 开始开发！
+`bun run dev` 会先由 `.env.local` 生成 `wrangler.toml`、`.dev.vars`、`client/.env`，
+再执行本地数据库迁移，然后同时启动 Vite 与 `wrangler dev`。开发入口默认是
+http://localhost:11498 （用 `--port` 可覆盖），`/api` 请求会被代理到下一个端口
+（默认 11499）上的 Worker。
 
 ### 测试
 
-运行测试套件以确保一切正常：
+测试按工作区组织，请进入对应目录运行：
 
 ```bash
-# 运行所有测试（客户端 + 服务器）
-bun run test
+# 服务器测试（bun:test）
+cd server && bun run test
 
-# 仅运行服务器测试
-bun run test:server
+# 客户端测试（vitest）
+cd client && bun run test
 
-# 运行测试并设置覆盖率
-bun run test:coverage
+# 类型检查 + 构建
+bun run check
+bun run build
 ```
+
+> 在仓库根目录执行 `bun run test` 实际跑的是 `bun test`，它会把客户端的 Vitest 用例
+> 也在没有 jsdom 的环境下收集执行并失败。请用上文的分工作区命令（CI 也是如此）。
 
 ### 一键部署
 
-使用一条命令即可将前端和后端同时部署到 Cloudflare：
+使用一条命令即可把站点部署到 Cloudflare：
 
 ```bash
-# 部署所有内容（前端+后端）
+# 前端构建 + 以静态资源形式随 Worker 一起部署
 bun run deploy
 
-# 仅部署后端
-bun run deploy:server
+# 仅部署后端（跳过前端构建）
+bun cli/bin/rin.ts deploy --server
 
-# 仅部署前端
-bun run deploy:client
+# 仅部署前端：作为 Cloudflare Pages 项目（assets 模式之外的可选路径）
+bun cli/bin/rin.ts deploy --client
+
+# 预览部署（附带 observability，不注册 cron 触发器）
+bun cli/bin/rin.ts deploy --preview
 ```
 
 **必需的环境变量：**
@@ -95,35 +105,42 @@ bun run deploy:client
 **可选的环境变量：**
 
 - `WORKER_NAME` - 后端工作进程名称（默认值：`rin-server`）
-- `PAGES_NAME` - 前端页面名称（默认值：`rin-client`）
 - `DB_NAME` - D1 数据库名称（默认值：`rin`）
+- `TASK_QUEUE_NAME` - AI 摘要 / 缓存任务队列名称（默认值：`<WORKER_NAME>-tasks`）
 - `R2_BUCKET_NAME` - R2 存储桶名称。设置后，部署会自动推导对应的 `S3_*` 配置；未设置时，不会自动选择任何 bucket。
 
 部署脚本将自动执行以下操作：
 
-- 自动检测并创建 D1 数据库如果不存在
+- 自动检测并创建 D1 数据库（如果不存在）
+- 自动创建任务队列及其 Worker 消费者（如果不存在）
 - 仅在显式设置 `R2_BUCKET_NAME` 时，自动推导对应的 `S3_*` 存储配置
-- 部署后端到 Workers
-- 构建前端并将其部署到 Pages
-- 运行数据库迁移
+- 构建前端，并把 `./dist/client` 作为 Worker 的 `[assets]`（`binding = "ASSETS"`）
+  一起部署，由同一个 Worker 提供页面与 API
+- 生成 `wrangler.toml`（含 `TASK_QUEUE` 生产者/消费者与 Workers AI 的 `AI` 绑定），
+  并按 `info` 表中记录的版本号执行 `server/sql` 里待应用的迁移
+- 将敏感环境变量同步为 Worker secrets
 
 ### GitHub Actions Workflows
 
 存储库包含多个自动化工作流程：
 
 - **`ci.yml`** - 每次推送/PR 都会运行类型检查和格式验证
-- **`test.yml`** - 运行全面的测试（服务器+客户端），并生成覆盖率报告
-- **`build.yml`** - 构建项目并触发部署
-- **`deploy.yml`** - 部署到 Cloudflare Pages 和 Workers
+- **`test.yml`** - 分别在独立任务中运行服务器（`bun:test`）与客户端（`vitest`）测试，
+  另含类型检查、构建、格式检查与覆盖率上传
+- **`build.yml`** - 构建项目（前端 + `wrangler deploy --dry-run`）
+- **`deploy.yml`** - 执行 `bun run deploy`：部署单个 Worker，前端作为其静态资源
+- **`docs.yml`** - 构建 `docs/` 下的 Rspress 文档并发布到 GitHub Pages
+  （仓库里唯一真正使用 Pages 的地方）
+- **`release.yml`**、**`clean.yml`** - 版本发布与 Cloudflare 资源清理
 
 **必备变量 (Repository Settings → Secrets and variables → Actions):**
 
-- `CLOUDFLARE_API_TOKEN` - 您的 Cloudflare API 令牌，包含 Workers 和 Pages 权限
+- `CLOUDFLARE_API_TOKEN` - 您的 Cloudflare API 令牌，需包含 Workers、D1、Queue 权限
 - `CLOUDFLARE_ACCOUNT_ID` - 您的 Cloudflare 帐户 ID
 
 **可选配置(Repository Settings → Secrets and variables → Variables):**
 
-- `WORKER_NAME`, `PAGES_NAME`, `DB_NAME` - 资源名称
+- `WORKER_NAME`, `DB_NAME`, `TASK_QUEUE_NAME` - 资源名称
 - `NAME`, `DESCRIPTION`, `AVATAR` - 站点配置
 - `R2_BUCKET_NAME` - 要使用的特定 R2 存储桶
 

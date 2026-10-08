@@ -17,7 +17,7 @@ features:
     details: 30s build & deploy
     icon: 🏃🏻
   - title: All Cloudflare
-    details: Based on Cloudflare Workers + D1 + R2 + Pages
+    details: One Worker serves API + frontend assets, on Cloudflare Workers + D1 + R2 + Queues
     icon: ☁️
   - title: Dynamic
     details: No build for write, just write and edit real-time
@@ -31,8 +31,8 @@ features:
   - title: Hashtags
     details: Free to use hashtags in your article
     icon: 🏷️
-  - title: Comprehensive Testing
-    details: Full test coverage with Vitest & Bun test runner
+  - title: Tested suites
+    details: Server suite on Bun's test runner, client suite on Vitest + jsdom
     icon: 🧪
   - title: Modern API Client
     details: Custom HTTP client replacing Eden for better type safety

@@ -11,12 +11,21 @@ Rin 为客户端和服务端使用不同的测试框架：
 
 ## 运行测试
 
-### 所有测试
+请按工作区运行各自的测试（完整命令见下面的「客户端测试」「服务端测试」小节）：
 
 ```bash
-# 运行客户端和服务端测试
-bun run test
+cd server && bun run test   # Bun 原生运行器，无需构建
+cd client && bun run test   # Vitest + jsdom
+bun run test:server         # 在仓库根目录跑同一套服务端测试
 ```
+
+### 为什么不要在根目录跑 `bun run test`
+
+根目录的 `test` 脚本就是 `bun test`，它会扫描**所有**工作区，并在没有 jsdom 的情况下用
+`bun:test` 去跑客户端的 Vitest 文件。当前代码库实测：收集到 781 条用例、24 条失败，失败项全部
+是 DOM / 剪贴板 / localStorage 相关，用 `cd client && bun run test` 都能通过。CI 之所以没踩这个坑，
+是因为 `.github/workflows/test.yml` 用 `working-directory: ./server` 和 `./client` 分别执行，
+从未调用过根命令。`bun run test:coverage` 同理，请使用各工作区下的同名脚本。
 
 ### 客户端测试
 
@@ -141,26 +150,32 @@ describe('FeedService', () => {
 
 ## 覆盖率
 
-客户端和服务端都支持代码覆盖率报告：
+覆盖率目前**不能直接运行**：
 
-```bash
-# 客户端覆盖率
-bun run test:coverage
+- **客户端**：`cd client && bun run test:coverage`（即 `vitest run --coverage`）会直接退出并报
+  `MISSING DEPENDENCY Cannot find dependency '@vitest/coverage-v8'`。需要先安装该 provider，
+  装上之后报告输出到 `client/coverage/`。
+- **服务端**：`cd server && bun run test:coverage`（即 `bun test --coverage`）只在终端打印覆盖率
+  表格。Bun 不会生成 `lcov.info`，Vitest 的默认 reporter（text / html / clover / cobertura）同样
+  不会，因此 `.github/workflows/test.yml` 里上传 `./server/coverage/lcov.info` 和
+  `./client/coverage/lcov.info` 的 Codecov 步骤指向的是当前任何命令都不会产出的文件。
 
-# 服务端覆盖率  
-bun run test:coverage
-```
-
-覆盖率报告生成在：
-- 客户端：`client/coverage/`
-- 服务端：`server/coverage/`
+日常只需要跑各工作区的 `bun run test`，它与覆盖率工具链无关。
 
 ## CI/CD 集成
 
 测试在以下情况自动运行：
-- 每次推送到 `main` 或 `develop` 分支
-- 每个 Pull Request
-- 部署前（阻塞性）
+- 每次推送到 `main` 或 `trunk` 分支
+- 针对这些分支的每个 Pull Request
+- 分成 `test-server` 与 `test-client` 两个 job（见 `.github/workflows/test.yml`），各自再跟一个本工作区的
+  类型检查；客户端 job 还会额外执行一次前端构建
+
+但同名文件里有两个 job 并不像它的名字那样工作，判断 CI 红/绿之前值得先知道：
+
+- `format-check` 执行根目录的 `bun run format:check`，它展开为 `turbo format:check`。没有任何工作区
+  定义 `format` 脚本，prettier 也不在依赖里，于是 turbo 报告“0 tasks”并以 0 退出——这个 job 永远是绿的。
+- `coverage` 执行根目录的 `bun run test:coverage`，也就是上面说的错误 glob，会在客户端 DOM 用例上失败，
+  除非改成各工作区下的同名命令。
 
 详细信息请参阅 [GitHub Actions 工作流](./deploy.mdx#github-actions-工作流)。
 

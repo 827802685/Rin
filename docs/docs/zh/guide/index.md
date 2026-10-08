@@ -1,6 +1,6 @@
 # 简介
 
-Rin 是一个基于 Cloudflare Pages + Workers + D1 + R2 全家桶的博客，只需要一个解析到 Cloudflare 的域名即可部署。
+Rin 是一个基于 Cloudflare Workers + D1 + R2 全家桶的博客：同一个 Worker 既提供 API，也把构建好的前端作为静态资源对外服务，只需要一个解析到 Cloudflare 的域名即可部署。
 
 ## 演示地址
 
