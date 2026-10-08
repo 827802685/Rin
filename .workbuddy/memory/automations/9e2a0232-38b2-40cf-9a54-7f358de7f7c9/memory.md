@@ -3,6 +3,37 @@
 > 2026-10-04 起迭代目标已从 daily-blog 子项目切回 Rin 本体（daily-blog 已从主干移除）。
 > 2026-10-07 起改为在 `auto` 分支上迭代，每 5 次成功迭代合并回 `main`（当前进度 M=1/5）。
 
+## 2026-10-09 02:01 第 5 次执行（auto 分支第 3 次迭代）
+
+- 进场时工作区有 10-08 晚间遗留的**未提交**改动（22 改 + 8 新文件）。先跑门禁确认
+  自洽（server 537 / client 162 全绿），再按模块收编，最后追加本轮自己的修复。
+- 结果：4 个提交落在 `auto`：`b97959e`（server 死代码 + 错误响应）、`bcf9ae0`
+  （client mermaid 懒加载 + live2d 拆分）、`08e7e8c`（文档失真修正）、
+  `df3a6b0`（storage 直连分支 URL 未编码）。workspace 干净。**未触发合并（M=3/5）**，
+  `main` 落后 `auto` 7 个提交。
+- **重大收获：server tsc 18 条 → 0 条**。长期被记为「pnpm 残留 hono 环境噪声」的那
+  18 条 TS2345/TS2741，真根因是 `errors/index.ts` 把 `ErrorResponse`/`ErrorDetail`
+  写成 interface，而 Hono `c.json()` 要求参数落到 `JSONValue`（TS 只给 type 别名
+  隐式索引签名）。今后 server tsc 任何错误都是真回归。
+- **本轮挖到的新 bug**：`getStoragePublicUrl` 的 `S3_ACCESS_HOST` 直连分支原样拼 key，
+  只有 `/api/blob` 代理分支走了 `encodeStorageKey` → key 含空格/`#`/`?`/非 ASCII 时
+  直连域名下 URL 是坏的（`#1.png` 被当 fragment 丢掉）。改为两分支共用编码。
+- 门禁（bun 1.4.2 实测）：server tsc **0 条**／server test **563 pass / 0 fail**
+  （537 → 563）／client tsc 0 错／client vitest **162 pass / 22 files**（+37）／
+  packages/api 19 pass／client vite build **PASS**（exit 0）。基线已回写 MEMORY.md。
+- 变异 1/1 killed（直连分支改回原样拼接 → 7 红），恢复后 26 pass。
+- 经验（供后续复用）：
+  ① **client 构建被 safe-delete 拦有两种触发点**：清 `dist/client/assets` 是一种；
+     即便指定了 `--outDir`，只要该目录**已存在**且 assets > 50 文件同样拦
+     （`prepareOutDir`→`emptyDir`）。可靠绕法：outDir 带 `$(date +%s)` 每次全新。
+  ② 进场遇到脏工作区**先跑门禁再决定**，别想当然 stash。
+  ③ 收编大块遗留改动按 server/client/docs 分批提交，零风险、可追溯性好。
+- 下一目标：① `server/src/utils/s3.ts`(134 行) 零覆盖，补签名/URL 拼装用例
+  ② 客户端页面级组件测试（分页 / 评论列表 / 设置页表单）
+  ③ UV 并发写 HLL 丢失更新（已知未修）。
+
+---
+
 ## 2026-10-08 02:01 第 4 次执行（auto 分支第 2 次迭代）
 
 - 目标：待办 ③「零覆盖模块」→ `config-queue-status.ts`(147) + `config-compat-tasks.ts`(160)。

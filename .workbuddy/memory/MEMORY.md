@@ -42,15 +42,18 @@ cd client      && "$BUN" run tsc --noEmit && "$BUN" run vitest run
 cd packages/api && "$BUN" test
 ```
 
-基线（2026-10-08 02:1x 实测，脚本与包名以当前仓库为准）：
+基线（2026-10-09 02:1x 实测，脚本与包名以当前仓库为准）：
 
 - `packages/api`：19 pass / 0 fail。
-- `server`：`bun test` **529 pass / 0 fail**（40 个文件）。
-  `bun run tsc --noEmit` **恒定 18 条 error TS2345/TS2741/TS2352** —— 根因是
-  `server/node_modules/hono` 是 pnpm 残留的 **4.13.2**（根级 `node_modules/hono` 是 4.12.2），
-  报的是 `string | undefined` 与 `fetch` 缺 `preconnect`。**与代码无关，不要去修**，
-  只要错误条数不增加。
-- `client`：`tsc --noEmit` 0 错；`vitest run` 17 个文件 **125 pass / 0 fail**，exit 0。
+- `server`：`bun run tsc --noEmit` **0 条**（2026-10-09 由 18 条归零，见下）；
+  `bun test` **563 pass / 0 fail**。
+  ~~旧基线：tsc 恒定 18 条 TS2345/TS2741/TS2352~~ —— 2026-10-09 已查明：
+  主因不是 pnpm 残留 hono，而是 `server/src/errors/index.ts` 把
+  `ErrorResponse` / `ErrorDetail` 声明成 **interface**，Hono 的 `c.json()`
+  要求参数能落到 `JSONValue`，而 TS 只给类型别名隐式索引签名。
+  改 `type` + 删零引用死代码后归零。**不要再当成环境噪声忽略**；
+  今后 server tsc 出现任何错误都是真回归。
+- `client`：`tsc --noEmit` 0 错；`vitest run` 22 个文件 **162 pass / 0 fail**，exit 0。
 
 已知偶发（不算回归）：沙箱到不了 `test.r2.cloudflarestorage.com` 时 `rss.test.ts` /
 `favicon.test.ts` 的 S3 用例会 5000ms 超时，网络通时自己会过。
@@ -62,14 +65,23 @@ cd packages/api && "$BUN" test
 - **client 侧可过**（vite，约 3.5 分钟）。但 `bun run build` 直接跑会被
   WorkBuddy 的 safe-delete shim 拦住：vite 清空 `dist/client/assets`（218 文件）
   超过 50 个的批量删除阈值，报 `[safe-delete][SAFE_DELETE_BULK_CONFIRM_REQUIRED]`。
-  **这不是编译错误**。绕法：`cd client && bun x vite build --outDir dist/verify-build`
-  （全新目录无需清空）。
+  **这不是编译错误**。绕法：`cd client && bun x vite build --outDir dist/vb-$(date +%s)`
+  —— 注意 outDir **必须每次都是全新目录**：只要目标目录已存在且 assets 下
+  文件 > 50，`prepareOutDir` → `emptyDir` 同样会被拦（2026-10-09 实测踩到）。
 - **server 侧恒失败且属既有环境问题**：`wrangler deploy --dry-run` 报
   `The detected framework ("Hono") cannot be automatically configured` ——
   `server/` 下没有 wrangler 配置文件，workspace 内 wrangler 自动配置受限。
   2026-10-07 已在父提交的临时 worktree 上复现同样失败，**不要当成回归去修**。
 - 另注：`bun run build:server` 里的 `bunx` 不在 PATH（bun 是绝对路径调用的），
   必须写成 `bun x wrangler ...`。
+
+## 遗留未提交改动的处理
+
+- 自动轮次进场时若工作区是脏的，**先跑一遍门禁再决定**，不要想当然 stash。
+  2026-10-09 进场看到 22 改 + 8 新文件的遗留工作，实跑全绿，收编为 3 个提交；
+  直接判成「半成品」丢掉会白扔一天工作量。
+- 收编大块遗留改动按 `server/` / `client/` / `docs` 分批提交，三者互不依赖，
+  拆分零风险但可追溯性显著更好。
 
 ## 变异测试纪律
 
