@@ -15,7 +15,7 @@ import { ProfileContext } from "../state/profile";
 import { timeago } from "../utils/timeago";
 import { Button } from "../components/button";
 import { Tips } from "../components/tips";
-import mermaid from "mermaid";
+import { renderMermaidBlocks } from "../utils/mermaid-render";
 import { AdjacentSection } from "../components/adjacent_feed.tsx";
 import { ReadingProgress } from "../components/reading-progress";
 import { stripImageUrlMetadata } from "../utils/image-upload";
@@ -117,23 +117,8 @@ export function FeedPage({ id, TOC, clean }: { id: string, TOC: () => JSX.Elemen
     ref.current = id;
   }, [id]);
   useEffect(() => {
-    mermaid.initialize({
-      startOnLoad: false,
-      theme: "default",
-    });
-    mermaid.run({
-      suppressErrors: true,
-      nodes: document.querySelectorAll("pre.mermaid_default")
-    }).then(() => {
-      mermaid.initialize({
-        startOnLoad: false,
-        theme: "dark",
-      });
-      mermaid.run({
-        suppressErrors: true,
-        nodes: document.querySelectorAll("pre.mermaid_dark")
-      });
-    })
+    // mermaid 改为按需动态加载（见 utils/mermaid-render），仅当页面存在 mermaid 代码块时才拉取 chunk
+    void renderMermaidBlocks();
   }, [feed]);
 
   return (

@@ -24,6 +24,15 @@ import {
   parseCustomModels,
   resolveDefaultName,
 } from "./live2d/models";
+import { buildOverrideStyleCss, OVERRIDE_STYLE_ID } from "./live2d/override-style";
+import { type ProgressState, formatProgressMb, progressPercent } from "./live2d/progress-format";
+import { clampDragPosition, loadSavedPos, saveSavedPos } from "./live2d/saved-pos";
+import {
+  isEdgeRestEnabled,
+  normalizeScale,
+  parseLayoutConfig,
+  widgetBoxSize,
+} from "./live2d/widget-config";
 
 /**
  * Live2D 看板娘组件 —— live2d-widget 插件接入版（复刻 Demo autoload.js）
@@ -35,7 +44,11 @@ import {
  *   - live2d/models.ts   模型清单唯一来源（内置 + 自定义模型、聊天人设）；
  *   - live2d/actions.ts  动作引擎（JS 参数动画）与模型实例捕获；
  *   - live2d/cache.ts    模型源探测与 Service Worker 预缓存；
- *   - 本文件             插件加载/挂载、拖拽、聊天面板、覆盖样式。
+ *   - live2d/widget-config.ts   组件配置归一化纯函数（scale/edge/layout/容器尺寸）；
+ *   - live2d/progress-format.ts 下载进度百分比与 MB 文案的纯计算；
+ *   - live2d/saved-pos.ts       拖动位置持久化与视口限位；
+ *   - live2d/override-style.ts  插件覆盖样式（含 edgeRest 裁剪）的 CSS 串构建；
+ *   - 本文件             插件加载/挂载、拖拽、聊天面板等有状态主流程。
  *
  * 交互（联动性）说明：
  *   - 鼠标移动：渲染器让模型眼睛/头部跟随光标（onDrag）；
@@ -76,14 +89,6 @@ const DRAG_START_THRESHOLD = 6;
 // 坐标映射同步生效，模型视角/点击命中保持一致），调用结束立即还原，不影响页面其它部分。
 const MAX_RENDER_DPR = 1.5;
 
-// ---- 趴在屏幕边缘（edgeRest）模式参数 ----
-// 实现思路：模型整体放大并锚定在底部中心，再用 clip-path 把下半身"裁到屏幕外"，
-// 只露出上半身，配合底部一条"桌面边缘"高光，看起来像双手搭在屏幕底边。
-// 因为裁的是 #live2d 画布本身，不会影响浮在上方的 #waifu-tips 气泡。
-const EDGE_SCALE = 1.45; // 放大倍数
-const EDGE_CLIP_TOP = "10%"; // 顶部裁掉的比例（去掉超出画面的头顶）
-const EDGE_CLIP_BOTTOM = "32%"; // 底部裁掉的比例（隐藏下半身/腿）
-
 // initWidget 的配置结构（对应 stevenjoezhang/live2d-widget 的 dist/autoload.js）
 type InitWidgetConfig = {
   waifuPath: string;
@@ -99,9 +104,6 @@ type WidgetLoader = (config: InitWidgetConfig) => void;
 // 用于标记我们注入的 <link>/<script>，便于卸载时定向清理（尽量不误删页面其它资源）
 const CSS_MARK = "rin-live2d-widget--css";
 const SCRIPT_MARK = "rin-live2d-widget--script";
-const OVERRIDE_STYLE_ID = "rin-live2d-widget--override";
-
-type ProgressState = { loaded: number; total: number };
 
 // ---------------------------------------------------------------------------
 // 基础工具函数
@@ -421,43 +423,8 @@ function passClickThrough(clientX: number, clientY: number, widget: HTMLElement 
   );
 }
 
-// 拖动位置持久化 key
-const POS_KEY = "rin.live2d.pos";
-// 记忆的拖动偏移 {left, top}：均为像素
-type SavedPos = { left: number; top: number } | null;
-
-function loadSavedPos(): SavedPos {
-  try {
-    const raw = localStorage.getItem(POS_KEY);
-    if (!raw) {
-      return null;
-    }
-    const parsed = JSON.parse(raw) as { left: number; top: number };
-    if (typeof parsed.left === "number" && typeof parsed.top === "number") {
-      return parsed;
-    }
-  } catch {
-    // ignore
-  }
-  return null;
-}
-
-// 解析 Layout 配置（JSON 字符串，如 {"Center Y": 0.05}）
-function parseLayoutConfig(raw: string): Record<string, number> | null {
-  if (!raw) return null;
-  try {
-    const parsed = JSON.parse(raw) as Record<string, unknown>;
-    const out: Record<string, number> = {};
-    for (const [k, v] of Object.entries(parsed)) {
-      if (typeof v === "number" && Number.isFinite(v)) {
-        out[k] = v;
-      }
-    }
-    return Object.keys(out).length > 0 ? out : null;
-  } catch {
-    return null;
-  }
-}
+// 拖动位置持久化与 Layout/配置解析等同目录纯函数模块，
+// 见 live2d/saved-pos.ts、live2d/widget-config.ts。
 
 export function Live2DWidget() {
   const config = useContext(ClientConfigContext);
@@ -522,17 +489,15 @@ export function Live2DWidget() {
   const [pos, setPos] = useState<{ left: number; top: number } | null>(() => loadSavedPos());
 
   const position = String(config.get("widget.live2d.position") ?? "right");
-  const rawScale = Number(config.get("widget.live2d.scale") ?? 1);
   // 防止配置被误调成超大值导致模型挡住整个页面：限制在安全范围内
-  const scaleValue = Number.isFinite(rawScale) ? Math.min(Math.max(rawScale, 0.1), 2) : 1;
+  const scaleValue = normalizeScale(config.get("widget.live2d.scale"));
   // 趴在屏幕边缘模式：仅显示模型上半身，双手像趴在桌面一样搭在屏幕底部边缘
-  const edgeRest = String(config.get("widget.live2d.edge") ?? "").trim().toLowerCase() === "true";
+  const edgeRest = isEdgeRestEnabled(config.get("widget.live2d.edge"));
   // 颈部/位置微调：widget.live2d.layout（JSON），注入模型配置的 Layout 段
   const layoutConfig = parseLayoutConfig(String(config.get("widget.live2d.layout") ?? ""));
 
   // 模型容器尺寸：与插件 #waifu-canvas 的 300x300 一致，随配置缩放
-  const boxW = Math.round(300 * scaleValue);
-  const boxH = Math.round(300 * scaleValue);
+  const { width: boxW, height: boxH } = widgetBoxSize(scaleValue);
 
   // 当前模型的展示名（内置模型用 i18n，自定义模型用其配置的角色名），
   // 供聊天面板标题/提示文案使用，保证人设与显示的模型一致。
@@ -742,69 +707,12 @@ export function Live2DWidget() {
     }
 
     // ---- 注入我们自己的覆盖样式：把插件 #waifu 定位进 React 容器，气泡改为蓝色 ----
+    // 规则串构建在 live2d/override-style.ts（纯函数，逐行原样迁移；edgeRest 时
+    // 追加"趴屏幕边缘"的放大/裁剪规则）。气泡样式为何全带 !important 见该模块注释。
     // 先创建覆盖样式元素（可重复挂载，后续在插件样式之后会再重挂一次保证优先级）
     const overrideStyle = document.createElement("style");
     overrideStyle.id = OVERRIDE_STYLE_ID;
-
-    const rules = [
-      `#${OVERRIDE_STYLE_ID}{}`,
-      // 模型容器：占满 React 容器，取消插件默认的 fixed 定位与过渡
-      `#waifu{position:absolute !important;top:0;left:0;bottom:auto !important;`,
-      `transform:none !important;transition:none !important;z-index:0 !important;`,
-      `width:100%;height:100%;margin:0}`,
-      `#waifu.waifu-active{bottom:auto !important}`,
-      `#waifu:hover{transform:none !important}`,
-      `#waifu-canvas{width:100% !important;height:100% !important;margin:0}`,
-      // 渲染门控：模型完整加载前画布透明（避免露出半成品），就绪后淡入
-      `#live2d{width:100% !important;height:100% !important;position:relative;display:block;`,
-      `opacity:0;transition:opacity .4s ease;}`,
-      `#live2d.rin-live2d-ready{opacity:1;}`,
-      // 气泡：浮在模型上方，淡蓝色半透明背景（保持透明效果，仅改颜色为淡蓝）。
-      // 注意：插件 waifu.css 在覆盖样式之后加载，且选择器特异性相同（都是 #waifu-tips），
-      // 因此这里所有属性都必须带 !important，否则会被插件默认的米色样式覆盖。
-      `#waifu-tips{position:absolute !important;bottom:100% !important;left:50% !important;`,
-      `transform:translateX(-50%) !important;margin:0 0 8px !important;`,
-      `width:max-content !important;max-width:220px !important;min-height:0 !important;`,
-      `background:rgba(186,225,248,.92) !important;border:1px solid rgba(90,176,232,.45) !important;`,
-      `border-radius:12px !important;box-shadow:0 4px 16px rgba(90,176,232,.28) !important;`,
-      `color:#2a4a6b !important;font-size:12px !important;line-height:1.5 !important;`,
-      `padding:6px 10px !important;opacity:0 !important;`,
-      `transition:opacity .2s !important;z-index:20 !important;pointer-events:none !important;`,
-      `text-align:center !important;`,
-      `animation:none !important;overflow:visible !important;text-overflow:clip !important;`,
-      `word-break:normal !important;}`,
-      `[data-color-mode="dark"] #waifu-tips{background:rgba(46,84,120,.9) !important;`,
-      `border-color:rgba(120,180,230,.35) !important;color:#dceaf7 !important;}`,
-      `#waifu-tips.waifu-tips-active{opacity:1 !important;}`,
-      `#waifu-tips span{color:#2a4a6b !important;}`,
-      `[data-color-mode="dark"] #waifu-tips span{color:#dceaf7 !important;}`,
-      // 工具列与开关交给 React 按钮
-      `#waifu-tool,#waifu-toggle{display:none !important}`,
-    ];
-    // 趴在屏幕边缘：放大模型 + 裁掉下半身 + 底部画一条"桌面边缘"高光
-    if (edgeRest) {
-      rules.push(
-        // 容器底部对齐屏幕底边，模型整体放大并锚定底部
-        `#waifu{bottom:0 !important;transform:none !important;}`,
-        `#live2d{transform:scale(${EDGE_SCALE});transform-origin:50% 100%;`,
-        `clip-path:inset(${EDGE_CLIP_TOP} 0 ${EDGE_CLIP_BOTTOM} 0);}`,
-        // 桌面边缘：模型下方一条细高光，模拟桌面反射/厚度
-        `#waifu::after{content:"";position:absolute;left:0;right:0;bottom:0;`,
-        `height:10px;background:linear-gradient(180deg,rgba(0,0,0,0) 0%,`,
-        `rgba(255,255,255,.25) 40%,rgba(0,0,0,.12) 100%);`,
-        `pointer-events:none;z-index:1;}`,
-        `[data-color-mode="dark"] #waifu::after{`,
-        `background:linear-gradient(180deg,rgba(0,0,0,0) 0%,`,
-        `rgba(255,255,255,.08) 40%,rgba(0,0,0,.35) 100%);}`,
-      );
-      // 桌面横条视觉（比高光更明显）：画一条横贯容器底部的"桌沿"线
-      rules.push(
-        `#waifu::before{content:"";position:absolute;left:0;right:0;bottom:10px;`,
-        `height:2px;background:rgba(120,180,230,.35);`,
-        `pointer-events:none;z-index:1;}`,
-      );
-    }
-    overrideStyle.textContent = rules.join("\n");
+    overrideStyle.textContent = buildOverrideStyleCss(edgeRest);
     document.head.appendChild(overrideStyle);
 
     // ---- 复刻 Demo：给图片加载统一加 crossOrigin ----
@@ -1176,8 +1084,12 @@ export function Live2DWidget() {
     const nextLeft = state.origLeft + deltaX;
     const nextTop = state.origTop + deltaY;
     // 限位：不超过视口右下，且顶部不高于 0
-    const clampedLeft = Math.min(Math.max(nextLeft, 0), window.innerWidth - 20);
-    const clampedTop = Math.min(Math.max(nextTop, 0), window.innerHeight - 20);
+    const { left: clampedLeft, top: clampedTop } = clampDragPosition(
+      nextLeft,
+      nextTop,
+      window.innerWidth,
+      window.innerHeight,
+    );
     setPos({ left: clampedLeft, top: clampedTop });
   };
 
@@ -1196,7 +1108,7 @@ export function Live2DWidget() {
     // 拖拽结束
     const wrapper = outerRef.current;
     if (wrapper) {
-      localStorage.setItem(POS_KEY, JSON.stringify({ left: wrapper.offsetLeft, top: wrapper.offsetTop }));
+      saveSavedPos(wrapper.offsetLeft, wrapper.offsetTop);
     }
     setDragging(false);
     stopDragFlutter();
@@ -1264,9 +1176,7 @@ export function Live2DWidget() {
     : anchorStyle;
 
   // 加载进度百分比（0-100）。自定义模型不知总字节数（total=0）时返回 null，仅显示已下载量。
-  const pct = progress && progress.total > 0
-    ? Math.min(100, Math.round((progress.loaded / progress.total) * 100))
-    : null;
+  const pct = progressPercent(progress);
 
   return (
     <>
@@ -1410,9 +1320,7 @@ export function Live2DWidget() {
                   </span>
                   {progress ? (
                     <span className="t-muted text-[10px]">
-                      {progress.total > 0
-                        ? `${(progress.loaded / 1048576).toFixed(1)} / ${(progress.total / 1048576).toFixed(1)} MB`
-                        : `${(progress.loaded / 1048576).toFixed(1)} MB`}
+                      {formatProgressMb(progress)}
                     </span>
                   ) : null}
                 </div>
