@@ -135,9 +135,16 @@ export async function headStorageObject(env: Env, storageKey: string): Promise<R
   return headS3Object(client, env, storageKey);
 }
 
+/**
+ * 对外可访问的对象 URL。
+ *
+ * 两条分支必须一样按段编码：走 blob 代理时会把 key 编进 `/api/blob/<key>`，
+ * 直连 S3_ACCESS_HOST 时如果原样拼 key，含空格 / `#` / `?` / 非 ASCII 的 key
+ * 会被当成 fragment、query 或直接截断，浏览器拿到的 URL 与对象实际 key 对不上。
+ */
 export function getStoragePublicUrl(env: Env, storageKey: string, baseUrl?: string) {
   if (env.S3_ACCESS_HOST) {
-    return `${trimTrailingSlash(env.S3_ACCESS_HOST)}/${storageKey}`;
+    return `${trimTrailingSlash(env.S3_ACCESS_HOST)}/${encodeStorageKey(storageKey)}`;
   }
 
   return buildBlobUrl(storageKey, baseUrl);
