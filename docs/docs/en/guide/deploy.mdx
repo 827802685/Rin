@@ -103,6 +103,34 @@ no `PAGES_NAME` variable that the code reads.
 
 ---
 
+## Deploying from your machine (CLI)
+
+If you would rather not go through GitHub Actions, the same deploy task can run locally:
+
+```bash
+bun install
+cp .env.example .env.local     # fill in NAME, WORKER_NAME, DB_NAME, CLOUDFLARE_* …
+bun cli/bin/rin.ts deploy      # add --server / --client / --preview to narrow it down
+```
+
+Existing D1 databases, queues and Workers are reused by name — pointing the config at a
+production Worker redeploys it rather than creating a duplicate. Migrations only apply SQL
+files whose version is above `info.migration_version`, so a redeploy of an already-migrated
+database is a no-op.
+
+Two things to know before you run it:
+
+- **Do not put `JWT_SECRET`, `ADMIN_USERNAME`, `ADMIN_PASSWORD`, `RIN_GITHUB_CLIENT_*` or
+  `S3_ACCESS_KEY_ID` / `S3_SECRET_ACCESS_KEY` in `.env.local`.** Bun automatically loads
+  `.env.local` from the current directory into `process.env`, and the deploy task reads the
+  worker secrets from `process.env`, so those keys get pushed on every run and overwrite the
+  live values (a rotated `JWT_SECRET` signs out every session). `ADMIN_USERNAME` /
+  `ADMIN_PASSWORD` are additionally protected by a "write once" check, but the others are not.
+  Keep them in a file outside the repository and source it only when you actually need them.
+- **Building the frontend can stall.** `cd client && bun run build` sometimes stays alive after
+  printing `✓ built in …`. `deploy` reuses `./dist/client` when `dist/client/index.html` already
+  exists, so wrap the build in a timeout or build it once and let deploy reuse it.
+
 ## Advanced Configuration
 
 ### Custom Domain

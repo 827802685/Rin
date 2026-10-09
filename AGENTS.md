@@ -61,6 +61,27 @@ Do not trust these from older docs; they were re-checked on 2026-10-09:
 - `turbo run check` skips the three `packages/*` packages because they name their
   script `typecheck`.
 
+### Deploying to Cloudflare — gotchas found while doing a real deploy (2026-10-09)
+
+- **Bun auto-loads `.env.local` from the current directory**, and `cli/src/tasks/deploy-cf.ts`
+  reads `WORKER_SECRET_KEYS` straight from `process.env`. So any secret key written in
+  `.env.local` *will* be pushed to the Worker, even if the calling shell `unset`s it first.
+  Keep `JWT_SECRET` / `ADMIN_*` / `RIN_GITHUB_CLIENT_*` / `S3_*_KEY*` out of the repo
+  directory entirely (a file outside the worktree works fine, e.g. `~/work/rin-secrets.env`);
+  suppression has to happen in the file, not the shell. Overwriting `JWT_SECRET`
+  silently invalidates every logged-in session.
+- `setup-dev` exits early if required vars are blank (`NAME`, `AVATAR`,
+  `RIN_GITHUB_CLIENT_ID`, `RIN_GITHUB_CLIENT_SECRET`, `JWT_SECRET`, plus `S3_*` when
+  `R2_BUCKET_NAME` is unset), so `bun run dev` needs those filled in even though
+  `deploy` tolerates them being empty.
+- `bun run build:server` at the repo root fails with "Wrangler application detection
+  … run in the root of a workspace, this is not supported" unless a `wrangler.toml`
+  exists — it is a generated file, so run `bun cli/bin/rin.ts setup-dev` (or `deploy`,
+  which generates it) first.
+- `cd client && bun run build` can stay alive after printing "✓ built in …" (idle
+  `bun`/`vite` processes); `deploy` reuses `./dist/client` when
+  `dist/client/index.html` is already there, so wrap the build in `timeout` or skip it.
+
 ## Rin CLI
 
 The project uses a unified CLI tool located at `cli/bin/rin.ts`. Command implementations live under `cli/src/{commands,tasks,lib}`.

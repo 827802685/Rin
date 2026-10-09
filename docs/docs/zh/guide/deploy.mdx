@@ -103,6 +103,32 @@ Rin 目前支持账号密码登录与 Github OAuth 登录，可二选一或同�
 
 ---
 
+## 在本地用 CLI 部署
+
+不想走 GitHub Actions 的话，同一个部署任务可以在本机执行：
+
+```bash
+bun install
+cp .env.example .env.local     # 填好 NAME、WORKER_NAME、DB_NAME、CLOUDFLARE_* 等
+bun cli/bin/rin.ts deploy      # 可加 --server / --client / --preview 缩小范围
+```
+
+已有的 D1 数据库、Queue 和 Worker 都会按名字复用——把配置指向线上那个 Worker 是重新部署它，
+而不是新建一份。迁移只会执行版本号高于 `info.migration_version` 的 SQL 文件，因此对已经迁移过
+的数据库重复部署不会改动任何表。
+
+执行前有两点必须知道：
+
+- **不要把 `JWT_SECRET`、`ADMIN_USERNAME`、`ADMIN_PASSWORD`、`RIN_GITHUB_CLIENT_*`、
+  `S3_ACCESS_KEY_ID` / `S3_SECRET_ACCESS_KEY` 写进 `.env.local`。** Bun 会把当前目录下的
+  `.env.local` 自动加载进 `process.env`，而部署任务正是从 `process.env` 读取 Worker secret，
+  所以每次部署都会重新推送这些键并覆盖线上值（`JWT_SECRET` 被换掉后所有已登录会话都会失效）。
+  `ADMIN_USERNAME` / `ADMIN_PASSWORD` 另有一层"只写一次"的保护，其余键没有。把这些值放在仓库之外
+  的文件里，只在确实需要时再加载。
+- **前端构建可能会卡住。** `cd client && bun run build` 有时会打印完 `✓ built in …` 却不退出。
+  只要 `dist/client/index.html` 已存在，`deploy` 就直接复用 `./dist/client`，因此建议给构建加
+  `timeout`，或者构建一次后让部署复用产物。
+
 ## 高级配置
 
 ### 自定义域名
