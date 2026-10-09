@@ -147,8 +147,8 @@ export function FaviconService(): Hono {
             }
 
             const body = await profileAsync(c, 'favicon_upload_parse', () => c.req.parseBody());
-            const file = body.file as File;
-            
+            const file = body.file instanceof File ? body.file : undefined;
+
             if (!file) {
                 c.status(400);
                 return c.text("No file uploaded");
@@ -170,10 +170,17 @@ export function FaviconService(): Hono {
                 `originFavicon${FAVICON_ALLOWED_TYPES[file.type]}`,
             );
 
+            // 原图必须带上真实的 MIME：`/favicon/original` 会直接把它回给浏览器，
+            // 而 `/api/blob/<key>` 一律加 `X-Content-Type-Options: nosniff`，
+            // 缺 Content-Type 时对象会被当成 octet-stream，浏览器不会当图片渲染。
+            // 这里也把 File 读成 Uint8Array 再写：直接把 File/Blob 当 body 会走
+            // 流式校验和，Node 运行时下会在上传前就抛错。
+            const originBytes = new Uint8Array(await file.arrayBuffer());
             await profileAsync(c, 'favicon_origin_put', () => putStorageObjectAtKey(
                 env,
                 originFaviconKey,
-                file
+                originBytes,
+                file.type
             ));
 
             const originFaviconUrl = getStoragePublicUrl(env, originFaviconKey, new URL(c.req.url).origin);
@@ -200,10 +207,12 @@ export function FaviconService(): Hono {
 
             const arrayBuffer = await profileAsync(c, 'favicon_transform_body', () => response.arrayBuffer());
 
+            // 转换结果恒为 webp，与按需生成分支（buildFaviconFromSource）保持一致。
             await profileAsync(c, 'favicon_put', () => putStorageObjectAtKey(
                 env,
                 faviconKey,
-                new Uint8Array(arrayBuffer)
+                new Uint8Array(arrayBuffer),
+                "image/webp"
             ));
 
             return c.json({ url: getStoragePublicUrl(env, faviconKey, new URL(c.req.url).origin) });

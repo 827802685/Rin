@@ -332,6 +332,78 @@ describe('FaviconService', () => {
             // Will fail due to S3 not available
             expect(res.status).not.toBe(403);
         });
+
+        /**
+         * `/api/blob/<key>` 回放对象时会强制加 `X-Content-Type-Options: nosniff`，
+         * 所以上传时写进存储的 Content-Type 就是浏览器能不能把它当图片渲染的唯一依据。
+         * 上传分支历史上两次 `putStorageObjectAtKey` 都不传 contentType，
+         * 与按需生成分支（显式传 image/webp）以及 /storage 上传（传 file.type）不对称。
+         */
+        it('should store both objects with a real Content-Type', async () => {
+            const file = new File(['test'], 'favicon.png', { type: 'image/png' });
+            const formData = new FormData();
+            formData.append('file', file);
+
+            const puts: { url: string; contentType: string | null }[] = [];
+            const originalFetch = globalThis.fetch;
+
+            globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+                const isRequest = input instanceof Request;
+                const url = typeof input === 'string'
+                    ? input
+                    : input instanceof URL
+                      ? input.toString()
+                      : input.url;
+                const method = init?.method ?? (isRequest ? input.method : 'GET');
+                const rawHeaders = init?.headers ?? (isRequest ? input.headers : undefined);
+                const headers = rawHeaders ? new Headers(rawHeaders as HeadersInit) : null;
+
+                if (method === 'PUT') {
+                    puts.push({ url, contentType: headers ? headers.get('content-type') : null });
+                    return new Response(null, { status: 200 });
+                }
+
+                // 图片转换请求（取回刚上传的原图）
+                return new Response(new Uint8Array([1, 2, 3]), {
+                    status: 200,
+                    headers: { 'Content-Type': 'image/webp' },
+                });
+            };
+
+            try {
+                const res = await app.request('/', {
+                    method: 'POST',
+                    headers: { 'Authorization': 'Bearer mock_token_1' },
+                    body: formData,
+                }, env);
+
+                expect(res.status).toBe(200);
+                expect(puts.length).toBe(2);
+
+                const originPut = puts.find(p => p.url.includes('originFavicon.png'));
+                const faviconPut = puts.find(p => p.url.includes('favicon.webp'));
+
+                expect(originPut).toBeDefined();
+                expect(faviconPut).toBeDefined();
+                expect(originPut!.contentType).toBe('image/png');
+                expect(faviconPut!.contentType).toBe('image/webp');
+            } finally {
+                globalThis.fetch = originalFetch;
+            }
+        });
+
+        it('should reject a non-file field named file', async () => {
+            const formData = new FormData();
+            formData.append('file', 'not-a-file');
+
+            const res = await app.request('/', {
+                method: 'POST',
+                headers: { 'Authorization': 'Bearer mock_token_1' },
+                body: formData,
+            }, env);
+
+            expect(res.status).toBe(400);
+        });
     });
 
     describe('FAVICON_ALLOWED_TYPES', () => {
