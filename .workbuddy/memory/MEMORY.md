@@ -42,11 +42,11 @@ cd client      && "$BUN" run tsc --noEmit && "$BUN" run vitest run
 cd packages/api && "$BUN" test
 ```
 
-基线（2026-10-09 02:1x 实测，脚本与包名以当前仓库为准）：
+基线（2026-10-11 02:1x 实测，脚本与包名以当前仓库为准）：
 
 - `packages/api`：19 pass / 0 fail。
 - `server`：`bun run tsc --noEmit` **0 条**（2026-10-09 由 18 条归零，见下）；
-  `bun test` **563 pass / 0 fail**。
+  `bun test` **571 pass / 0 fail**（10-11 由 565 → 571）。
   ~~旧基线：tsc 恒定 18 条 TS2345/TS2741/TS2352~~ —— 2026-10-09 已查明：
   主因不是 pnpm 残留 hono，而是 `server/src/errors/index.ts` 把
   `ErrorResponse` / `ErrorDetail` 声明成 **interface**，Hono 的 `c.json()`
@@ -68,10 +68,18 @@ cd packages/api && "$BUN" test
   **这不是编译错误**。绕法：`cd client && bun x vite build --outDir dist/vb-$(date +%s)`
   —— 注意 outDir **必须每次都是全新目录**：只要目标目录已存在且 assets 下
   文件 > 50，`prepareOutDir` → `emptyDir` 同样会被拦（2026-10-09 实测踩到）。
-- **server 侧恒失败且属既有环境问题**：`wrangler deploy --dry-run` 报
-  `The detected framework ("Hono") cannot be automatically configured` ——
-  `server/` 下没有 wrangler 配置文件，workspace 内 wrangler 自动配置受限。
-  2026-10-07 已在父提交的临时 worktree 上复现同样失败，**不要当成回归去修**。
+- **server 侧 2026-10-10 起也能过了**（exit 0）。此前记录为「恒失败」：
+  `wrangler deploy --dry-run` 报 `The detected framework ("Hono") cannot be
+  automatically configured`，根因是 `server/` 下没有 wrangler 配置文件。
+  现在仓库根有生成的 `wrangler.toml`，`cd server && bun run build` 直接跑通，
+  会打印绑定清单后 `--dry-run: exiting now.`。
+  **所以今后 server 构建失败是真回归，不要再拿旧结论当既有环境问题。**
+- **client 构建还有第二种 safe-delete 触发点**（2026-10-11 实测）：即使 outDir 全新、
+  日志已经打印 `✓ built in 6m 18s`，进程仍会 exit 1。错误在 `closeBundle`
+  —— vite 收尾要删 `node_modules/.vite-temp/vite.config.ts.timestamp-*.mjs`，
+  shim 走 `genie-trash` 子进程 `ETIMEDOUT`。**这是收尾清理失败，不是编译错误**；
+  判据是日志里 `✓ built in` 是否出现 + outDir 下 `index.html`/`assets`(218) 是否齐全。
+  所以**不要只看退出码判 client 构建成败**，要把日志落文件再 grep。
 - 另注：`bun run build:server` 里的 `bunx` 不在 PATH（bun 是绝对路径调用的），
   必须写成 `bun x wrangler ...`。
 
@@ -93,21 +101,29 @@ cd packages/api && "$BUN" test
 
 ## 环境陷阱
 
-- **bun 已不在本机**：`C:\Users\Administrator\.bun` 于 2026-10-03 确认不存在，`bun` 与 baseline 版均无法调用，
-  server / client / packages/api 的 bun 系门禁（tsc / bun test / vitest）当前**无法实跑**，不得声明其通过。
-  仍可用的替代：`node_modules/.bin/tsc.exe`、`node_modules/.bin/vitest.exe`；
-  managed node：`C:\Users\Administrator\.workbuddy\binaries\node\versions\22.22.2-5\node.exe`；
-  daily-blog 用 `node --test tests/*.test.js`（纯 Node，可跑）。
+- ~~**bun 已不在本机**~~ —— 该结论已于 2026-10-04 作废：`C:\Users\Administrator\.bun`
+  确实不存在，但 WorkBuddy 自带一份 bun 1.4.2（路径见本文件顶部「提交前验证门禁」），
+  server / client / packages/api 三套 bun 门禁**都能实跑**。看到这条旧记录不要当真。
 - bash 必须先 `export PATH="/usr/bin:/bin:$PATH"`，否则 ls/find/grep/dirname 全部 command not found。
 - PowerShell 工具不返回 stdout，一律用 Bash。
 - 源码是 **CRLF 行尾**，正则处理内容时必须用 `\r?\n`。
 - 不要动 `bun.lock`（本机镜像会写脏，需要时 `git checkout -- bun.lock`）。
 - `F:/Documents/GitHub/Rin` 的 `node_modules` 有 pnpm 残留的 `hono@4.13.2`（顶层是 4.12.2），
   会导致那里的 `tsc` 报 `string | undefined` 误报。
+- **别把 `File` / `Blob` 直接当 S3 `PutObjectCommand` 的 body**：会走流式校验和，
+  Node 运行时在发出请求之前就抛 `Unable to calculate hash for flowing readable stream`
+  （`@smithy/hash-stream-node` → `getAwsChunkedEncodingStream`）。一律先
+  `new Uint8Array(await file.arrayBuffer())`。2026-10-10 修 favicon 上传时踩到。
+- 变异脚本里**别硬编码 `\n`**：先 `"\r\n" in text` 探测行尾再拼锚点。
+  2026-10-10 首跑因为硬编码 `\n` 得到 `anchor count=0`，白跑一轮。
+- 测「写入对象存储带了什么头」最省事的写法：替换 `globalThis.fetch`，按
+  `method === 'PUT'` 收集 `{url, contentType}`（smithy 传的是 `Request` 对象，
+  头在 `input.headers`，不是 `init.headers`），其余 GET 一律返 200 webp 字节。
 
 ## 工作区
 
 - `F:/Documents/GitHub/Rin` —— 唯一工作区，checkout 在 `main`。
+- 自 2026-10-07 起自动化迭代实际 checkout 在 **`auto`**，`main` 只接收每 5 次的合并。
 - 旧 AI worktree `C:/Users/Administrator/WorkBuddy/Worktrees/Rin/main-f7c3f4a1` 目录已不存在，worktree 记录已 prune。
 
 ## 已发生的事故记录（避免重犯）
