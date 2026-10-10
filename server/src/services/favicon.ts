@@ -2,7 +2,13 @@ import { Hono } from "hono";
 import type { AppContext } from "../core/hono-types";
 import { profileAsync } from "../core/server-timing";
 import { path_join } from "../utils/path";
-import { getStorageObject, getStoragePublicUrl, putStorageObjectAtKey } from "../utils/storage";
+import {
+    deleteStorageObjectAtKey,
+    getStorageObject,
+    getStoragePublicUrl,
+    headStorageObject,
+    putStorageObjectAtKey,
+} from "../utils/storage";
 
 // @see https://developers.cloudflare.com/images/url-format#supported-formats-and-limitations
 export const FAVICON_ALLOWED_TYPES: { [key: string]: string } = {
@@ -14,6 +20,30 @@ export const FAVICON_ALLOWED_TYPES: { [key: string]: string } = {
 
 export function getFaviconKey(env: Env) {
     return path_join(env.S3_FOLDER || "", "favicon.webp");
+}
+
+export function getOriginFaviconKey(env: Env, ext: string) {
+    return path_join(env.S3_FOLDER || "", `originFavicon${ext}`);
+}
+
+/**
+ * 清掉其它扩展名的原始图标。
+ *
+ * 换格式上传时只会写 `originFavicon<新扩展名>`，旧扩展名的对象不会自动消失。
+ * 请求失败不该连累上传本身 —— 新原图此时已经写进去了，所以这里只记日志。
+ */
+async function removeStaleOriginFavicons(env: Env, keepExt: string) {
+    const staleKeys = Object.values(FAVICON_ALLOWED_TYPES)
+        .filter((ext) => ext !== keepExt)
+        .map((ext) => getOriginFaviconKey(env, ext));
+
+    await Promise.all(staleKeys.map(async (key) => {
+        try {
+            await deleteStorageObjectAtKey(env, key);
+        } catch (error) {
+            console.error("Error removing stale original favicon:", error);
+        }
+    }));
 }
 
 async function buildFaviconFromSource(c: AppContext, sourceUrl: string, faviconKey: string) {
@@ -108,19 +138,47 @@ export function FaviconService(): Hono {
         const env = c.get('env');
         
         try {
-            for (const [mimeType, ext] of Object.entries(FAVICON_ALLOWED_TYPES)) {
-                const originFaviconKey = path_join(env.S3_FOLDER || "", `originFavicon${ext}`);
-                const response = await profileAsync(c, 'favicon_original_fetch', () => getStorageObject(env, originFaviconKey));
+            // 四个扩展名的对象可能同时存在：换格式上传后旧的那份并不会被自动替换掉，
+            // 按固定顺序取「第一个命中」就会一直把旧图回给浏览器（顺序是 jpg→png→gif→webp，
+            // 先传 png 再传 jpg 之后，这里永远返回 png）。所以把候选全部探一遍，
+            // 取 Last-Modified 最新的那份；时间戳相同的按声明顺序取第一个（sort 稳定）。
+            const candidates: { mimeType: string; key: string; uploadedAt: number }[] = [];
 
-                if (response) {
-                    c.header("Content-Type", mimeType);
-                    c.header("Cache-Control", "public, max-age=31536000");
-                    return c.body(await profileAsync(c, 'favicon_original_body', () => response.arrayBuffer()));
+            for (const [mimeType, ext] of Object.entries(FAVICON_ALLOWED_TYPES)) {
+                const originFaviconKey = getOriginFaviconKey(env, ext);
+                const head = await profileAsync(c, 'favicon_original_head', () => headStorageObject(env, originFaviconKey));
+
+                if (!head) {
+                    continue;
                 }
+
+                const modified = head.headers.get("Last-Modified");
+                const parsed = modified ? Date.parse(modified) : NaN;
+                candidates.push({
+                    mimeType,
+                    key: originFaviconKey,
+                    uploadedAt: Number.isNaN(parsed) ? 0 : parsed,
+                });
             }
 
-            c.status(404);
-            return c.text("Original favicon not found");
+            const latest = candidates.sort((a, b) => b.uploadedAt - a.uploadedAt)[0];
+
+            if (!latest) {
+                c.status(404);
+                return c.text("Original favicon not found");
+            }
+
+            const response = await profileAsync(c, 'favicon_original_fetch', () => getStorageObject(env, latest.key));
+
+            if (!response) {
+                // HEAD 命中之后对象又被删掉了
+                c.status(404);
+                return c.text("Original favicon not found");
+            }
+
+            c.header("Content-Type", response.headers.get("Content-Type") || latest.mimeType);
+            c.header("Cache-Control", "public, max-age=31536000");
+            return c.body(await profileAsync(c, 'favicon_original_body', () => response.arrayBuffer()));
         } catch (error) {
             if (error instanceof Error) {
                 c.status(500);
@@ -165,10 +223,8 @@ export function FaviconService(): Hono {
                 return c.text("Disallowed file type");
             }
             
-            const originFaviconKey = path_join(
-                env.S3_FOLDER || "",
-                `originFavicon${FAVICON_ALLOWED_TYPES[file.type]}`,
-            );
+            const originExt = FAVICON_ALLOWED_TYPES[file.type];
+            const originFaviconKey = getOriginFaviconKey(env, originExt);
 
             // 原图必须带上真实的 MIME：`/favicon/original` 会直接把它回给浏览器，
             // 而 `/api/blob/<key>` 一律加 `X-Content-Type-Options: nosniff`，
@@ -214,6 +270,9 @@ export function FaviconService(): Hono {
                 new Uint8Array(arrayBuffer),
                 "image/webp"
             ));
+
+            // 新图已经落地，此时清掉旧扩展名的原图才不会把站点图标清成 404。
+            await profileAsync(c, 'favicon_origin_cleanup', () => removeStaleOriginFavicons(env, originExt));
 
             return c.json({ url: getStoragePublicUrl(env, faviconKey, new URL(c.req.url).origin) });
         } catch (error) {

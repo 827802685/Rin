@@ -59,11 +59,101 @@ class TestCacheImpl implements CacheImpl {
     }
 }
 
+/** 记录写入/删除动作的内存 R2 替身 */
+type TestR2Bucket = {
+    puts: string[];
+    deletes: string[];
+    head: (key: string) => Promise<R2Object | null>;
+    get: (key: string) => Promise<R2ObjectBody | null>;
+    put: (key: string) => Promise<R2Object>;
+    delete: (key: string) => Promise<void>;
+};
+
+function createR2Object(
+    key: string,
+    body: string,
+    uploaded: Date,
+    contentType: string,
+): R2ObjectBody {
+    return {
+        key,
+        size: body.length,
+        etag: `etag-${key}`,
+        httpEtag: `etag-${key}`,
+        uploaded,
+        storageClass: 'Standard',
+        checksums: {} as R2Checksums,
+        httpMetadata: { contentType },
+        writeHttpMetadata(headers: Headers) {
+            headers.set('Content-Type', contentType);
+        },
+        body: new Blob([body]).stream(),
+        bodyUsed: false,
+        arrayBuffer: async () => new TextEncoder().encode(body).buffer,
+        text: async () => body,
+        json: async () => ({ value: body }),
+        blob: async () => new Blob([body]),
+        bytes: async () => new Uint8Array(new TextEncoder().encode(body)),
+    } as unknown as R2ObjectBody;
+}
+
+function createR2Env(
+    objects: Record<string, R2ObjectBody>,
+    seed: Record<string, string> = {},
+): Env {
+    const store = new Map<string, R2ObjectBody>(Object.entries(objects));
+    const puts: string[] = [];
+    const deletes: string[] = [];
+
+    const bucket = {
+        puts,
+        deletes,
+        head: async (key: string) => store.get(key) ?? null,
+        get: async (key: string) => store.get(key) ?? null,
+        put: async (key: string) => {
+            puts.push(key);
+            const object = createR2Object(key, seed[key] ?? 'body', new Date(), 'application/octet-stream');
+            store.set(key, object);
+            return object;
+        },
+        delete: async (key: string) => {
+            deletes.push(key);
+            store.delete(key);
+        },
+    } as unknown as TestR2Bucket;
+
+    return createMockEnv({ R2_BUCKET: bucket as unknown as R2Bucket });
+}
+
 describe('FaviconService', () => {
     let db: any;
     let sqlite: Database;
     let env: Env;
     let app: Hono<{ Bindings: Env; Variables: Variables }>;
+
+    /** 用指定 env 起一个只有 FaviconService 的应用（uid=1 / admin=true） */
+    function buildApp(targetEnv: Env) {
+        const testApp = new Hono<{ Bindings: Env; Variables: Variables }>();
+
+        testApp.use(createMiddleware<{ Bindings: Env; Variables: Variables }>(async (c, next) => {
+            c.set('db', db);
+            c.set('cache', new TestCacheImpl());
+            c.set('serverConfig', new TestCacheImpl());
+            c.set('clientConfig', new TestCacheImpl());
+            c.set('jwt', {
+                sign: async (payload: any) => `mock_token_${payload.id}`,
+                verify: async (token: string) => token.startsWith('mock_token_') ? { id: 1 } : null,
+            } as JWTUtils);
+            c.set('oauth2', undefined);
+            c.set('env', targetEnv);
+            c.set('uid', 1);
+            c.set('admin', true);
+            await next();
+        }));
+
+        testApp.route('/', FaviconService());
+        return testApp;
+    }
 
     beforeEach(async () => {
         const mockDB = createMockDB();
@@ -271,6 +361,50 @@ describe('FaviconService', () => {
             // Will fail due to S3 not being available, but verifies route is registered
             expect(res.status).not.toBe(404);
         });
+
+        /**
+         * 换格式上传后旧扩展名的对象不会消失，而遍历顺序是固定的
+         * jpg→png→gif→webp。先传 png 再传 jpg 之后，「取第一个命中」会永远
+         * 把那张旧 png 回给浏览器，新图标怎么传都不生效。
+         */
+        it('should return the most recently uploaded original, not the first match by extension', async () => {
+            const r2Env = createR2Env({
+                'images/originFavicon.jpg': createR2Object(
+                    'images/originFavicon.jpg', 'stale-jpg', new Date('2024-01-01T00:00:00Z'), 'image/jpeg',
+                ),
+                'images/originFavicon.png': createR2Object(
+                    'images/originFavicon.png', 'fresh-png', new Date('2026-06-01T00:00:00Z'), 'image/png',
+                ),
+            });
+
+            const res = await buildApp(r2Env).request('/original', { method: 'GET' }, r2Env);
+
+            expect(res.status).toBe(200);
+            expect(res.headers.get('content-type')).toBe('image/png');
+            expect(await res.text()).toBe('fresh-png');
+        });
+
+        it('should fall back to the only existing original', async () => {
+            const r2Env = createR2Env({
+                'images/originFavicon.webp': createR2Object(
+                    'images/originFavicon.webp', 'only-webp', new Date('2026-06-01T00:00:00Z'), 'image/webp',
+                ),
+            });
+
+            const res = await buildApp(r2Env).request('/original', { method: 'GET' }, r2Env);
+
+            expect(res.status).toBe(200);
+            expect(res.headers.get('content-type')).toBe('image/webp');
+            expect(await res.text()).toBe('only-webp');
+        });
+
+        it('should return 404 when no original has ever been uploaded', async () => {
+            const r2Env = createR2Env({});
+
+            const res = await buildApp(r2Env).request('/original', { method: 'GET' }, r2Env);
+
+            expect(res.status).toBe(404);
+        });
     });
 
     describe('POST / - Upload favicon', () => {
@@ -387,6 +521,44 @@ describe('FaviconService', () => {
                 expect(faviconPut).toBeDefined();
                 expect(originPut!.contentType).toBe('image/png');
                 expect(faviconPut!.contentType).toBe('image/webp');
+            } finally {
+                globalThis.fetch = originalFetch;
+            }
+        });
+
+        /**
+         * 不清理的话，站点每换一次图标格式就会在存储里多留一份永远读不到的旧原图。
+         */
+        it('should remove originals left over from a previous upload in another format', async () => {
+            const r2Env = createR2Env({}, { 'images/originFavicon.jpg': 'stale' });
+            const file = new File(['test'], 'favicon.png', { type: 'image/png' });
+            const formData = new FormData();
+            formData.append('file', file);
+
+            const originalFetch = globalThis.fetch;
+            globalThis.fetch = async () =>
+                new Response(new Uint8Array([1, 2, 3]), {
+                    status: 200,
+                    headers: { 'Content-Type': 'image/webp' },
+                });
+
+            try {
+                const res = await buildApp(r2Env).request('/', {
+                    method: 'POST',
+                    headers: { 'Authorization': 'Bearer mock_token_1' },
+                    body: formData,
+                }, r2Env);
+
+                expect(res.status).toBe(200);
+
+                const bucket = r2Env.R2_BUCKET as unknown as TestR2Bucket;
+                expect(bucket.puts).toContain('images/originFavicon.png');
+                expect(bucket.puts).toContain('images/favicon.webp');
+                expect(bucket.deletes.sort()).toEqual([
+                    'images/originFavicon.gif',
+                    'images/originFavicon.jpg',
+                    'images/originFavicon.webp',
+                ]);
             } finally {
                 globalThis.fetch = originalFetch;
             }

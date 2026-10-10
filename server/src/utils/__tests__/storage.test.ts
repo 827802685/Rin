@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'bun:test';
 import {
+  deleteStorageObjectAtKey,
   getStoragePublicUrl,
   isObjectStorageConfigured,
   resolveStorageTarget,
@@ -196,6 +197,56 @@ describe('resolveStorageTarget', () => {
         }),
       ),
     ).toThrow('S3_BUCKET is not defined');
+  });
+});
+
+describe('deleteStorageObjectAtKey', () => {
+  const s3Env = envWith({
+    S3_ENDPOINT: 'https://s3.example.com',
+    S3_BUCKET: 'rin',
+    S3_ACCESS_KEY_ID: 'id',
+    S3_SECRET_ACCESS_KEY: 'secret',
+  });
+
+  it('R2 分支走 bucket.delete，key 原样透传', async () => {
+    const deleted: string[] = [];
+    const env = envWith({
+      R2_BUCKET: {
+        delete: async (key: string) => {
+          deleted.push(key);
+        },
+      } as unknown as R2Bucket,
+    });
+
+    await deleteStorageObjectAtKey(env, 'rin/originFavicon.jpg');
+
+    expect(deleted).toEqual(['rin/originFavicon.jpg']);
+  });
+
+  it('S3 分支发出 DELETE，打到该 key 对应的对象 URL', async () => {
+    const seen: { url: string; method: string }[] = [];
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+      const isRequest = input instanceof Request;
+      const url =
+        typeof input === 'string'
+          ? input
+          : input instanceof URL
+            ? input.toString()
+            : input.url;
+      seen.push({ url: url.split('?')[0], method: init?.method ?? (isRequest ? input.method : 'GET') });
+      return new Response(null, { status: 204 });
+    };
+
+    try {
+      await deleteStorageObjectAtKey(s3Env, 'rin/originFavicon.jpg');
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+
+    expect(seen.length).toBe(1);
+    expect(seen[0].method).toBe('DELETE');
+    expect(keyOf(seen[0].url)).toBe('rin/originFavicon.jpg');
   });
 });
 

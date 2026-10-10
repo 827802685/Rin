@@ -1,5 +1,11 @@
 import { path_join } from "./path";
-import { createS3Client, getObject, headObject as headS3Object, putObject as putS3Object } from "./s3";
+import {
+  createS3Client,
+  deleteObject as deleteS3Object,
+  getObject,
+  headObject as headS3Object,
+  putObject as putS3Object,
+} from "./s3";
 
 type StorageTarget =
   | {
@@ -148,6 +154,16 @@ export function getStoragePublicUrl(env: Env, storageKey: string, baseUrl?: stri
   }
 
   return buildBlobUrl(storageKey, baseUrl);
+}
+
+export async function deleteStorageObjectAtKey(env: Env, storageKey: string) {
+  if (env.R2_BUCKET) {
+    await env.R2_BUCKET.delete(storageKey);
+    return;
+  }
+
+  const client = createS3Client(env);
+  await deleteS3Object(client, env, storageKey);
 }
 
 export async function putStorageObject(
