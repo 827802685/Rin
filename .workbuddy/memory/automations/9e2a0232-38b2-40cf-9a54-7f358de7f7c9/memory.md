@@ -32,6 +32,9 @@
      变异的残留，白记一次。循环里要 `mutate → test → restore` 三步成套。
   ③ R2 替身要同时实现 `head`/`get`/`put`/`delete`，并把 put/delete 的 key 记进数组，
      断言「清理了哪些、没清理哪个」比断言状态码有力得多。
+- 合并：`auto` → `main` 走 `--no-ff` 合并提交 `8b98d78`，随后 `auto` 快进到同一提交，
+  `git diff main..auto` 为空。`git push origin main` 因 `github.com:443` 21 秒连不上失败
+  （本机既有网络问题，非回归），本地 main 已领先 origin/main 12 个提交，待网络恢复再推。
 - 下一目标：① `utils/s3.ts` 剩余零覆盖（`buildS3ObjectUrl` 仍无调用点，考虑处置）
   ② UV 并发写 HLL 丢失更新（已知未修）③ 客户端页面级组件测试（分页 / 评论列表 / 设置页表单）。
 
