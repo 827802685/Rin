@@ -16,16 +16,24 @@ On Windows, copy the `commit-msg.sh` file directly to `.git/hooks/commit-msg`.
 cp .\scripts\commit-msg.sh .\.git\hooks\commit-msg
 ```
 
-This will run the following checks before each commit:
+Installing it adds two checks before each commit:
 
-1. **Type checking** - `bun run check` validates TypeScript types across all packages
-2. **Linting** - checks code formatting and style
-3. **Commit message format** - verifies the commit message starts with one of: `feat|chore|fix|docs|ci|style|test|pref`
+1. **Type checking** - the hook runs `bun check`, i.e. `turbo check`, which covers `client/`,
+   `server/` and `cli/`. The shared packages (`@rin/api`, `@rin/ui`, `@rin/config`) expose their
+   script as `typecheck`, so the hook does **not** cover them — run
+   `cd packages/<name> && bun run typecheck` yourself when you touch one.
+2. **Commit message format** - verifies the message starts with one of:
+   `feat|chore|fix|docs|ci|style|test|pref` followed by `: `
+
+There is no linting or formatting step in the hook, and it does not run tests either. Check those
+manually before committing — per workspace, not from the repository root:
 
 :::warning Important
-The hook also runs tests. Make sure all tests pass before committing:
+`bun run test` at the root is `bun test`, which globs every workspace and runs the client's
+Vitest files without jsdom (781 tests collected, 24 failures on the current checkout). Use:
 ```sh
-bun run test
+cd server && bun run test
+cd client && bun run test
 ```
 :::
 
@@ -89,13 +97,17 @@ If you want to use the image upload feature, fill in the S3 configuration in `.e
 Before submitting a pull request, please ensure all tests pass:
 
 ```sh
-# Run all tests
-bun run test
+# Run the suites (per workspace — the root `bun test` glob is broken, see above)
+cd server && bun run test
+cd client && bun run test
 
-# Run type checking
+# Run type checking (client/, server/, cli/)
 bun run check
 
-# Run formatting check
+# Type check the shared packages separately
+cd packages/api && bun run typecheck
+
+# Run formatting check (currently a no-op: no workspace defines a `format` script)
 bun run format:check
 ```
 

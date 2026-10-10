@@ -107,18 +107,39 @@ bun run build
 # Clean generated files
 bun run clean
 
-# Run type checking
+# Run type checking (turbo check: covers client/, server/, cli/)
 bun run check
+
+# Type check the shared packages, which expose `typecheck`, not `check`
+cd packages/api && bun run typecheck
+cd packages/ui && bun run typecheck
+cd packages/config && bun run typecheck
+
+# Run tests (per workspace — see the note below)
+cd server && bun run test
+cd client && bun run test
+bun run test:server         # Server suite from the repository root
+
+# Run tests with coverage (per workspace; the client needs @vitest/coverage-v8)
+cd server && bun run test:coverage
+cd client && bun run test:coverage
 
 # Format code
 bun run format:write
 bun run format:check
-
-# Run tests
-bun run test              # Run all tests
-bun run test:server       # Run server tests only
- bun run test:coverage     # Run tests with coverage
 ```
+
+Three of the commands above need caveats, verified against the current checkout:
+
+- **Do not run `bun test` from the repository root.** The root `test` / `test:coverage` scripts
+  are plain `bun test`, which globs every workspace and runs the client's Vitest files without
+  jsdom; it collects 781 tests and fails 24 of them, all of which pass under `cd client && bun run test`.
+- **`bun run check` skips the shared packages.** Turbo only runs scripts named `check`, which
+  exist in `client/`, `server/` and `cli/`; `@rin/api`, `@rin/ui` and `@rin/config` name theirs
+  `typecheck`, so check them with the per-package command above.
+- **`format:write` / `format:check` currently do nothing.** They resolve to `turbo format:*`, no
+  workspace defines a `format` script, and prettier is not a dependency, so turbo reports
+  "0 tasks" and exits 0. Format with your editor until a `format` script is wired up.
 
 ## Development Workflow
 
@@ -126,9 +147,18 @@ bun run test:server       # Run server tests only
 
 1. Fork the project repository
 2. Clone to local
-3. Install dependencies: `bun install`
-4. Configure `.env.local`
-5. Run `bun run dev`
+3. Install dependencies: `bun install` (Bun is the only supported package manager here —
+   the repo ships `bun.lock` and no lockfile for npm/pnpm)
+4. Create and edit the local env file: `cp .env.example .env.local`
+5. Run `bun run dev` — it regenerates `wrangler.toml`, `.dev.vars` and `client/.env` from
+   `.env.local`, applies any pending local migrations (`server/sql/*.sql`, tracked in the
+   `info` table), then starts the worker on port 11499 and Vite on 11498 with `/api` proxied
+   to the worker
+
+Use `bun run dev:client` or `bun run dev:server` to run one side alone (note that `dev:client`
+skips the migration step, and both need the ports 11498/11499 to be free). `bun run dev:setup`
+only performs the config-file generation, which is what you want after editing `.env.local`
+without booting the stack.
 
 ### Daily Development
 

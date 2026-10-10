@@ -9,7 +9,7 @@ import {Checkbox, Input} from "../components/input";
 import { DateTimeInput, FlatMetaRow, FlatPanel } from "@rin/ui";
 import { client } from "../app/runtime";
 import {Cache} from '../utils/cache';
-import mermaid from 'mermaid';
+import { renderMermaidBlocks } from '../utils/mermaid-render';
 import { RichTextEditor } from '../components/richtext-editor';
 
 async function publish({
@@ -200,23 +200,8 @@ export function WritingPage({ id }: { id?: number }) {
   }, []);
   const debouncedUpdate = useCallback(
     _.debounce(() => {
-      mermaid.initialize({
-        startOnLoad: false,
-        theme: "default",
-      });
-      mermaid.run({
-        suppressErrors: true,
-        nodes: document.querySelectorAll("pre.mermaid_default")
-      }).then(()=>{
-        mermaid.initialize({
-          startOnLoad: false,
-          theme: "dark",
-        });
-        mermaid.run({
-          suppressErrors: true,
-          nodes: document.querySelectorAll("pre.mermaid_dark")
-        });
-      })
+      // mermaid 改为按需动态加载（见 utils/mermaid-render）
+      void renderMermaidBlocks();
     }, 100),
     []
   );

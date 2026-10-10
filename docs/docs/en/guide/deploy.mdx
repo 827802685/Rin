@@ -74,10 +74,17 @@ The deployment process takes approximately 3-5 minutes. You can view the deploym
 
 ### Step 4: Access Your Blog
 
-After deployment is complete, you can access your blog through the following addresses:
+After deployment is complete, the default `deploy.yml` path produces **one Worker** that serves
+both the API and the built frontend, so a single address covers the whole site:
 
-- **Frontend**: `https://rin-client.pages.dev` (or the name you set in `PAGES_NAME`)
-- **Backend API**: `https://rin-server.your-account-id.workers.dev`
+- **Site + API**: `https://<WORKER_NAME>.your-account-subdomain.workers.dev` (default
+  `WORKER_NAME` is `rin-server`); the frontend is served from `/`, the API from `/api/*`
+- **Custom domain**: attach it to the Worker under *Workers & Pages → your Worker → Settings →
+  Domains & Routes* — see [Custom domain](#custom-domain) below
+
+Only if you ran the optional `bun cli/bin/rin.ts deploy --client` escape hatch do you also get a
+Pages project (`https://<project>.pages.dev`); it is not part of the normal deployment and there is
+no `PAGES_NAME` variable that the code reads.
 
 ### Step 5: First Login
 
@@ -96,13 +103,41 @@ After deployment is complete, you can access your blog through the following add
 
 ---
 
+## Deploying from your machine (CLI)
+
+If you would rather not go through GitHub Actions, the same deploy task can run locally:
+
+```bash
+bun install
+cp .env.example .env.local     # fill in NAME, WORKER_NAME, DB_NAME, CLOUDFLARE_* …
+bun cli/bin/rin.ts deploy      # add --server / --client / --preview to narrow it down
+```
+
+Existing D1 databases, queues and Workers are reused by name — pointing the config at a
+production Worker redeploys it rather than creating a duplicate. Migrations only apply SQL
+files whose version is above `info.migration_version`, so a redeploy of an already-migrated
+database is a no-op.
+
+Two things to know before you run it:
+
+- **Do not put `JWT_SECRET`, `ADMIN_USERNAME`, `ADMIN_PASSWORD`, `RIN_GITHUB_CLIENT_*` or
+  `S3_ACCESS_KEY_ID` / `S3_SECRET_ACCESS_KEY` in `.env.local`.** Bun automatically loads
+  `.env.local` from the current directory into `process.env`, and the deploy task reads the
+  worker secrets from `process.env`, so those keys get pushed on every run and overwrite the
+  live values (a rotated `JWT_SECRET` signs out every session). `ADMIN_USERNAME` /
+  `ADMIN_PASSWORD` are additionally protected by a "write once" check, but the others are not.
+  Keep them in a file outside the repository and source it only when you actually need them.
+- **Building the frontend can stall.** `cd client && bun run build` sometimes stays alive after
+  printing `✓ built in …`. `deploy` reuses `./dist/client` when `dist/client/index.html` already
+  exists, so wrap the build in a timeout or build it once and let deploy reuse it.
+
 ## Advanced Configuration
 
 ### Custom Domain
 
 1. Log in to the Cloudflare Dashboard
-2. Go to **Pages** > Your Project > **Custom Domains**
-3. Follow the prompts to add your domain
+2. Open **Workers & Pages** > your Worker (`WORKER_NAME`, default `rin-server`) > **Settings** > **Domains & Routes**
+3. Follow the prompts to add your domain — the same Worker serves `/api/*` and the bundled frontend
 
 ### Image Storage Configuration
 
@@ -110,17 +145,28 @@ Rin supports two storage methods: **Cloudflare R2** (recommended) or **S3-compat
 
 #### Using Cloudflare R2 (Recommended)
 
-If no S3 environment variables are configured, the deployment script will automatically attempt to use Cloudflare R2. You only need to set the following in GitHub Variables:
+Image storage is optional: leave it unconfigured and the blog works without uploads. When you do
+configure it, the deploy script fills in the S3 endpoint and bucket from R2 for you — but only if
+**both** of these are available:
+
+| Variable Name | Where | Description | Example |
+|--------------|-------|-------------|---------|
+| `R2_BUCKET_NAME` | GitHub **Variables** | R2 bucket name | `my-blog-images` |
+| `CLOUDFLARE_ACCOUNT_ID` | GitHub Secrets/Variables | Required to build the endpoint; without it the R2 fallback is skipped | `0d1c…` |
+
+With `R2_BUCKET_NAME` set, the script builds `https://<account>/r2.cloudflarestorage.com` as the
+endpoint and `https://<bucket>.<account>.r2.dev` as the access host, and adds an
+`[[r2_buckets]] binding = "R2_BUCKET"` block to `wrangler.toml`. The server prefers that binding at
+runtime (`resolveStorageTarget` in `server/src/utils/storage.ts`), so uploads work through it
+without an S3 access key. Set these only if you go the S3-compatible route instead, or want to
+override the derived endpoint/bucket values:
 
 | Variable Name | Description | Example |
 |--------------|-------------|---------|
-| `R2_BUCKET_NAME` | R2 bucket name | `my-blog-images` |
+| `S3_ACCESS_KEY_ID` / `S3_SECRET_ACCESS_KEY` | GitHub **Secrets** — an API token with the `Object Read & Write` R2 policy | `…` |
+| `S3_ACCESS_HOST` | Image access domain, if you do not want the `r2.dev` host (optional) | `https://images.myblog.com` |
 
-The deployment script will automatically construct the R2 endpoint and access host. If you want to use a custom domain for images, you can additionally set:
-
-| Variable Name | Description | Example |
-|--------------|-------------|---------|
-| `S3_ACCESS_HOST` | Image access domain (optional) | `https://images.myblog.com` |
+If `S3_ENDPOINT` and `S3_BUCKET` are already configured, they win and the R2 fallback is not used.
 
 #### Using S3-Compatible Storage
 
@@ -169,7 +215,7 @@ If you want Rin to send comment and friend-link notifications to a bot, chat ser
 
 1. Check if GitHub Secrets are configured correctly
 2. View the Actions logs for detailed error messages
-3. Ensure your Cloudflare account has permissions for Workers, Pages, and D1
+3. Ensure your Cloudflare API token has permissions for Workers, D1 and Queues (R2 buckets are only referenced by name — the deploy does not create them)
 
 ### Cannot Log In
 
@@ -211,9 +257,9 @@ Runs on pushes to main and develop branches:
 
 ### Deploy Workflow (`deploy.yml`)
 Triggered manually or by build completion:
-- Deploys frontend to Cloudflare Pages
+- Builds the frontend and deploys it as the Worker's static assets (`[assets] directory = "./dist/client"`)
 - Deploys backend to Cloudflare Workers
-- Runs database migrations
+- Creates the D1 database / task queue if missing and runs database migrations
 
 ### PR Preview
 When you create a Pull Request, a preview deployment will be automatically generated so you can test changes before merging.

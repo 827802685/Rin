@@ -1,6 +1,6 @@
 # Introduction
 
-Rin is a blog based on Cloudflare Pages + Workers + D1 + R2. It does not require a server to deploy. It can be deployed just with a domain name that resolves to Cloudflare.
+Rin is a blog based on Cloudflare Workers + D1 + R2: one Worker serves both the API and the built frontend as static assets. It does not require a server to deploy. It can be deployed just with a domain name that resolves to Cloudflare.
 
 ## Demo
 

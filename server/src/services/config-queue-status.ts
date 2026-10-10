@@ -48,12 +48,19 @@ export async function retryQueueStatusTask(
     throw new Error("Only failed AI summary tasks can be retried");
   }
 
-  await syncFeedAISummaryQueueState(db, serverConfig, env, feedId, {
+  const result = await syncFeedAISummaryQueueState(db, serverConfig, env, feedId, {
     draft: feed.draft === 1,
     updatedAt: feed.updatedAt,
     resetSummary: false,
   });
   await clearFeedCache(cache, feed.id, feed.alias, feed.alias);
+
+  // The row has already been flipped back to "failed" at this point. Reporting
+  // success here would tell the admin the retry worked while the queue never
+  // received the task, so surface the underlying reason instead.
+  if (result.status === "failed") {
+    throw new Error(result.error || "Failed to retry AI summary task");
+  }
 }
 
 export async function deleteQueueStatusTask(

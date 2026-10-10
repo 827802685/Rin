@@ -17,7 +17,7 @@ features:
     details: 30秒构建与部署
     icon: 🏃🏻
   - title: Cloudflare
-    details: 基于 Cloudflare Workers + D1 + R2 + Pages
+    details: 同一个 Worker 同时提供 API 与前端静态资源，基于 Cloudflare Workers + D1 + R2 + Queues
     icon: ☁️
   - title: 动态
     details: 写作时无需构建，实时写作和编辑
@@ -31,8 +31,8 @@ features:
   - title: 标签
     details: 自由使用标签进行文章分类
     icon: 🏷️
-  - title: 全面测试
-    details: 使用 Vitest 和 Bun 测试运行器实现完整测试覆盖
+  - title: 测试套件
+    details: 服务端用 Bun 原生测试运行器，客户端用 Vitest + jsdom
     icon: 🧪
   - title: 现代化 API 客户端
     details: 自定义 HTTP 客户端替代 Eden，提供更好的类型安全

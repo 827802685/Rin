@@ -11,12 +11,24 @@ Rin uses different testing frameworks for the client and server:
 
 ## Running Tests
 
-### All Tests
+Run each workspace's own suite — see the Client Tests and Server Tests sections below, or the
+one-liners:
 
 ```bash
-# Run both client and server tests
-bun run test
+cd server && bun run test   # Bun's runner, no build step
+cd client && bun run test   # Vitest with jsdom
+bun run test:server         # the same server suite, from the repository root
 ```
+
+### Why not `bun run test` at the root
+
+The root `test` script is `bun test`, which globs **every** workspace and runs the
+client's Vitest files under `bun:test` without jsdom. On the current checkout it
+collects 781 tests and reports 24 failures — all of them DOM / clipboard /
+localStorage cases that pass with `cd client && bun run test`. CI avoids this by
+running `bun run test` with `working-directory: ./server` and `./client` in
+separate jobs, so the root command is never exercised. The same applies to
+`bun run test:coverage`.
 
 ### Client Tests
 
@@ -141,26 +153,36 @@ Server tests use fixtures for mock data:
 
 ## Coverage
 
-Both client and server support code coverage reporting:
+Coverage is **not** ready to run out of the box:
 
-```bash
-# Client coverage
-bun run test:coverage
+- **Client**: `cd client && bun run test:coverage` (`vitest run --coverage`) exits with
+  `MISSING DEPENDENCY Cannot find dependency '@vitest/coverage-v8'`. Install that provider
+  first; with it present the report goes to `client/coverage/`.
+- **Server**: `cd server && bun run test:coverage` (`bun test --coverage`) prints a coverage
+  table to the terminal. Bun does not emit an `lcov.info` file, and Vitest's default reporter
+  list (text / html / clover / cobertura) does not either, so `.github/workflows/test.yml`'s
+  Codecov step — which uploads `./server/coverage/lcov.info` and `./client/coverage/lcov.info` —
+  points at files no current command produces.
 
-# Server coverage  
-bun run test:coverage
-```
-
-Coverage reports are generated in:
-- Client: `client/coverage/`
-- Server: `server/coverage/`
+Plain test runs (`bun run test` in either workspace) need none of the above and are the
+commands to rely on.
 
 ## CI/CD Integration
 
 Tests run automatically on:
-- Every push to `main` or `develop` branches
-- Every Pull Request
-- Before deployment (blocking)
+- Every push to the `main` or `trunk` branches
+- Every Pull Request targeting those branches
+- As separate `test-server` / `test-client` jobs (see `.github/workflows/test.yml`), each
+  followed by that workspace's type check; the client job additionally builds the frontend
+
+Two jobs in that file do not do what their names suggest, and are worth knowing before
+you trust a green/red check:
+
+- `format-check` runs the root `bun run format:check`, which expands to `turbo format:check`.
+  No workspace defines a `format` script and prettier is not a dependency, so turbo reports
+  "0 tasks" and exits 0 — the job is always green.
+- `coverage` runs the root `bun run test:coverage`, i.e. the broken glob described above, so
+  it fails on client DOM tests unless the invocation is switched to the per-workspace commands.
 
 See [GitHub Actions Workflows](./deploy.mdx#github-actions-workflows) for details.
 

@@ -13,7 +13,7 @@ English | [简体中文](./README_zh_CN.md)
 
 ## Introduction
 
-Rin is a modern, serverless blog platform built entirely on Cloudflare's developer platform: Pages for hosting, Workers for serverless functions, D1 for SQLite database, and R2 for object storage. Deploy your personal blog with just a domain name pointed to Cloudflare—no server management required.
+Rin is a modern, serverless blog platform built on Cloudflare's developer platform: a single Worker serves both the API and the built frontend as its static assets, D1 provides the SQLite database, and R2 (or any S3-compatible bucket) provides object storage. Deploy your personal blog with just a domain name pointed to Cloudflare—no server management required.
 
 ## Live Demo
 
@@ -55,36 +55,48 @@ cp .env.example .env.local
 bun run dev
 ```
 
-Visit http://localhost:5173 to start hacking!
+`bun run dev` generates `wrangler.toml`, `.dev.vars` and `client/.env` from
+`.env.local`, applies local database migrations, then runs Vite and
+`wrangler dev` side by side. The development entry is
+http://localhost:11498 (override with `--port`); `/api` requests are proxied to
+the Worker on the next port (11499 by default).
 
 ### Testing
 
-Run the test suite to ensure everything works:
+Tests are per workspace — run them from inside the workspace:
 
 ```bash
-# Run all tests (client + server)
-bun run test
+# Server tests (bun:test)
+cd server && bun run test
 
-# Run server tests only
-bun run test:server
+# Client tests (vitest)
+cd client && bun run test
 
-# Run tests with coverage
-bun run test:coverage
+# Type check + build (turbo / vite + wrangler dry-run)
+bun run check
+bun run build
 ```
+
+> `bun run test` at the repository root runs `bun test`, which also collects the
+> client's Vitest files without jsdom and fails them. Prefer the per-workspace
+> commands above (this is what CI does).
 
 ### One-Command Deployment
 
-Deploy both frontend and backend to Cloudflare with a single command:
+Deploy the whole site to Cloudflare with a single command:
 
 ```bash
-# Deploy everything (frontend + backend)
+# Frontend build + Worker with the build as its static assets
 bun run deploy
 
-# Deploy only backend
-bun run deploy:server
+# Worker only (skips the client build)
+bun cli/bin/rin.ts deploy --server
 
-# Deploy only frontend
-bun run deploy:client
+# Frontend only, as a Cloudflare Pages project (opt-in alternative to assets mode)
+bun cli/bin/rin.ts deploy --client
+
+# Preview deployment (adds observability, no cron triggers)
+bun cli/bin/rin.ts deploy --preview
 ```
 
 **Required environment variables:**
@@ -95,35 +107,45 @@ bun run deploy:client
 **Optional environment variables:**
 
 - `WORKER_NAME` - Backend worker name (default: `rin-server`)
-- `PAGES_NAME` - Frontend pages name (default: `rin-client`)
 - `DB_NAME` - D1 database name (default: `rin`)
+- `TASK_QUEUE_NAME` - Queue used for AI summary / cache tasks (default: `<WORKER_NAME>-tasks`)
 - `R2_BUCKET_NAME` - R2 bucket name. If set, deploy derives the matching `S3_*` values automatically. If unset, no bucket is auto-selected.
 
 The deployment script will automatically:
 
-- Create D1 database if it doesn't exist
+- Create the D1 database if it doesn't exist
+- Create the task queue and its Worker consumer if they don't exist
 - Derive `S3_*` storage settings from `R2_BUCKET_NAME` only when it is explicitly set
-- Deploy backend to Workers
-- Build and deploy frontend to Pages
-- Run database migrations
+- Build the client and deploy the Worker with `./dist/client` bound as `[assets]`
+  (`binding = "ASSETS"`), so one Worker serves both pages and API
+- Generate `wrangler.toml` (including the `TASK_QUEUE` producer/consumer and the
+  Workers AI `AI` binding) and run the pending `server/sql` migrations, tracking the
+  applied version in the `info` table
+- Push secret environment variables to the Worker
 
 ### GitHub Actions Workflows
 
 The repository includes several automated workflows:
 
 - **`ci.yml`** - Runs type checking and formatting validation on every push/PR
-- **`test.yml`** - Runs comprehensive tests (server + client) with coverage reporting
-- **`build.yml`** - Builds the project and triggers deployment
-- **`deploy.yml`** - Deploys to Cloudflare Pages and Workers
+- **`test.yml`** - Runs server (`bun:test`) and client (`vitest`) suites in separate
+  jobs, plus type check, build, format check and coverage upload
+- **`build.yml`** - Builds the project (client + `wrangler deploy --dry-run`) and, on
+  completion, triggers `deploy.yml`
+- **`deploy.yml`** - Runs `bun run deploy`: one Worker with the bundled frontend as
+  static assets
+- **`docs.yml`** - Builds the Rspress docs under `docs/` and publishes them to
+  GitHub Pages (the only Pages deployment here)
+- **`release.yml`**, **`clean.yml`** - Releases and teardown of Cloudflare resources
 
 **Required secrets (Repository Settings → Secrets and variables → Actions):**
 
-- `CLOUDFLARE_API_TOKEN` - Your Cloudflare API token with Workers and Pages permissions
+- `CLOUDFLARE_API_TOKEN` - Your Cloudflare API token with Workers, D1 and Queue permissions
 - `CLOUDFLARE_ACCOUNT_ID` - Your Cloudflare account ID
 
 **Optional configuration (Repository Settings → Secrets and variables → Variables):**
 
-- `WORKER_NAME`, `PAGES_NAME`, `DB_NAME` - Resource names
+- `WORKER_NAME`, `DB_NAME`, `TASK_QUEUE_NAME` - Resource names
 - `NAME`, `DESCRIPTION`, `AVATAR` - Site configuration
 - `R2_BUCKET_NAME` - Specific R2 bucket to use
 

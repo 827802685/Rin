@@ -1,6 +1,168 @@
 # 自动化执行记录：Rin 博客本体每日迭代（client/ + server/ + packages/api）
 
 > 2026-10-04 起迭代目标已从 daily-blog 子项目切回 Rin 本体（daily-blog 已从主干移除）。
+> 2026-10-07 起改为在 `auto` 分支上迭代，每 5 次成功迭代合并回 `main`（10-11 已完成第 1 轮合并，新一轮 M=1/5）。
+
+## 2026-10-11 02:09 第 7 次执行（auto 分支第 5 次迭代，**已触发合并**）
+
+- 进场：分支 `auto`，比 `main` 领先 10 个提交；工作区只有 memory 文件改动 + 上一轮
+  遗留未提交的 `2026-10-10.md`。先跑门禁确认自洽，再收编文档提交。
+- 结果：2 个提交落在 `auto`：`da999b7`（favicon 原图修复）、`docs` 提交（日志 + 基线）。
+  **M=5/5 触发合并**：`auto` → `main`（合并提交，保留历史）。
+- **本轮挖到的真 bug**：先传 png 再传 jpg，`/favicon/original` 永远返回那张旧 png。
+  两条根因：① `POST /favicon` 只写 `originFavicon<新扩展名>`，旧对象不消失；
+  ② `GET /favicon/original` 按 `FAVICON_ALLOWED_TYPES` 固定顺序（jpg→png→gif→webp）
+  命中第一个就返回，排前面的旧对象永久遮挡新对象。
+- 修复：GET 侧先对所有候选 HEAD、取 `Last-Modified` 最新那份（sort 稳定；顺带让存量
+  残留自动失效，无需数据迁移）；POST 侧在新原图与 `favicon.webp` 都写成功后清理其它
+  扩展名（放在写之后，清理失败不会把图标清成 404，失败只记日志）；新增
+  `deleteStorageObjectAtKey`（R2 delete + S3 DeleteObject），`s3.ts` 的 `deleteObject`
+  零调用点就此有了用途。
+- 门禁（bun 1.4.2）：server tsc **0 条**／server test **571 pass / 0 fail**（565 → 571）／
+  packages/api 19 pass／client tsc 0 错／client vitest **162 pass**／22 files。
+- 构建：**server PASS + client PASS**。
+- 变异 4/4 killed（首个命中返回 → 1 红／排序反向 → 1 红／不清理旧图 → 1 红／
+  R2 delete 变空操作 → 2 红），恢复后 46 pass。
+- 经验（供后续复用）：
+  ① **client 构建的第二种 safe-delete 触发点**：日志已 `✓ built in 6m 18s` 仍 exit 1
+     —— `closeBundle` 删 vite 临时配置时 `genie-trash` 超时。**别只看退出码**，
+     把日志落文件 grep `built in`，并核对 outDir 下 `index.html` + `assets`(218)。
+  ② **变异脚本循环跑时，每次变异前必须先 restore** —— 本轮首跑 mutation 2 因为
+     上一条变异没还原，anchor count=0 直接断言失败，测出来的「1 红」其实是上一条
+     变异的残留，白记一次。循环里要 `mutate → test → restore` 三步成套。
+  ③ R2 替身要同时实现 `head`/`get`/`put`/`delete`，并把 put/delete 的 key 记进数组，
+     断言「清理了哪些、没清理哪个」比断言状态码有力得多。
+- 下一目标：① `utils/s3.ts` 剩余零覆盖（`buildS3ObjectUrl` 仍无调用点，考虑处置）
+  ② UV 并发写 HLL 丢失更新（已知未修）③ 客户端页面级组件测试（分页 / 评论列表 / 设置页表单）。
+
+---
+
+## 2026-10-10 02:01 第 6 次执行（auto 分支第 4 次迭代）
+
+- 进场：分支 `auto`，`main` 落后 8 个提交；工作区有 10-09 晚间遗留的 3 个文档改动
+  （AGENTS.md + docs 中英 deploy.mdx）。先跑门禁确认自洽再收编为 `3631eda`。
+- 结果：2 个提交落在 `auto`：`3631eda`（docs）、`405ff25`（favicon 修复）。
+  workspace 干净。**未触发合并（M=4/5）**。
+- **挖到的真 bug**：`POST /favicon` 两次 `putStorageObjectAtKey` 都不传 contentType，
+  与另三条写入路径不对称（/storage 传 file.type、cache 传 application/json、
+  buildFaviconFromSource 传 image/webp）。BlobService 回放时强制带
+  `X-Content-Type-Options: nosniff`，缺 MIME 的对象浏览器不会当图片渲染 →
+  管理员上传的站点图标在 `/api/blob/<key>` 下打不开。
+- 修复：原图传 `file.type`、转换结果传 `image/webp`；顺带把原图 body 从 `File` 改成
+  `new Uint8Array(await file.arrayBuffer())`（File/Blob 直接当 S3 body 走流式校验和，
+  Node 下抛 `Unable to calculate hash for flowing readable stream`，请求根本发不出去）；
+  `body.file instanceof File` 替代 `as File`。
+- 门禁（bun 1.4.2）：server tsc **0 条**／server test **565 pass / 0 fail**（563 → 565）／
+  packages/api 19 pass／client tsc 0 错／client vitest **162 pass**／22 files。
+- 构建：**client PASS + server PASS**。server 侧此前一直记为「恒失败的既有环境问题」，
+  本轮 `cd server && bun run build` **exit 0** —— 因为仓库根现在有生成的
+  `wrangler.toml`。**旧结论作废，今后 server 构建失败就是真回归。**
+- 变异 2/2 killed（去掉 file.type → 1 红／去掉 image/webp → 1 红），还原后 14 pass。
+- 经验（供后续复用）：
+  ① **变异脚本别硬编码 `\n`**：本轮首跑因硬编码 LF 锚点得到 `anchor count=0` 白跑一轮，
+     要先 `"\r\n" in text` 探测行尾再拼锚点（`io.open(..., newline='')` 仍是必须的）。
+  ② 断言「写进对象存储带了什么头」：替换 `globalThis.fetch`，按 `method === 'PUT'`
+     收集 `{url, contentType}`。smithy 传的是 `Request` 对象，头在 `input.headers`
+     而不是 `init.headers` —— 两边都要兜。
+  ③ **别把 File/Blob 直接当 S3 PutObject 的 body**，一律先转 Uint8Array。
+  ④ server 构建从本轮起可过，别再套用「既有环境问题」的旧判定。
+- 下一目标：① `utils/s3.ts`(134) 零覆盖补测 + `buildS3ObjectUrl`/`deleteObject`
+  零调用点处置 ② `/favicon/original` 换格式后旧扩展名残留会一直返回旧图
+  （遍历顺序固定 jpeg→png→gif→webp）③ UV 并发写 HLL 丢失更新。
+
+---
+
+## 2026-10-09 02:01 第 5 次执行（auto 分支第 3 次迭代）
+
+- 进场时工作区有 10-08 晚间遗留的**未提交**改动（22 改 + 8 新文件）。先跑门禁确认
+  自洽（server 537 / client 162 全绿），再按模块收编，最后追加本轮自己的修复。
+- 结果：4 个提交落在 `auto`：`b97959e`（server 死代码 + 错误响应）、`bcf9ae0`
+  （client mermaid 懒加载 + live2d 拆分）、`08e7e8c`（文档失真修正）、
+  `df3a6b0`（storage 直连分支 URL 未编码）。workspace 干净。**未触发合并（M=3/5）**，
+  `main` 落后 `auto` 7 个提交。
+- **重大收获：server tsc 18 条 → 0 条**。长期被记为「pnpm 残留 hono 环境噪声」的那
+  18 条 TS2345/TS2741，真根因是 `errors/index.ts` 把 `ErrorResponse`/`ErrorDetail`
+  写成 interface，而 Hono `c.json()` 要求参数落到 `JSONValue`（TS 只给 type 别名
+  隐式索引签名）。今后 server tsc 任何错误都是真回归。
+- **本轮挖到的新 bug**：`getStoragePublicUrl` 的 `S3_ACCESS_HOST` 直连分支原样拼 key，
+  只有 `/api/blob` 代理分支走了 `encodeStorageKey` → key 含空格/`#`/`?`/非 ASCII 时
+  直连域名下 URL 是坏的（`#1.png` 被当 fragment 丢掉）。改为两分支共用编码。
+- 门禁（bun 1.4.2 实测）：server tsc **0 条**／server test **563 pass / 0 fail**
+  （537 → 563）／client tsc 0 错／client vitest **162 pass / 22 files**（+37）／
+  packages/api 19 pass／client vite build **PASS**（exit 0）。基线已回写 MEMORY.md。
+- 变异 1/1 killed（直连分支改回原样拼接 → 7 红），恢复后 26 pass。
+- 经验（供后续复用）：
+  ① **client 构建被 safe-delete 拦有两种触发点**：清 `dist/client/assets` 是一种；
+     即便指定了 `--outDir`，只要该目录**已存在**且 assets > 50 文件同样拦
+     （`prepareOutDir`→`emptyDir`）。可靠绕法：outDir 带 `$(date +%s)` 每次全新。
+  ② 进场遇到脏工作区**先跑门禁再决定**，别想当然 stash。
+  ③ 收编大块遗留改动按 server/client/docs 分批提交，零风险、可追溯性好。
+- 下一目标：① `server/src/utils/s3.ts`(134 行) 零覆盖，补签名/URL 拼装用例
+  ② 客户端页面级组件测试（分页 / 评论列表 / 设置页表单）
+  ③ UV 并发写 HLL 丢失更新（已知未修）。
+
+---
+
+## 2026-10-08 02:01 第 4 次执行（auto 分支第 2 次迭代）
+
+- 目标：待办 ③「零覆盖模块」→ `config-queue-status.ts`(147) + `config-compat-tasks.ts`(160)。
+- 结果：1 个提交落在 `auto`：`da27175`。workspace 干净。未触发合并（M=2/5）。
+- **挖到的真 bug**：`syncFeedAISummaryQueueState` 入队失败只写库、不返回结果 →
+  ① `retryQueueStatusTask` 无条件返回，路由恒回 `{success:true}`，TASK_QUEUE 缺失或
+  send 抛错时任务被标回 failed、界面却弹「重试成功」；② compat 回填把被拒的文章也计入
+  `queued`，看着像回填成功。
+- 修复：该函数改返回 `{status, queued, error}`（三处调用方行为不变）；retry 在 failed 时
+  抛队列错误 → 路由 400 带真因；回填按 `queued/failed/skipped` 分别计数，
+  客户端类型补 `failed?: number`。
+- 新增 `server/src/services/__tests__/config-queue-status.test.ts`（14 条，走
+  `setupTestApp(ConfigService)` + 真 sqlite）。
+- 门禁（bun 1.4.2）：server tsc 18 条（持平）／server test **529 pass / 0 fail**
+  （515 → 529）／client tsc 0 错／client vitest 125 pass／packages/api 19 pass。
+- 变异 3/3 killed（关 retry 的 throw → 2 红／回填无条件 queued → 1 红／
+  sync 谎报 queued:true → 3 红），恢复后 14 pass。
+- 构建：client 通过；server wrangler 失败**已在父提交 e11331d 的 worktree 复现**
+  → 既有环境问题。
+- 经验（供后续复用）：
+  ① **client `bun run build` 会被 safe-delete shim 拦**（清 dist/client/assets 218 个文件
+     超 50 阈值），不是编译错误；绕法 `bun x vite build --outDir dist/verify-build`。
+  ② 判定「既有失败 vs 回归」继续用 `git worktree add --detach /tmp/rin-base <父提交>`
+     跑同一命令（本轮 server 构建就是这样定性的），用完 `worktree remove --force`。
+  ③ `setupTestApp(ConfigService, { TASK_QUEUE: undefined })` 可以造出「队列未配置」的
+     env；AI 开关直接用 `await serverConfig.set("ai_summary.enabled","true")`，
+     比走一遍 `POST /server` 快得多。
+- 下一目标：① `core/error-handler.ts`(183) / `errors/index.ts`(275) 死代码处置
+  ② `utils/storage.ts`(179) / `utils/s3.ts`(134) 补测（`getStoragePublicUrl` 在
+  S3_ACCESS_HOST 分支不编码 key，与 blob 分支不对称）③ 客户端页面级组件测试。
+
+---
+
+## 2026-10-07 02:01 第 3 次执行（auto 分支第 1 次迭代）
+
+- 目标：待办 2「零覆盖高风险模块」→ `server/src/services/config-health.ts`（404 行）。
+- 结果：1 个提交落在 `auto`：`e11331d`。workspace 干净。未触发合并（M=1/5）。
+- **挖到的真 bug**：健康检查只读旧键 `WEBHOOK_URL` + `env.WEBHOOK_URL`，漏读当前主键
+  `webhook_url`；而设置页写的正是 `webhook_url`，`resolveWebhookConfig` 也以它为最高优先级
+  → 管理员配好 webhook 后 `/config/health` 仍报 warning「未配置」，假告警。
+- 修复：按 `webhook_url` → `WEBHOOK_URL` → `env.WEBHOOK_URL` 取，空白串视为未配置；
+  `normalizeOptionalString` 从 config-helpers 导出复用；删死变量 `hasAccessHost`。
+- 新增 `server/src/services/__tests__/config-health.test.ts`（35 条，覆盖 7 个检查项全部分支）。
+- 门禁（bun 1.4.2 实测）：server tsc 18 条（基线持平）／server test **515 pass / 0 fail**
+  （480 → 515）／client tsc 0 错／client vitest 125 pass／packages/api 19 pass。
+- 变异测试 6/6 killed（webhook 主键 / env 兜底 / 存储全缺判定 / 默认口令 / 站点名 trim /
+  汇总计数），恢复后 35 pass。
+- 构建：client 通过；server `wrangler deploy --dry-run` 失败，已在父提交 worktree 复现
+  → **既有环境问题**（server/ 无 wrangler 配置），非回归。
+- 经验（供后续复用）：
+  ① **先 commit 再变异**——本轮沿用，未踩还原坑。
+  ② 断言「配置项归属」要看清是 clientConfig 还是 serverConfig：本轮
+     `friend_crontab` 误放在 client 侧导致用例假红（它属于 serverConfig）。
+  ③ 判断「既有失败 vs 回归」最省事的办法：`git worktree add --detach /tmp/base <父提交>`
+     在父提交上跑同一命令，同错即为既有问题（wrangler 这轮就是这样定性的）。
+  ④ `bunx` 不在 PATH，脚本里要用 `bun x`。
+- 下一目标：① `core/error-handler.ts`(183 行) 死代码处置 ② 客户端页面级组件测试
+  （分页 / 评论列表 / 设置页表单）③ 继续补 config-queue-status 等零覆盖模块。
+
+---
 
 ## 2026-10-06 02:01 第 2 次执行
 

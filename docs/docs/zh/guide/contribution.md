@@ -16,16 +16,22 @@ Windows 下请直接将 `commit-msg.sh` 文件复制到 `.git/hooks/commit-msg`�
 cp .\scripts\commit-msg.sh .\.git\hooks\commit-msg
 ```
 
-这将在每次提交之前运行以下检查：
+安装后会在每次提交前执行两项检查：
 
-1. **类型检查** - `bun run check` 验证所有包的 TypeScript 类型
-2. **代码格式化** - 检查代码格式和风格
-3. **提交消息格式** - 验证提交消息是否以以下之一开头：`feat|chore|fix|docs|ci|style|test|pref`
+1. **类型检查** - 钩子执行 `bun check`，也就是 `turbo check`，覆盖 `client/`、`server/`、`cli/`。
+   共享包（`@rin/api`、`@rin/ui`、`@rin/config`）的脚本名是 `typecheck`，钩子**不会**检查它们，
+   改动这些包时请自行执行 `cd packages/<name> && bun run typecheck`。
+2. **提交消息格式** - 验证提交消息以下列前缀之一加 `: ` 开头：
+   `feat|chore|fix|docs|ci|style|test|pref`
+
+钩子里没有 lint 或格式化步骤，也不会运行测试，这些需要自己手动检查——按工作区执行，不要在根目录跑：
 
 :::warning 重要提示
-钩子还会运行测试。提交前请确保所有测试通过：
+根目录的 `bun run test` 就是 `bun test`，会扫描所有工作区，并在没有 jsdom 的情况下执行客户端的
+Vitest 文件（当前代码库实测收集 781 条、失败 24 条）。请改用：
 ```sh
-bun run test
+cd server && bun run test
+cd client && bun run test
 ```
 :::
 
@@ -88,13 +94,17 @@ bun run db:migrate
 在提交 Pull Request 之前，请确保所有测试通过：
 
 ```sh
-# 运行所有测试
-bun run test
+# 运行测试（按工作区；根目录的 bun test 是错误的 glob，见上文）
+cd server && bun run test
+cd client && bun run test
 
-# 运行类型检查
+# 运行类型检查（client/、server/、cli/）
 bun run check
 
-# 运行格式化检查
+# 共享包需要单独检查
+cd packages/api && bun run typecheck
+
+# 运行格式化检查（目前为空转：没有工作区定义 format 脚本）
 bun run format:check
 ```
 

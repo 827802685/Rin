@@ -32,21 +32,25 @@ export type ErrorCode =
   // 503 Service Unavailable
   | 'SERVICE_UNAVAILABLE';
 
-export interface ErrorDetail {
+export type ErrorDetail = {
   field?: string;
   message: string;
   code?: string;
-}
+};
 
-export interface ErrorResponse {
+// 说明：这里刻意用 type 而不是 interface——Hono 的 c.json() 要求参数能落到
+// JSONValue 上，而 TS 只给类型别名（不给 interface）隐式索引签名。
+export type ErrorResponse = {
   success: false;
   error: {
     code: ErrorCode;
     message: string;
     details?: ErrorDetail[];
     requestId?: string;
+    /** HTTP 状态码，让响应体自带状态，前端不必只依赖传输层的 status */
+    status?: number;
   };
-}
+};
 
 // ============================================================================
 // Base Application Error
@@ -85,6 +89,7 @@ export class AppError extends Error {
         message: this.message,
         details: this.details,
         requestId: requestId || this.requestId,
+        status: this.statusCode,
       },
     };
   }
@@ -216,13 +221,6 @@ export function isAppError(error: unknown): error is AppError {
   return error instanceof AppError;
 }
 
-export function isOperationalError(error: unknown): boolean {
-  if (isAppError(error)) {
-    return error.isOperational;
-  }
-  return false;
-}
-
 export function createErrorResponse(
   error: unknown,
   requestId?: string
@@ -231,45 +229,17 @@ export function createErrorResponse(
     return error.toJSON(requestId);
   }
 
-  // Handle standard Error instances
-  if (error instanceof Error) {
-    return {
-      success: false,
-      error: {
-        code: 'INTERNAL_ERROR',
-        message: error.message || 'An unexpected error occurred',
-        requestId,
-      },
-    };
-  }
-
-  // Handle unknown errors
+  // 非业务错误一律对外降级为 500 / INTERNAL_ERROR，
+  // 原始 message 只在能取到的时候透出，细节留给服务端日志。
   return {
     success: false,
     error: {
       code: 'INTERNAL_ERROR',
-      message: 'An unexpected error occurred',
+      message:
+        (error instanceof Error && error.message) ||
+        'An unexpected error occurred',
       requestId,
+      status: 500,
     },
-  };
-}
-
-// ============================================================================
-// Async Handler Wrapper
-// ============================================================================
-
-export type AsyncHandler<T = Response> = (
-  ...args: any[]
-) => Promise<T>;
-
-export function catchAsync<T>(
-  fn: AsyncHandler<T>
-): AsyncHandler<T | Response> {
-  return async (...args: any[]) => {
-    try {
-      return await fn(...args);
-    } catch (error) {
-      throw error;
-    }
   };
 }
