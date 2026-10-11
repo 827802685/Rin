@@ -10,13 +10,13 @@ import {
 } from "@rin/api";
 import type { Variables } from "../core/hono-types";
 import { profileAsync } from "../core/server-timing";
-import { feeds, visits, visitStats } from "../db/schema";
-import { HyperLogLog } from "../utils/hyperloglog";
+import { feeds, visits } from "../db/schema";
 import { extractImageWithMetadata } from "../utils/image";
 import { containsLikePattern } from "../utils/like";
 import { stripMarkdown } from "../utils/markdown";
 import { parsePagination, toPage } from "../utils/pagination";
 import { decodePathParam } from "../utils/path";
+import { recordVisit } from "../utils/visit-stats";
 import { syncFeedAISummaryQueueState } from "./feed-ai-summary";
 import { bindTagToPost } from "./tag";
 import { clearFeedCache } from "./clear-feed-cache";
@@ -255,42 +255,9 @@ export function FeedService(): Hono<{
             const ip = c.req.header('cf-connecting-ip') || c.req.header('x-real-ip') || "UNK";
             const visitorKey = `${ip}`;
 
-            // Get or create visit stats for this feed
-            let stats = await profileAsync(c, 'feed_detail_stats_lookup', () => db.query.visitStats.findFirst({
-                where: eq(visitStats.feedId, feed.id)
-            }));
-
-            if (!stats) {
-                // Create new stats record
-                // 创建首条统计：必须把当前访客一并写进 HLL，
-                // 否则这个访客永远不计入 UV，之后每次估算都少 1
-                const hll = new HyperLogLog();
-                hll.add(visitorKey);
-                await profileAsync(c, 'feed_detail_stats_insert', () => db.insert(visitStats).values({
-                    feedId: feed.id,
-                    pv: 1,
-                    hllData: hll.serialize()
-                }));
-                pv = 1;
-                uv = Math.round(hll.count());
-            } else {
-                // Update existing stats
-                const hll = new HyperLogLog(stats.hllData);
-                hll.add(visitorKey);
-                const newHllData = hll.serialize();
-                const newPv = stats.pv + 1;
-
-                await profileAsync(c, 'feed_detail_stats_update', () => db.update(visitStats)
-                    .set({
-                        pv: newPv,
-                        hllData: newHllData,
-                        updatedAt: new Date()
-                    })
-                    .where(eq(visitStats.feedId, feed.id)));
-
-                pv = newPv;
-                uv = Math.round(hll.count());
-            }
+            const counter = await profileAsync(c, 'feed_detail_stats_record', () => recordVisit(db, feed.id, visitorKey));
+            pv = counter.pv;
+            uv = counter.uv;
 
             // Keep recording to visits table for backup/history
             await profileAsync(c, 'feed_detail_visit_insert', () => db.insert(visits).values({ feedId: feed.id, ip: ip }));
