@@ -73,6 +73,30 @@ describe('recordVisit - 并发写入不丢访客', () => {
         expect(again.uv).toBe(1);
     });
 
+    it('竞争写入只改 PV 时（回访场景），PV 不再被旧值覆盖', async () => {
+        await recordVisit(db, 1, '203.0.113.1');
+
+        let injected = false;
+        db.query.visitStats.findFirst = async (...args: any[]) => {
+            const row = await originalFindFirst(...args);
+            if (!injected && row) {
+                injected = true;
+                // 竞争请求是回访：hll_data 一字不变，只有 pv 加了 1。
+                // 这种情况下 CAS 条件照样成立，PV 只能靠 SQL 层自增才不丢。
+                sqlite.exec('UPDATE visit_stats SET pv = pv + 1 WHERE feed_id = 1');
+                return { ...row };
+            }
+            return row;
+        };
+
+        // 本次同样是回访，hll_data 也不变
+        const result = await recordVisit(db, 1, '203.0.113.1');
+
+        // 旧实现按读到的旧 pv 计算，会把竞争那一次覆盖掉，只剩 2
+        expect(result.pv).toBe(3);
+        expect(persistedPv()).toBe(3);
+    });
+
     it('读取被抢占后重试，两个不同访客都不丢', async () => {
         await recordVisit(db, 1, '203.0.113.1');
 
