@@ -3,6 +3,40 @@
 > 2026-10-04 起迭代目标已从 daily-blog 子项目切回 Rin 本体（daily-blog 已从主干移除）。
 > 2026-10-07 起改为在 `auto` 分支上迭代，每 5 次成功迭代合并回 `main`（10-11 已完成第 1 轮合并，新一轮 M=1/5）。
 
+## 2026-10-12 02:01 第 8 次执行（auto 分支，第 2 轮第 1 次迭代）
+
+- 进场：`auto` = `main` + 1 个 docs 提交，工作区干净，先跑门禁确认自洽。
+- 结果：2 个提交落在 `auto`：`5477553`（并发 UV/PV 丢失更新修复）、`1cd07ff`（补 PV 原子性用例）。
+  workspace 干净。**未触发合并（新一轮 M=1/5）**。
+- **本轮挖到的真 bug**：`GET /feed/:id` 的访客计数是 read-modify-write。HLL 寄存器整份
+  序列化在 `visit_stats.hll_data` 一列，两个并发请求读到同一份旧 blob 后无条件写回，
+  后写的整份覆盖先写的 —— 先到的访客从 UV 里彻底消失；PV 同样按读到的旧值 `+1`，并发少加。
+- 修复：抽到新文件 `server/src/utils/visit-stats.ts` 的 `recordVisit()`：
+  ① PV 走 SQL 层 `sql\`${visitStats.pv} + 1\``；② HLL 写回带 CAS 条件
+  `hll_data = <旧值>`，`.returning({pv})` **返回空数组即判定失败**，失败重读重加重写
+  （上限 5 次，最后一次退化成不带 CAS 的覆盖写）；③ 建行撞唯一约束不再 500，回循环走更新分支。
+- 新增 `server/src/utils/__tests__/visit-stats.test.ts`（6 条）。
+- 门禁（bun 1.4.2）：server tsc **0 条**／server test **577 pass / 0 fail**（571 → 577）／
+  packages/api 19 pass／client tsc 0 错／client vitest **162 pass / 22 files**。
+- 构建：**server PASS + client PASS**（日志 `✓ built in`，outDir 下 index.html + assets 218）。
+- 变异 4/4 killed（去 CAS → 1 红／PV 改回 stats.pv+1 → 1 红／建行照旧抛出 → 1 红／
+  CAS 失败不重试 → 1 红），还原后 6 pass。
+- 经验（供后续复用）：
+  ① **并发竞态在单线程里撞不出来，要主动把窗口打开**：patch
+     `db.query.visitStats.findFirst`，在返回旧 row 之前用 `sqlite.exec` 注入一次竞争写入，
+     再把旧值交回被测代码 —— 确定性复现 read-modify-write 丢失更新，比 `Promise.all` 靠谱。
+  ② **并发用例必须同时覆盖「CAS 命中」和「CAS 失败」两条路径**。本轮首版只有
+     hll_data 变化的场景，CAS 失败重读会顺带回新 pv，导致「PV 改回 stats.pv+1」变异
+     SURVIVED；补一条「竞争请求是回访（只改 pv、hll_data 一字不变，CAS 照样命中）」才杀掉。
+  ③ 判断 drizzle UPDATE 是否命中：`where(...).returning({...})` 返回空数组即可，
+     不用去碰各驱动的 `changes`/`meta.changes` 差异（bun-sqlite 与 D1 形状不一样）。
+  ④ 交叉验证：`.returning()` 与 `sql\`${col} + 1\`` 都是仓库里已有的写法
+     （`feed.ts` insert、`rate-limit.ts` 计数），不引入新依赖。
+- 下一目标：① `server/src/utils/s3.ts` 的 `buildS3ObjectUrl` 仍是零调用点死代码，按约定删除
+  ② 客户端页面级组件测试（分页 / 评论列表 / 设置页表单）③ `storage.ts` / `s3.ts` 剩余零覆盖。
+
+---
+
 ## 2026-10-11 02:09 第 7 次执行（auto 分支第 5 次迭代，**已触发合并**）
 
 - 进场：分支 `auto`，比 `main` 领先 10 个提交；工作区只有 memory 文件改动 + 上一轮
