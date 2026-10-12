@@ -8,7 +8,7 @@ import {
     feedUpdateSchema,
     parseSchema,
 } from "@rin/api";
-import type { Variables } from "../core/hono-types";
+import type { CacheImpl, Variables } from "../core/hono-types";
 import { profileAsync } from "../core/server-timing";
 import { feeds, visits } from "../db/schema";
 import { extractImageWithMetadata } from "../utils/image";
@@ -21,6 +21,26 @@ import { syncFeedAISummaryQueueState } from "./feed-ai-summary";
 import { bindTagToPost } from "./tag";
 import { clearFeedCache } from "./clear-feed-cache";
 export { clearFeedCache } from "./clear-feed-cache";
+import { GitHubClient, getGitHubSettings } from "./github";
+
+/**
+ * 加载文章时，把站内媒体链接重写为 GitHub CDN 地址。
+ * 配置来源：设置页 serverConfig 优先，环境变量兜底；未配置则原样返回。
+ */
+async function applyGithubCdn(content: string, serverConfig: CacheImpl | undefined, env: Env): Promise<string> {
+  if (!serverConfig) {
+    return content;
+  }
+
+  const settings = await getGitHubSettings(serverConfig, env);
+  if (!settings) {
+    return content;
+  }
+
+  const client = new GitHubClient(settings);
+  const publicBase = (env.S3_ACCESS_HOST || env.S3_ENDPOINT || "").replace(/\/+$/, "");
+  return client.rewriteMediaToCdn(content, publicBase ? [publicBase] : []);
+}
 
 // Lazy-loaded modules for WordPress import
 let XMLParser: any;
@@ -246,6 +266,10 @@ export function FeedService(): Hono<{
         const { hashtags, ...other } = feed;
         const hashtags_flatten = hashtags.map((f: any) => f.hashtag);
 
+        // 加载文章时自动套用 GitHub CDN（未配置则原样返回）
+        const env = c.get('env');
+        const contentWithCdn = await applyGithubCdn(other.content, c.get('serverConfig'), env);
+
         // update visits using HyperLogLog for efficient UV estimation
         const enableVisit = await profileAsync(c, 'feed_detail_counter_flag', () => clientConfig.getOrDefault('counter.enabled', true));
         let pv = 0;
@@ -263,7 +287,7 @@ export function FeedService(): Hono<{
             await profileAsync(c, 'feed_detail_visit_insert', () => db.insert(visits).values({ feedId: feed.id, ip: ip }));
         }
 
-        return c.json({ ...other, hashtags: hashtags_flatten, pv, uv });
+        return c.json({ ...other, content: contentWithCdn, hashtags: hashtags_flatten, pv, uv });
     });
 
     // GET /feed/adjacent/:id

@@ -22,6 +22,7 @@ const WORKER_SECRET_KEYS = [
   "RIN_GITHUB_CLIENT_SECRET",
   "S3_ACCESS_KEY_ID",
   "S3_SECRET_ACCESS_KEY",
+  "GITHUB_PAT",
 ] as const;
 
 function isQueueAlreadyPresentError(stderr: string) {
@@ -180,6 +181,7 @@ export async function runCloudflareDeploy(target: "all" | "server" | "client" = 
   const dbName = renv("DB_NAME", "rin");
   const workerName = renv("WORKER_NAME", "rin-server");
   const taskQueueName = env("TASK_QUEUE_NAME", env("AI_SUMMARY_QUEUE_NAME", `${workerName}-tasks`)) ?? `${workerName}-tasks`;
+  const kvCacheIdConfigured = env("KV_CACHE_ID", "");
   const r2BucketName = env("R2_BUCKET_NAME", "");
   const s3Endpoint = env("S3_ENDPOINT", "");
   const s3AccessHost = env("S3_ACCESS_HOST", "");
@@ -197,6 +199,12 @@ export async function runCloudflareDeploy(target: "all" | "server" | "client" = 
   const avatar = env("AVATAR", "");
   const pageSize = env("PAGE_SIZE", "5");
   const rssEnable = env("RSS_ENABLE", "false");
+  
+  // GitHub integration
+  const githubOwner = env("GITHUB_REPO_OWNER", "");
+  const githubRepo = env("GITHUB_REPO_NAME", "");
+  const githubBranch = env("GITHUB_REPO_BRANCH", "main");
+  const githubCdnBaseUrl = env("GITHUB_CDN_BASE_URL", "");
 
   let finalS3Endpoint = s3Endpoint;
   let finalS3Bucket = s3Bucket;
@@ -249,6 +257,10 @@ export async function runCloudflareDeploy(target: "all" | "server" | "client" = 
       AVATAR = "${avatar}"
       PAGE_SIZE = "${pageSize}"
       RSS_ENABLE = "${rssEnable}"
+      GITHUB_REPO_OWNER = "${githubOwner}"
+      GITHUB_REPO_NAME = "${githubRepo}"
+      GITHUB_REPO_BRANCH = "${githubBranch}"
+      GITHUB_CDN_BASE_URL = "${githubCdnBaseUrl}"
 
       [placement]
       mode = "smart"
@@ -287,6 +299,42 @@ export async function runCloudflareDeploy(target: "all" | "server" | "client" = 
     [ai]
     binding = "AI"
   `)} >> wrangler.toml`.quiet();
+
+  // KV namespace：优先用配置好的 id，否则按标题查找/创建（与 D1 的创建流程一致）
+  let kvCacheId = kvCacheIdConfigured;
+  if (!kvCacheId) {
+    const kvTitle = `${workerName}-kv`;
+    const kvList = await $`${bunExec} x wrangler kv namespace list --json`.quiet().nothrow();
+    if (kvList.exitCode === 0) {
+      try {
+        const namespaces = JSON.parse(kvList.stdout.toString()) as Array<{ id: string; title: string }>;
+        kvCacheId = namespaces.find((item) => item.title === kvTitle)?.id ?? "";
+      } catch {
+        kvCacheId = "";
+      }
+    }
+    if (!kvCacheId) {
+      const kvCreate = await $`${bunExec} x wrangler kv namespace create ${kvTitle} --json`.quiet().nothrow();
+      if (kvCreate.exitCode === 0) {
+        try {
+          kvCacheId = (JSON.parse(kvCreate.stdout.toString()) as { id: string }).id;
+        } catch {
+          kvCacheId = "";
+        }
+      } else {
+        console.warn("⚠️  KV namespace create failed; continuing without KV cache");
+        console.warn(stripIndent(kvCreate.stderr.toString()));
+      }
+    }
+  }
+
+  if (kvCacheId) {
+    await $`echo ${stripIndent(`
+      [[kv_namespaces]]
+      binding = "KV_CACHE"
+      id = "${kvCacheId}"
+    `)} >> wrangler.toml`.quiet();
+  }
 
   await $`echo ${buildWranglerQueueConfig(taskQueueName, preview)} >> wrangler.toml`.quiet();
 

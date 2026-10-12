@@ -27,14 +27,16 @@ export type ScheduledTaskModules = {
     friendCrontab: (typeof import("../services/friends"))["friendCrontab"];
     rssCrontab: (typeof import("../services/rss"))["rssCrontab"];
     cleanupRateLimits: (typeof import("../utils/rate-limit"))["cleanupRateLimits"];
+    githubSyncCrontab?: (typeof import("../services/github-sync"))["githubSyncCrontab"];
 };
 
 async function loadScheduledTaskModules(): Promise<ScheduledTaskModules> {
     const { friendCrontab } = await import("../services/friends");
     const { rssCrontab } = await import("../services/rss");
     const { cleanupRateLimits } = await import("../utils/rate-limit");
+    const { githubSyncCrontab } = await import("../services/github-sync");
 
-    return { friendCrontab, rssCrontab, cleanupRateLimits };
+    return { friendCrontab, rssCrontab, cleanupRateLimits, githubSyncCrontab };
 }
 
 export async function handleScheduled(
@@ -50,10 +52,13 @@ export async function handleScheduled(
   const clientConfig = new CacheImpl(db, env, "client.config");
   const cache = new CacheImpl(db, env, "cache", undefined, clientConfig);
 
-  const { friendCrontab, rssCrontab, cleanupRateLimits } = modules ?? await loadScheduledTaskModules();
+  const { friendCrontab, rssCrontab, cleanupRateLimits, githubSyncCrontab } = modules ?? await loadScheduledTaskModules();
 
   await runScheduledTask("friendCrontab", () => friendCrontab(env, ctx, db, cache, serverConfig, clientConfig));
   await runScheduledTask("rssCrontab", () => rssCrontab(env, db));
+  if (githubSyncCrontab) {
+    await runScheduledTask("githubSyncCrontab", () => githubSyncCrontab(env, db, serverConfig));
+  }
 
   // Reclaim abandoned rate limit buckets (longest window is 24h).
   await runScheduledTask("cleanupRateLimits", () => cleanupRateLimits(db, 60 * 60 * 24));

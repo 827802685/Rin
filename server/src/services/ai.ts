@@ -1,10 +1,11 @@
 import { Hono } from "hono";
 import type { AppContext, Variables } from "../core/hono-types";
-import { generateAIChatReply, type AIChatMessage } from "../utils/ai";
+import { generateAIChatReply, generateBlogPost, type AIChatMessage } from "../utils/ai";
 import { getAIConfig } from "../utils/db-config";
 import { getClientIP } from "../utils/request";
 import { consumeRateLimit } from "../utils/rate-limit";
 import { RateLimitError, ServiceUnavailableError } from "../errors";
+import { createTaskQueue, createFeedAIGenerateTask } from "../queue";
 
 const MAX_MESSAGES = 30;
 const MAX_MESSAGE_CONTENT_LENGTH = 4000;
@@ -95,6 +96,53 @@ export function AIService(): Hono<{
         }
 
         return c.json({ content: result.content });
+    });
+
+    // POST /ai/generate-blog - 手动触发 AI 博文生成（需要登录）
+    app.post("/generate-blog", async (c: AppContext) => {
+        const db = c.get('db');
+        const serverConfig = c.get('serverConfig');
+        const uid = c.get('uid');
+        const env = c.get('env');
+
+        // 需要登录才能使用此功能
+        if (!uid) {
+            return c.json({ error: "Authentication required" }, 401);
+        }
+
+        const aiConfig = await getAIConfig(serverConfig);
+        if (!aiConfig.enabled) {
+            throw new ServiceUnavailableError('AI is not enabled');
+        }
+
+        const body = await c.req.json().catch(() => null) as {
+            topic?: string;
+            keywords?: string[];
+            style?: "technical" | "casual" | "tutorial" | "review";
+            maxLength?: number;
+        } | null;
+
+        // 将任务加入队列异步处理
+        try {
+            await createTaskQueue(env).send(
+                createFeedAIGenerateTask({
+                    topic: body?.topic,
+                    keywords: body?.keywords || [],
+                    style: body?.style || "technical",
+                    maxLength: body?.maxLength || 2000,
+                }),
+            );
+
+            return c.json({ 
+                success: true, 
+                message: "Blog generation task queued successfully",
+            });
+        } catch (error) {
+            return c.json({ 
+                success: false, 
+                error: error instanceof Error ? error.message : String(error),
+            }, 500);
+        }
     });
 
     return app;

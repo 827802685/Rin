@@ -65,6 +65,29 @@ export function RSSService(): Hono {
         return c.redirect('/rss.xml', 301);
     });
 
+    // POST /refresh - Manually trigger RSS refresh (admin only)
+    app.post('/refresh', async (c: AppContext) => {
+        if (!c.get('admin')) {
+            return c.text('Unauthorized', 401);
+        }
+
+        const env = c.get('env');
+        const db = c.get('db');
+
+        try {
+            await rssCrontab(env, db);
+            return c.json({ 
+                success: true, 
+                message: "RSS feeds refreshed successfully",
+            });
+        } catch (error) {
+            return c.json({ 
+                success: false, 
+                error: error instanceof Error ? error.message : String(error),
+            }, 500);
+        }
+    });
+
     return app;
 }
 
