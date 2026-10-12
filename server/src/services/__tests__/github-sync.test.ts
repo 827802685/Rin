@@ -149,10 +149,12 @@ describe('runGitHubSync media key safety', () => {
     it('never uploads a traversal media key referenced from an article', async () => {
         const { client, uploaded } = recordingClient();
 
+        // 对象必须真的存在：取不到会走「对象不存在」分支 skipped，
+        // 跟「被安全过滤挡下」的计数一样，那样这条用例就守不住过滤了。
         const stats = await runGitHubSync(
             client,
             makeDb('![x](/blob/../../evil)'),
-            makeEnv(['../evil']),
+            makeEnv(['../../evil']),
         );
 
         expect(stats.media.total).toBe(1);
