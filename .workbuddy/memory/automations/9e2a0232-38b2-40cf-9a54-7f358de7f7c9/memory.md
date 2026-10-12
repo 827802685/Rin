@@ -3,6 +3,42 @@
 > 2026-10-04 起迭代目标已从 daily-blog 子项目切回 Rin 本体（daily-blog 已从主干移除）。
 > 2026-10-07 起改为在 `auto` 分支上迭代，每 5 次成功迭代合并回 `main`（10-11 已完成第 1 轮合并，新一轮 M=1/5）。
 
+## 2026-10-13 02:01 第 9 次执行（auto 分支，第 2 轮第 2 次迭代）
+
+- 进场：工作区有 10-12 遗留未提交的 GitHub 同步功能（14 改 + 3 新文件，646 行）。
+  先跑门禁确认：**client tsc 已红**（`settings.tsx` 新卡片 `<SettingsCardRow>`
+  只传 header，`action` 是必填 → TS2741，构建被阻塞）。
+- 结果：5 个提交落在 `auto`：`f7e1c7d`（server 收编 + 三处修复）、`135999c`
+  （client 类型修复）、`e2ff913`（回归用例）、`b4bc0b7`（integrations/）、
+  `d46ec72`（用例强化）。workspace 干净。**未触发合并（M=2/5）**。
+- 本轮修的三个真 bug：① `uploadFile` 的 1MiB 限制只判 ArrayBuffer，Markdown
+  正文（string）完全不检查 → 超长文章白白发一次必然 422 的请求且无日志；
+  改为按 UTF-8 字节数统一判限。② `runGitHubSync` 媒体同步漏了 `isSafeMediaKey`
+  （`/export` 与 `/export/media` 都有）→ 越界上传。③ `githubSyncCrontab`
+  成败都写 `github.last_sync_date` → 整轮失败当天不再重试。
+- 门禁：server tsc 0 条／server test **608 pass / 0 fail / 45 files**（600 → 608）／
+  packages/api 19 pass／client tsc 0 错／client vitest 162 pass。
+- 构建：server exit 0；client `✓ built in 4m 2s` exit 0。
+- 变异 4/4 killed，还原后 8 pass。
+- 经验（供后续复用）：
+  ① **bun 的 `mock.module` 跨测试文件残留** —— 只替换一个导出会让同进程的
+     rss / storage / cache 用例拿到残缺模块，全量跑出 4 条无关假红。
+     改用 env 注入假 `R2_BUCKET`（storage 层在 R2_BUCKET 存在时直接走
+     `bucket.get()`），零全局污染。**优先 env 注入，别用模块 mock。**
+  ② **断言「被安全机制挡下」必须让被挡对象真的存在** —— 首版 traversal 用例
+     假 R2 预置 key 写错（`../evil` vs 实际 `../../evil`），对象取不到走
+     「不存在」分支，与被过滤的 skipped++ 计数相同 → 变异 SURVIVED 的假绿。
+  ③ **别和 client vite build 并发跑 server test** —— 同机并发会出 3 fail / 3 errors
+     （超时型），串行重跑即 0 fail。判定回归前先串行重跑一次。
+  ④ 仓库源码是 **LF** 不是 CRLF（可由 git 的 `LF will be replaced by CRLF`
+     警告反推）；变异脚本继续「先探测行尾」。
+- 下一目标：① `utils/s3.ts` 的 `buildS3ObjectUrl` 零调用点死代码删除
+  ② `POST /ai/generate-blog` 只 console.log 不落库，半成品待决
+  ③ `applyGithubCdn` 无条件重写 /blob/ 为 CDN，未同步到的图片会裂
+  ④ 客户端页面级组件测试。
+
+---
+
 ## 2026-10-12 02:01 第 8 次执行（auto 分支，第 2 轮第 1 次迭代）
 
 - 进场：`auto` = `main` + 1 个 docs 提交，工作区干净，先跑门禁确认自洽。

@@ -106,7 +106,14 @@ cd packages/api && "$BUN" test
   server / client / packages/api 三套 bun 门禁**都能实跑**。看到这条旧记录不要当真。
 - bash 必须先 `export PATH="/usr/bin:/bin:$PATH"`，否则 ls/find/grep/dirname 全部 command not found。
 - PowerShell 工具不返回 stdout，一律用 Bash。
-- 源码是 **CRLF 行尾**，正则处理内容时必须用 `\r?\n`。
+- 源码行尾**按文件而异**：`server/src/services/*.ts` 等新文件是 **LF**，部分老文件是 CRLF。
+  正则/变异脚本一律先 `"\r\n" in text` 探测再拼锚点（git 的 `LF will be replaced by CRLF`
+  警告可反推行尾）。
+- **bun 的 `mock.module` 会跨测试文件残留**（2026-10-13 实测）：只替换一个导出会让同进程的
+  rss / storage / cache 用例拿到残缺模块，全量跑出无关的假红。优先用 **env 注入假 R2_BUCKET**
+  （storage 层在 `env.R2_BUCKET` 存在时直接走 `bucket.get()`），不要用模块 mock。
+- **别和 client vite build 并发跑 server test**：同机并发会出 3 fail / 3 errors（超时型），
+  串行重跑即 0 fail。判定回归前先串行重跑一次。
 - 不要动 `bun.lock`（本机镜像会写脏，需要时 `git checkout -- bun.lock`）。
 - `F:/Documents/GitHub/Rin` 的 `node_modules` 有 pnpm 残留的 `hono@4.13.2`（顶层是 4.12.2），
   会导致那里的 `tsc` 报 `string | undefined` 误报。
