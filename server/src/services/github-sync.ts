@@ -9,6 +9,7 @@ import {
   getStorageHosts,
   GitHubClient,
   isSafeMediaKey,
+  saveSyncedMediaKeys,
   syncFeedToGitHub,
   syncMomentToGitHub,
 } from "./github";
@@ -27,6 +28,7 @@ export async function runGitHubSync(
   client: GitHubClient,
   db: DB,
   env: Env,
+  serverConfig?: CacheImpl,
 ): Promise<GitHubSyncStats> {
   const stats: GitHubSyncStats = {
     feeds: { total: 0, success: 0, failed: 0 },
@@ -80,6 +82,8 @@ export async function runGitHubSync(
   // 3. 文章/动态引用的站内媒体文件（GitHub contents API 限单文件 1 MiB）
   stats.media.total = mediaKeys.size;
 
+  const syncedMedia: string[] = [];
+
   for (const key of mediaKeys) {
     // 与 /export 一致：key 会被拼进仓库路径，越界的必须挡在上传之前
     if (!isSafeMediaKey(key)) {
@@ -101,11 +105,21 @@ export async function runGitHubSync(
         content: buffer,
         message: `sync: media ${key}`,
       });
-      ok ? stats.media.success++ : stats.media.skipped++;
+      if (ok) {
+        stats.media.success++;
+        syncedMedia.push(key);
+      } else {
+        stats.media.skipped++;
+      }
     } catch (error) {
       console.error(`[GitHub Sync] media ${key} failed:`, error);
       stats.media.skipped++;
     }
+  }
+
+  // 只有真正进仓的 key 才允许被重写到 CDN；失败/跳过的继续走本站存储
+  if (serverConfig) {
+    await saveSyncedMediaKeys(serverConfig, syncedMedia);
   }
 
   console.log("[GitHub Sync] done:", JSON.stringify(stats));
@@ -134,7 +148,7 @@ export async function githubSyncCrontab(
 
   console.log(`[GitHub Sync] daily sync starting for ${today}`);
   const client = new GitHubClient(settings);
-  const stats = await runGitHubSync(client, db, env);
+  const stats = await runGitHubSync(client, db, env, serverConfig);
 
   // 整轮一个都没成功（token 失效、网络中断等）时不记今天，
   // 否则当天再也不会重试，故障要等到第二天才被发现。

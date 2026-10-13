@@ -7,10 +7,14 @@ import {
     buildPostMarkdown,
     GitHubService,
     GITHUB_MAX_FILE_BYTES,
+    GITHUB_SYNCED_MEDIA_KEY,
     GitHubClient,
     getGitHubPath,
     getGitHubSettings,
+    getSyncedMediaKeys,
     isSafeMediaKey,
+    markMediaSynced,
+    saveSyncedMediaKeys,
     type GitHubSettings,
 } from '../github';
 
@@ -103,25 +107,102 @@ describe('getGitHubSettings', () => {
 describe('GitHubClient.rewriteMediaToCdn', () => {
     const client = new GitHubClient(settings);
     const hosts = ['https://img.example.com'];
+    const synced = new Set(['images/a.png']);
 
     it('rewrites internal /blob/ references to the CDN media folder', () => {
-        const out = client.rewriteMediaToCdn('![p](/blob/images/a.png)', hosts);
+        const out = client.rewriteMediaToCdn('![p](/blob/images/a.png)', hosts, synced);
         expect(out).toBe('![p](https://cdn.jsdelivr.net/gh/some-user/blog-content@main/media/images/a.png)');
     });
 
     it('rewrites same-site storage URLs', () => {
-        const out = client.rewriteMediaToCdn('![p](https://img.example.com/images/a.png)', hosts);
+        const out = client.rewriteMediaToCdn('![p](https://img.example.com/images/a.png)', hosts, synced);
         expect(out).toContain('/media/images/a.png');
     });
 
     it('leaves external and already-absolute unknown URLs untouched', () => {
         const external = '![p](https://other.site/a.png)';
-        expect(client.rewriteMediaToCdn(external, hosts)).toBe(external);
+        expect(client.rewriteMediaToCdn(external, hosts, synced)).toBe(external);
     });
 
     it('honors custom cdnBaseUrl', () => {
         const custom = new GitHubClient({ ...settings, cdnBaseUrl: 'https://my.cdn/' });
-        expect(custom.rewriteMediaToCdn('![p](/blob/a.png)', [])).toBe('![p](https://my.cdn/media/a.png)');
+        const out = custom.rewriteMediaToCdn('![p](/blob/a.png)', [], new Set(['a.png']));
+        expect(out).toBe('![p](https://my.cdn/media/a.png)');
+    });
+
+    // 回归：同步是每天一次，未入库的媒体被无条件改写会让图片直接裂开
+    it('does NOT rewrite media that was never synced into the repo', () => {
+        const src = '![p](/blob/images/new.png)';
+        expect(client.rewriteMediaToCdn(src, hosts, synced)).toBe(src);
+    });
+
+    it('rewrites nothing when the synced list is empty', () => {
+        const src = '![p](/blob/images/a.png)';
+        expect(client.rewriteMediaToCdn(src, hosts, new Set())).toBe(src);
+    });
+
+    it('only rewrites the synced image when a post mixes both', () => {
+        const src = '![a](/blob/images/a.png) ![b](/blob/images/missing.png)';
+        const out = client.rewriteMediaToCdn(src, hosts, synced);
+        expect(out).toContain('/media/images/a.png');
+        expect(out).toContain('/blob/images/missing.png');
+        expect(out).not.toContain('/media/images/missing.png');
+    });
+
+    it('matches percent-encoded URLs against decoded synced keys', () => {
+        const out = client.rewriteMediaToCdn('![p](/blob/images/a%20b.png)', hosts, new Set(['images/a b.png']));
+        expect(out).toContain('/media/images/a%20b.png');
+    });
+});
+
+describe('synced media key bookkeeping', () => {
+    function makeConfig(initial: unknown = undefined) {
+        const store = new Map<string, unknown>();
+        if (initial !== undefined) {
+            store.set(GITHUB_SYNCED_MEDIA_KEY, initial);
+        }
+        return {
+            store,
+            async get(key: string) {
+                return store.get(key) ?? null;
+            },
+            async set(key: string, value: unknown) {
+                store.set(key, value);
+            },
+        } as any;
+    }
+
+    it('returns an empty set when nothing was recorded', async () => {
+        expect(await getSyncedMediaKeys(makeConfig())).toEqual(new Set());
+    });
+
+    it('returns an empty set when there is no config at all', async () => {
+        expect(await getSyncedMediaKeys(undefined)).toEqual(new Set());
+    });
+
+    it('treats a corrupted list as empty instead of rewriting everything', async () => {
+        expect(await getSyncedMediaKeys(makeConfig('{not json'))).toEqual(new Set());
+    });
+
+    it('round-trips the keys it saved', async () => {
+        const config = makeConfig();
+        await saveSyncedMediaKeys(config, ['a.png', 'b.png']);
+        expect(await getSyncedMediaKeys(config)).toEqual(new Set(['a.png', 'b.png']));
+    });
+
+    it('replaces rather than accumulates, so stale keys cannot point at a dead repo', async () => {
+        const config = makeConfig();
+        await saveSyncedMediaKeys(config, ['old.png']);
+        await saveSyncedMediaKeys(config, ['new.png']);
+        expect(await getSyncedMediaKeys(config)).toEqual(new Set(['new.png']));
+    });
+
+    it('markMediaSynced adds a key without dropping the existing ones', async () => {
+        const config = makeConfig();
+        await saveSyncedMediaKeys(config, ['a.png']);
+        await markMediaSynced(config, 'b.png');
+        await markMediaSynced(config, 'b.png');
+        expect(await getSyncedMediaKeys(config)).toEqual(new Set(['a.png', 'b.png']));
     });
 });
 

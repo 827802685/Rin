@@ -17,6 +17,19 @@ export interface GitHubSettings {
 // GitHub contents API 单文件上限（1 MiB，官方限制）
 export const GITHUB_MAX_FILE_BYTES = 1024 * 1024;
 
+/**
+ * 已确认进入内容仓库的媒体 key 清单（JSON 数组）。
+ *
+ * CDN 重写必须以此为据：rewriteMediaToCdn 过去无条件把站内媒体换成 jsDelivr 地址，
+ * 而同步是每天一次的，于是「上传后到下次同步之间」以及「超过 1 MiB 被跳过的媒体」
+ * 全都会被指到仓库里根本不存在的文件上，图片直接裂开。宁可走本站存储慢一点，
+ * 也不能给出必然 404 的地址。
+ */
+export const GITHUB_SYNCED_MEDIA_KEY = "github.synced_media";
+
+// 清单只用于「这个 key 在不在仓库里」的判断，留最近的一批即可，避免无限膨胀
+const MAX_SYNCED_MEDIA_KEYS = 2000;
+
 interface GitHubFileMeta {
   path: string;
   content: string | ArrayBuffer;
@@ -227,10 +240,17 @@ export class GitHubClient {
   }
 
   /**
-   * 把站内媒体引用（相对 /blob/ 或本站 S3 host 的图片）重写为 CDN 地址，
-   * 使加载文章时直接使用 GitHub CDN。
+   * 把站内媒体引用（相对 /blob/ 或本站 S3 host 的图片）重写为 CDN 地址。
+   *
+   * syncedKeys 是「已确认进入内容仓库」的 key 集合，只有命中的才会改写；
+   * 其余一律保持原样继续走本站存储（能正常加载），而不是指到仓库里不存在的
+   * CDN 地址上。空集合表示尚未同步过任何媒体，此时一个都不改写。
    */
-  rewriteMediaToCdn(content: string, storageHosts: string[]): string {
+  rewriteMediaToCdn(
+    content: string,
+    storageHosts: string[],
+    syncedKeys: ReadonlySet<string>,
+  ): string {
     const cdnBase = (this.settings.cdnBaseUrl || "")
       ? this.settings.cdnBaseUrl!.replace(/\/+$/, "")
       : `https://cdn.jsdelivr.net/gh/${this.settings.owner}/${this.settings.repo}@${this.settings.branch}`;
@@ -238,7 +258,7 @@ export class GitHubClient {
     return content.replace(
       /(!\[[^\]]*\]\()\s*<?([^)\s]+)>?/g,
       (match, prefix, url) => {
-        const rewritten = rewriteSingleMediaUrl(url, cdnBase, storageHosts);
+        const rewritten = rewriteSingleMediaUrl(url, cdnBase, storageHosts, syncedKeys);
         return rewritten === null ? match : `${prefix}${rewritten}`;
       },
     );
@@ -249,20 +269,90 @@ function rewriteSingleMediaUrl(
   url: string,
   cdnBase: string,
   storageHosts: string[],
+  syncedKeys: ReadonlySet<string>,
 ): string | null {
-  // 站内 /blob/<key> 引用
-  if (url.startsWith("/blob/")) {
-    return `${cdnBase}/media/${url.slice("/blob/".length)}`;
+  const rawKey = internalMediaKey(url, storageHosts);
+  if (rawKey === null) {
+    return null; // 外链或不认识的地址保持原样
   }
 
-  // 本站存储域名下的对象
+  // 同步时按解码后的 key 记录，这里也必须解码后再比对，否则带 %20 的 URL 永远匹配不上
+  if (!syncedKeys.has(decodeMediaKey(rawKey))) {
+    return null;
+  }
+
+  // 拼进地址时保留原文，避免二次编码改变既有链接
+  return `${cdnBase}/media/${rawKey}`;
+}
+
+/** 站内媒体 URL -> 存储 key（原样，不解码）；外链返回 null */
+function internalMediaKey(url: string, storageHosts: string[]): string | null {
+  if (url.startsWith("/blob/")) {
+    return url.slice("/blob/".length);
+  }
+
   for (const host of storageHosts) {
     if (!host || !url.startsWith(host)) continue;
-    const key = url.slice(host.length).replace(/^\/+/, "");
-    return `${cdnBase}/media/${key}`;
+    return url.slice(host.length).replace(/^\/+/, "");
   }
 
-  return null; // 外链或不认识的地址保持原样
+  return null;
+}
+
+function decodeMediaKey(key: string): string {
+  try {
+    return decodeURIComponent(key);
+  } catch {
+    return key;
+  }
+}
+
+/** 读取已确认入库的媒体 key 集合；无配置/损坏时返回空集（= 一律不改写） */
+export async function getSyncedMediaKeys(
+  serverConfig: CacheImpl | undefined,
+): Promise<Set<string>> {
+  if (!serverConfig) {
+    return new Set();
+  }
+
+  const raw = await serverConfig.get(GITHUB_SYNCED_MEDIA_KEY);
+  if (!raw) {
+    return new Set();
+  }
+
+  try {
+    const parsed = JSON.parse(String(raw));
+    return Array.isArray(parsed) ? new Set(parsed.map(String)) : new Set();
+  } catch {
+    console.warn("[GitHub] synced media list is corrupted, treating as empty");
+    return new Set();
+  }
+}
+
+/**
+ * 覆盖写入已入库清单。用覆盖而非累加：同步是每天一次的全量扫描，本轮成功列表
+ * 就是仓库当前内容的真实快照；累加会让换仓库/换 CDN 后仍指向旧地址。
+ * 失败模式是「退回本站存储」，比 404 安全。
+ */
+export async function saveSyncedMediaKeys(
+  serverConfig: CacheImpl,
+  keys: Iterable<string>,
+): Promise<void> {
+  const list = [...new Set(keys)].slice(-MAX_SYNCED_MEDIA_KEYS);
+  await serverConfig.set(GITHUB_SYNCED_MEDIA_KEY, JSON.stringify(list));
+}
+
+/** 追加单个已确认入库的 key（GitHub Actions 拉取路径用） */
+export async function markMediaSynced(
+  serverConfig: CacheImpl,
+  key: string,
+): Promise<void> {
+  const keys = await getSyncedMediaKeys(serverConfig);
+  if (keys.has(key)) {
+    return;
+  }
+  keys.add(key);
+  await saveSyncedMediaKeys(serverConfig, keys);
 }
 
 /**
@@ -480,7 +570,7 @@ export function GitHubService() {
 
     // 动态导入避免 github <-> github-sync 的静态循环
     const { runGitHubSync } = await import("./github-sync");
-    const stats = await runGitHubSync(client, c.get("db"), c.get("env"));
+    const stats = await runGitHubSync(client, c.get("db"), c.get("env"), c.get("serverConfig"));
 
     return c.json({ success: true, stats });
   });
@@ -513,6 +603,10 @@ export function GitHubService() {
     if (!object) {
       return c.text("Not found", 404);
     }
+
+    // 拉取端拿到二进制后会提交进内容仓库，这里记一笔：Actions 是推不回结果的，
+    // 若不记录，>1 MiB（Worker 侧会被跳过）的媒体永远不会被重写到 CDN。
+    await markMediaSynced(c.get("serverConfig"), decodeMediaKey(key));
 
     return new Response(object.body, {
       headers: {

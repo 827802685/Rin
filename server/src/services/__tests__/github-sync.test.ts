@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from 'bun:test';
 
 import {
     GITHUB_MAX_FILE_BYTES,
+    GITHUB_SYNCED_MEDIA_KEY,
     GitHubClient,
     type GitHubSettings,
 } from '../github';
@@ -81,6 +82,13 @@ function recordingClient(): { client: GitHubClient; uploaded: string[] } {
         return true;
     };
     return { client, uploaded };
+}
+
+/** 上传一律失败，用来区分「进仓了」和「被拒绝了」 */
+function failingClient(): { client: GitHubClient } {
+    const client = new GitHubClient(settings);
+    (client as any).uploadFile = async () => false;
+    return { client };
 }
 
 describe('GitHubClient.uploadFile size limit', () => {
@@ -174,6 +182,51 @@ describe('runGitHubSync media key safety', () => {
 
         expect(stats.media.success).toBe(1);
         expect(uploaded).toContain('media/images/a.png');
+    });
+});
+
+describe('runGitHubSync synced-media bookkeeping', () => {
+    it('records only the media that actually landed in the repo', async () => {
+        const { client } = recordingClient();
+        const config = fakeConfig();
+
+        // 两张图都被引用，但只有 a.png 在对象存储里，b.png 取不到 -> skipped
+        await runGitHubSync(
+            client,
+            makeDb('![a](/blob/images/a.png) ![b](/blob/images/b.png)'),
+            makeEnv(['images/a.png']),
+            config,
+        );
+
+        expect(new Set(JSON.parse(String(config.store.get(GITHUB_SYNCED_MEDIA_KEY)))))
+            .toEqual(new Set(['images/a.png']));
+    });
+
+    it('omits skipped keys even when the upload itself fails', async () => {
+        const { client } = failingClient();
+        const config = fakeConfig();
+
+        await runGitHubSync(
+            client,
+            makeDb('![a](/blob/images/a.png)'),
+            makeEnv(['images/a.png']),
+            config,
+        );
+
+        // 上传失败 = 仓库里没有这个文件，绝不能记进去给 CDN 重写放行
+        expect(JSON.parse(String(config.store.get(GITHUB_SYNCED_MEDIA_KEY)))).toEqual([]);
+    });
+
+    it('leaves the config untouched when no serverConfig is provided', async () => {
+        const { client } = recordingClient();
+
+        const stats = await runGitHubSync(
+            client,
+            makeDb('![a](/blob/images/a.png)'),
+            makeEnv(['images/a.png']),
+        );
+
+        expect(stats.media.success).toBe(1);
     });
 });
 

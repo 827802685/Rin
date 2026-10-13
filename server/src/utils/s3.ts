@@ -7,7 +7,6 @@ import {
   S3Client,
 } from "@aws-sdk/client-s3";
 import { FetchHttpHandler } from "@smithy/fetch-http-handler";
-import { path_join } from "./path";
 
 export function createS3Client(env: Env): S3Client {
   return new S3Client({
@@ -20,19 +19,6 @@ export function createS3Client(env: Env): S3Client {
       secretAccessKey: env.S3_SECRET_ACCESS_KEY,
     },
   });
-}
-
-export function buildS3ObjectUrl(env: Env, key: string): string {
-  const endpoint = env.S3_ENDPOINT;
-  const bucket = env.S3_BUCKET;
-  const forcePathStyle = env.S3_FORCE_PATH_STYLE === "true";
-
-  if (forcePathStyle) {
-    return path_join(endpoint, bucket, key);
-  }
-
-  const urlObj = new URL(endpoint);
-  return `${urlObj.protocol}//${bucket}.${urlObj.host}/${key}`;
 }
 
 export async function putObject(

@@ -21,7 +21,7 @@ import { syncFeedAISummaryQueueState } from "./feed-ai-summary";
 import { bindTagToPost } from "./tag";
 import { clearFeedCache } from "./clear-feed-cache";
 export { clearFeedCache } from "./clear-feed-cache";
-import { GitHubClient, getGitHubSettings } from "./github";
+import { GitHubClient, getGitHubSettings, getStorageHosts, getSyncedMediaKeys } from "./github";
 
 /**
  * 加载文章时，把站内媒体链接重写为 GitHub CDN 地址。
@@ -38,8 +38,8 @@ async function applyGithubCdn(content: string, serverConfig: CacheImpl | undefin
   }
 
   const client = new GitHubClient(settings);
-  const publicBase = (env.S3_ACCESS_HOST || env.S3_ENDPOINT || "").replace(/\/+$/, "");
-  return client.rewriteMediaToCdn(content, publicBase ? [publicBase] : []);
+  const syncedKeys = await getSyncedMediaKeys(serverConfig);
+  return client.rewriteMediaToCdn(content, getStorageHosts(env), syncedKeys);
 }
 
 // Lazy-loaded modules for WordPress import
