@@ -3,6 +3,40 @@
 > 2026-10-04 起迭代目标已从 daily-blog 子项目切回 Rin 本体（daily-blog 已从主干移除）。
 > 2026-10-07 起改为在 `auto` 分支上迭代，每 5 次成功迭代合并回 `main`（10-11 已完成第 1 轮合并，新一轮 M=1/5）。
 
+## 2026-10-14 02:01 第 10 次执行（auto 分支，第 2 轮第 3 次迭代）
+
+- 进场：工作区脏（54 改 + 15 新文件，约 1500 行），是上一轮遗留的客户端大改。
+  按纪律**先跑门禁再判断**，全绿 → 判定为可收编成果，未 stash。
+- 结果：5 个提交落在 `auto`：`4fd42b9`（server 静态资源不回退 index.html）、
+  `37fbf7a`（client 72 文件收编）、`26f274f`（docs + 贴图压缩）、
+  `0d026ce`（本轮修复）、`87e1673`（日志 + 基线）。workspace 干净。**未触发合并（M=3/5）**。
+- **本轮挖到的真 bug**：`rewriteMediaToCdn` 只判断「是不是站内媒体」、不判断
+  「有没有真的进仓」，任何 /blob/ 图片都被换成 jsDelivr 地址。同步每天一次 →
+  新上传的图、>1MiB 被跳过的图、单次失败的图全部指向仓库里不存在的文件，图片裂开且零报错。
+- 修复：以 `serverConfig` 的 `github.synced_media`（已确认入库 key 清单）为准；
+  `runGitHubSync` 覆盖写成功列表（失败不记）；Actions 拉取路径在 `/export/media`
+  成功返回时补记；`rewriteMediaToCdn` 只改写命中清单的 key（清单缺失/损坏当空集）。
+  取舍：**覆盖而非累加** —— 累加在换仓库后会 404，覆盖的失败模式只是「慢一点但仍能加载」。
+- 门禁：server tsc 0 条／server test **624 pass / 0 fail / 45 files**（608 → 624）／
+  packages/api 19 pass／client tsc 0 错／client vitest **247 pass / 34 files**（162 → 247）。
+- 构建：server exit 0；client `✓ built in 3m 20s`，index.html + 219 assets 齐全
+  （exit 1 是已知的 closeBundle 删 vite 临时配置时 genie-trash 超时，非编译错误）。
+- 变异 **6/6 killed**（去闸门 4 红／不解码 1 红／覆盖代替追加 1 红／累加代替覆盖 1 红／
+  失败也记清单 1 红／路由层不读清单 1 红）。
+- **推送成功**：本次网络通，`git push origin main`（13 个提交）+ `git push origin auto`
+  均 exit 0，本地 main 与 origin/main 已对齐（0 ahead）。
+- 经验（供后续复用）：
+  ① **守卫类修复必须补一层端到端用例** —— 本轮除 github.ts 纯函数单测外，另在
+     feed.test.ts 加了 `GET /feed/:id` 路由级用例；纯函数层测不出「调用方忘了传清单」。
+  ② **变异脚本要先自己跑一遍 baseline**，非绿直接 abort，否则 KILLED 全是假的；
+     每次变异后除比对 restore 文本，还要盯**总用例数是否骤降**（语法错误的假红）。
+  ③ 无回传通道的副作用路径（Actions 拉取）只能在服务端可观测的那一刻记账，属乐观记录，
+     必须在注释里写明前提。
+- 下一目标：① `POST /ai/generate-blog` 只 console.log 不落库（半成品待决）
+  ② 客户端页面级组件测试 ③ `storage.ts` 剩余零覆盖。
+
+---
+
 ## 2026-10-13 02:01 第 9 次执行（auto 分支，第 2 轮第 2 次迭代）
 
 - 进场：工作区有 10-12 遗留未提交的 GitHub 同步功能（14 改 + 3 新文件，646 行）。
