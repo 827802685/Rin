@@ -1,0 +1,69 @@
+# 接入外部主题（自定义 CSS / 配色令牌）
+
+Rin 的界面配色由一组 CSS 令牌驱动，可在「后台 → 主题 → 自定义 CSS（实验性）」里
+粘贴其它主题（Hexo / Halo 等）的色值，把它解析成 Rin 的配色方案，或直接挂载自定义 CSS。
+
+> 这是「接入其它框架主题」的第一步（groundwork）：目前只做**配色层面**的映射，
+> 不涉及对方主题的模板、脚本或布局。Rin 也只解析十六进制色值（`#rgb` / `#rrggbb`）。
+
+## Rin 令牌一览
+
+| 令牌 | 含义 | 常见外部主题变量名（示例） |
+| --- | --- | --- |
+| `surface-page` | 页面最底层背景 | `--background`、`--bg`、`--color-bg` |
+| `surface-raised` | 卡片 / 内容面 | `--card-bg`、`--color-panel` |
+| `surface-sunken` | 凹陷区（代码块、引用） | `--code-bg`、`--blockquote-bg` |
+| `surface-hover` | 悬停底色 | `--hover-bg` |
+| `surface-active` | 按下 / 激活底色 | `--active-bg` |
+| `text-primary` | 正文主色 | `--font-color`、`--color-text` |
+| `text-secondary` | 次级文字 | `--font-2`、`--color-text-secondary` |
+| `text-muted` | 弱化文字 / 占位 | `--color-text-muted`、`--muted` |
+| `border-default` | 常规描边 | `--border-color`、`--color-border` |
+| `border-strong` | 强调描边 | `--border-strong` |
+| （主色） | 链接 / 按钮强调色 | `--theme-color`、`--main-color`、`--accent` |
+
+外部主题的变量命名不统一，需要你把上面「常见变量名」对应的值，改名成 Rin 的令牌名后再粘贴。
+
+## 解析规则
+
+粘贴的 CSS 会按以下规则读取（`importSchemeFromCss`）：
+
+```css
+/* 1) :root 块里的十六进制色值 → 同时应用到深色/浅色两档 */
+:root {
+  --surface-page: #f6f7f9;
+  --text-primary: #17181c;
+  --theme-color: #d16180; /* 也可写 --accent / --accent-color */
+}
+
+/* 2) [data-color-mode] 块 → 只应用到对应档 */
+[data-color-mode="light"] { --surface-page: #f6f7f9; }
+[data-color-mode="dark"]  { --surface-page: #17181b; }
+
+/* 3) 变量名带 -light / -dark 后缀 → 只应用到对应档 */
+:root {
+  --surface-page-light: #f6f7f9;
+  --surface-page-dark: #17181b;
+}
+```
+
+- 只识别与 Rin 令牌**同名**、或带 `-light` / `-dark` 后缀的自定义属性。
+- 未提供的令牌自动回落到内置「默认蓝」方案对应档。
+- 注释（`/* … */`）会被剥离，不参与解析。
+- 一个令牌和主色都解析不到时，视为「无法导入」，界面会提示你，同时原样挂载 CSS 作为兜底。
+
+## 从 Hexo / Halo 迁移的步骤
+
+1. 找到主题的主色板文件，例如 Hexo 主题常在 `source/css/_var.styl`、`_config.yml`
+   或 `:root` 定义块；Halo 主题多在 `settings/design.css` 或主题的 `styles/theme.css`。
+2. 按上表把这些变量**改名**成 Rin 令牌名（保留它们各自的十六进制值）。
+3. 到「后台 → 主题 → 自定义 CSS」粘贴，点「应用预览」。
+4. 预览满意后保存：`theme.scheme` 会置为 `custom`，下次访问由客户端从 `theme.custom_css`
+   重新解析，深色/浅色两档在 CSS 里按 `[data-color-mode]` 解析，无需 JS 参与。
+
+## 注意事项
+
+- 「应用预览」只影响当前浏览器；**保存**才会写入站点配置对所有访客生效。
+- 自定义 CSS 是原样挂载的（仅剥离 `<script>` 残留），没有做样式沙箱。
+  出现 `@import` 时界面会提示：外部样式表会由访客浏览器直接拉取，可能引入不可控资源或跨域失败。
+- 离开主题设置页时，草稿状态会恢复到进入前的配置，未保存的预览不会残留。
