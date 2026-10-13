@@ -1,0 +1,42 @@
+# 放到你的内容仓库：.github/workflows/rin-sync.yml
+# 需要的配置（仓库 Settings）：
+#   - Variables:  RIN_SITE_URL  = 你的 Rin 站点地址，如 https://blog.example.com
+#   - Secrets:    RIN_GITHUB_PAT = 与网站设置页「GitHub PAT」相同的令牌
+name: 从 Rin 拉取内容
+
+on:
+  schedule:
+    # UTC 18:10，即北京时间次日 02:10，每天一次
+    - cron: "10 18 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: 拉取文章与媒体
+        env:
+          RIN_SITE_URL: ${{ vars.RIN_SITE_URL }}
+          RIN_GITHUB_PAT: ${{ secrets.RIN_GITHUB_PAT }}
+        run: node scripts/sync-from-rin.mjs
+
+      - name: 提交并推送
+        run: |
+          git config user.name "rin-sync[bot]"
+          git config user.email "rin-sync[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "内容无变化，跳过提交"
+          else
+            git commit -m "sync: 从 Rin 拉取 $(date -u +%F)"
+            git push
+          fi

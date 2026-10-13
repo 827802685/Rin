@@ -7,6 +7,7 @@ import { client } from "../app/runtime"
 import { ProfileContext } from "../state/profile"
 
 import { useSiteConfig } from "../hooks/useSiteConfig";
+import { getCardVariantForLayout, getFeedListClass } from "../components/feed/feed-layout";
 import { tryInt } from "../utils/int"
 import { useTranslation } from "react-i18next";
 
@@ -36,7 +37,7 @@ export function FeedsPage() {
     })
     const page = tryInt(1, query.get("page"))
     const limit = tryInt(siteConfig.pageSize, query.get("limit"))
-    const feedListClass = siteConfig.feedLayout === "masonry" ? "wauto columns-1 gap-5 ani-show md:columns-2" : "wauto flex flex-col ani-show";
+    const feedListClass = getFeedListClass(siteConfig.feedLayout, "ani-show");
     const currentFeeds = feeds[listState] ?? { size: 0, data: [], hasNext: false };
     const currentFeedData = Array.isArray(currentFeeds.data) ? currentFeeds.data : [];
     const ref = useRef("")
@@ -93,7 +94,7 @@ export function FeedsPage() {
                     <Waiting for={status === 'idle'}>
                         <div className={feedListClass}>
                             {currentFeedData.map(({ id, ...feed }: any) => (
-                                <FeedCard key={id} id={id} {...feed} />
+                                <FeedCard key={id} id={id} {...feed} variant={getCardVariantForLayout(siteConfig.feedLayout)} />
                             ))}
                         </div>
                         <div className="wauto flex flex-row items-center mt-4 ani-show">

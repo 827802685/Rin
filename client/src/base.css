@@ -3,19 +3,27 @@
 @tailwind utilities;
 @layer base {
     .bg-w {
-      @apply bg-white dark:bg-dark;
+      background-color: var(--surface-raised, #fff);
     }
   
     .bg-secondary {
-      @apply bg-neutral-100 dark:bg-neutral-700;
+      background-color: var(--surface-sunken, #f5f5f5);
     }
   
     .bg-button {
-      @apply hover:bg-neutral-200 dark:hover:bg-neutral-600 active:bg-neutral-300 dark:active:bg-neutral-500;
+      transition: background-color 0.2s;
     }
 
-    .bg-hover {
-      @apply hover:bg-neutral-200 dark:hover:bg-neutral-600;
+    .bg-button:hover {
+      background-color: var(--surface-hover, #e5e5e5);
+    }
+
+    .bg-button:active {
+      background-color: var(--surface-active, #d4d4d4);
+    }
+
+    .bg-hover:hover {
+      background-color: var(--surface-hover, #e5e5e5);
     }
   
     .shadow-light {
@@ -27,11 +35,23 @@
     }
   
     .t-primary {
-      @apply text-black dark:text-white;
+      color: var(--text-primary, #000);
     }
   
     .t-secondary {
-      @apply text-neutral-500 dark:text-neutral-200;
+      color: var(--text-secondary, #737373);
+    }
+
+    .t-muted {
+      color: var(--text-muted, #a3a3a3);
+    }
+
+    .border-line {
+      border-color: var(--border-default, #e5e5e5);
+    }
+
+    .border-line-strong {
+      border-color: var(--border-strong, #d4d4d4);
     }
   
     .wauto {

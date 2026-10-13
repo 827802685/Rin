@@ -208,6 +208,7 @@
     "api_url": "Pages 环境变量中 API_URL 应为 Worker 地址，请检查 Pages 环境变量中 API_URL 是否正确",
     "api_url_slash": "Pages 环境变量中 API_URL 应为 Worker 地址，请检查 Pages 环境变量中 API_URL 是否正确，且 API_URL 末尾不能有 /",
     "github_callback": "GitHub OAuth 回调地址应为 `https://<Worker 地址>/api/user/github/callback`，请检查 GitHub OAuth 回调地址是否正确",
+    "login_required": "需要登录后才能打开这个页面",
     "not_found": "页面未找到",
     "permission_denied": "权限不足",
     "title": "错误"
@@ -218,6 +219,14 @@
   },
   "footer": {
     "rss": "RSS 订阅链接"
+  },
+  "sidebar": {
+    "loading": "侧栏内容加载中…",
+    "tags_failed": "标签数据没取到",
+    "retry": "重试",
+    "tags_title": "热门标签",
+    "view_tags": "查看标签",
+    "view_timeline": "查看时间线"
   },
   "friends": {
     "apply": "申请友链",
@@ -500,11 +509,13 @@
       "desc": "选择桌面端站点头部的排布方式，并在下方预览效果",
       "options": {
         "classic": "经典居中",
-        "compact": "极简纯文本"
+        "compact": "极简纯文本",
+        "sidebar": "侧栏双列（实验性）"
       },
       "preview": {
         "classic": "品牌、居中导航和操作区保持当前这套平衡布局。",
-        "compact": "几乎去掉所有装饰，只保留最必要的信息和操作。"
+        "compact": "几乎去掉所有装饰，只保留最必要的信息和操作。",
+        "sidebar": "左正文右侧栏，窄屏折叠单列。"
       }
     },
     "header_behavior": {
@@ -521,11 +532,13 @@
       "desc": "选择文章列表、搜索结果和标签页中卡片的视觉风格",
       "options": {
         "default": "默认",
-        "editorial": "杂志风"
+        "editorial": "杂志风",
+        "cover": "大图封面（实验性）"
       },
       "preview": {
         "default": "当前这套紧凑卡片，表面处理简单，干净直接。",
-        "editorial": "更有展示感的卡片，带轻微主题染色、更强层级和类似画册的 framing。"
+        "editorial": "更有展示感的卡片，带轻微主题染色、更强层级和类似画册的 framing。",
+        "cover": "大图封面通栏置顶，正文在下。"
       }
     },
     "feed_layout": {
@@ -534,12 +547,36 @@
       "preview_note": "仅预览。保存设置后才会应用到站点。",
       "options": {
         "list": "单列",
-        "masonry": "瀑布流"
+        "masonry": "瀑布流",
+        "magazine": "杂志网格（实验性）"
       },
       "preview": {
         "list": "稳定的单列阅读节奏，每行只放一张卡片。",
-        "masonry": "按卡片高度自动拼接的多列布局，更适合长短不一的内容。"
+        "masonry": "按卡片高度自动拼接的多列布局，更适合长短不一的内容。",
+        "magazine": "两列等宽网格，搭配封面卡。"
       }
+    },
+    "theme_scheme": {
+      "title": "配色方案",
+      "desc": "页面配色预设（实验性），点击即时预览",
+      "options": {
+        "default": "默认蓝",
+        "sakura": "樱粉",
+        "ocean": "海盐",
+        "forest": "林绿",
+        "mono": "墨灰",
+        "amber": "暖砂",
+        "custom": "自定义"
+      }
+    },
+    "custom_css": {
+      "title": "自定义 CSS（实验性）",
+      "desc": "粘贴其它主题的 CSS 色值，解析为配色方案。",
+      "preview": "应用预览",
+      "clear": "清除",
+      "parsed": "已解析为自定义配色方案。",
+      "no_tokens": "未解析到令牌色值，仍会原样挂载 CSS。",
+      "import_warn": "检测到 @import，将加载外部地址资源。"
     },
     "theme_color": {
       "title": "主题色",
@@ -848,7 +885,7 @@
     "live2d": {
       "enable": {
         "title": "Live2D 看板娘",
-        "desc": "在站点上展示芙宁娜 Live2D 模型"
+        "desc": "在站点上展示 Live2D 看板娘，默认使用随站点打包的轻量模型"
       },
       "position": {
         "title": "看板娘靠左",
@@ -864,9 +901,21 @@
         "desc": "注入模型 Layout 的 JSON，用于微调模型在画布中的位置/缩放，可解决颈部错位等问题。示例：{\"Center Y\": 0.05}",
         "label": "Layout JSON"
       },
+      "fps_cap": {
+        "title": "帧率上限",
+        "desc": "限制看板娘的渲染频率（上限 30 帧）：绘制调用实测约降六成。在本来就跑不满 30 帧的机器上（重模型常见），看板娘不会变快，但整页帧率实测从 13 升到 29；保存后即时生效。",
+        "options": {
+          "off": "不封顶",
+          "fps30": "30 帧"
+        }
+      },
+      "preload": {
+        "title": "预缓存所有模型",
+        "desc": "关闭时不预下载远端大模型（约95MB）。"
+      },
       "custom": {
         "title": "模型管理",
-        "desc": "内置与自定义模型统一管理：点「设为默认」切换默认模型，也可以添加自己的模型（模型清单地址为 .model3.json 或 index.json）。",
+        "desc": "内置与自定义模型统一管理：点「设为默认」切换默认模型，也可以添加自己的模型（模型清单地址为 .model3.json 或 index.json）。默认已是随站点打包的轻量模型；芙宁娜约 95MB、只能走远端，弱机上整页会掉到约 12 帧。",
         "add": "添加模型",
         "remove": "删除",
         "defaultFlag": "默认",
@@ -942,6 +991,39 @@
       "text": {
         "title": "文本指针",
         "desc": "可编辑文本上的指针图片"
+      },
+      "scheme": {
+        "title": "指针方案",
+        "desc": "选择整套指针风格， furina 可逐态覆盖",
+        "options": {
+          "furina": "芙宁娜",
+          "dot": "小圆点",
+          "minimal": "系统原生"
+        }
+      },
+      "trail": {
+        "title": "指针拖尾",
+        "desc": "鼠标移动留下渐隐光点（实验性）"
+      }
+    },
+    "ambient": {
+      "enable": {
+        "title": "氛围背景",
+        "desc": "全屏程序化粒子背景（实验性），默认关闭"
+      },
+      "type": {
+        "title": "背景样式",
+        "desc": "氛围背景使用的粒子预设",
+        "options": {
+          "snow": "飘雪",
+          "sakura": "落樱",
+          "starry": "星夜",
+          "bubbles": "气泡"
+        }
+      },
+      "disable_mobile": {
+        "title": "移动端关闭",
+        "desc": "触屏设备不渲染氛围背景"
       }
     },
     "firework": {

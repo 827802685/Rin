@@ -1,4 +1,4 @@
-export const HEADER_LAYOUT_OPTIONS = ["classic", "compact"] as const;
+export const HEADER_LAYOUT_OPTIONS = ["classic", "compact", "sidebar"] as const;
 export const HEADER_BEHAVIOR_OPTIONS = ["fixed", "static", "reveal"] as const;
 
 export type HeaderLayoutOption = (typeof HEADER_LAYOUT_OPTIONS)[number];

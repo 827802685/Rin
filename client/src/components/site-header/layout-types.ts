@@ -25,6 +25,8 @@ export type HeaderLayoutDefinition = {
   renderRouteShell: (props: {
     header: ReactNode;
     content: ReactNode;
+    /** content 未经 Padding 包裹的原始节点，供侧栏壳自行控制留白 */
+    rawContent?: ReactNode;
     footer: ReactNode;
     paddingClassName?: string;
   }) => ReactNode;

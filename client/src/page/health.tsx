@@ -108,7 +108,7 @@ export function HealthPage() {
 
       {loading ? (
         <div className="flex items-center gap-3 py-8 text-sm text-neutral-500 dark:text-neutral-400">
-          <ReactLoading width="1.25em" height="1.25em" type="spin" color="#FC466B" />
+          <ReactLoading width="1.25em" height="1.25em" type="spin" color="rgb(var(--theme-rgb))" />
           <span>{t("health.loading")}</span>
         </div>
       ) : null}

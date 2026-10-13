@@ -2,7 +2,8 @@
 
 @layer base {
     .border-card {
-        @apply shadow-lg border dark:border-neutral-600 shadow-deep rounded-xl p-4 bg-w text-sm t-secondary font-normal flex flex-col items-start mt-2 space-y-2
+        @apply shadow-lg border shadow-deep rounded-xl p-4 bg-w text-sm t-secondary font-normal flex flex-col items-start mt-2 space-y-2;
+        border-color: var(--border-default, #e5e5e5);
     }
 
     .anchor-link {

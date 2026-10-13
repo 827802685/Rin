@@ -6,6 +6,7 @@ import { Helmet } from "react-helmet";
 import { siteName } from '../utils/constants';
 import { useTranslation } from "react-i18next";
 import { buildLoginPath, HIDDEN_LOGIN_REDIRECT } from "../utils/auth-redirect";
+import { setDataColorModeWithFade } from "../utils/darkModeUtils";
 
 type ThemeMode = 'light' | 'dark' | 'system';
 function Footer() {
@@ -73,18 +74,10 @@ function Footer() {
         setModeState(mode);
         localStorage.setItem('theme', mode);
 
-
-        if (mode !== 'system' || (!('theme' in localStorage) && window.matchMedia(`(prefers-color-scheme: ${mode})`).matches)) {
-            document.documentElement.setAttribute('data-color-mode', mode);
-        } else {
-            const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)')
-            if (mediaQuery.matches) {
-                document.documentElement.setAttribute('data-color-mode', 'dark');
-            } else {
-                document.documentElement.setAttribute('data-color-mode', 'light');
-            }
-        }
-        window.dispatchEvent(new Event("colorSchemeChange"));
+        const resolved: 'light' | 'dark' = mode === 'system'
+            ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
+            : mode;
+        setDataColorModeWithFade(resolved);
     };
 
     return (

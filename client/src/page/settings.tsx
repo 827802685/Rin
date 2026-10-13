@@ -112,7 +112,7 @@ export function Settings() {
       </Helmet>
       <main className="w-full rounded-2xl bg-w" aria-label={t("main_content")}>
         <div className="flex flex-col items-start space-y-2 pb-24">
-          {(loading || saving) && <ReactLoading width="1em" height="1em" type="spin" color="#FC466B" />}
+          {(loading || saving) && <ReactLoading width="1em" height="1em" type="spin" color="rgb(var(--theme-rgb))" />}
           <ItemTitle title={t("settings.site.title")} />
           <ItemInput
             title={t("settings.site.name.title")}
@@ -380,6 +380,78 @@ export function Settings() {
               }
             }}
           />
+
+          <ItemTitle title="GitHub 同步与 CDN" />
+          <ItemSwitch
+            title={t("启用 GitHub 同步")}
+            description="开启后每日 cron 自动把已发布文章、动态和被引用的站内图片同步到 GitHub 仓库；文章加载时图片走 GitHub CDN。"
+            checked={Boolean(serverConfig.get("github.enabled"))}
+            onChange={(checked) => {
+              setConfigValue("server", "github.enabled", checked);
+            }}
+          />
+          <SettingsCard>
+            <SettingsCardHeader
+              title="GitHub 仓库配置"
+              description="注意：内置推送走 GitHub contents API，单文件上限 1 MiB，超限的图片/视频会被跳过。大文件（视频）建议用仓库侧 GitHub Actions 主动拉取：配置好本卡片后，把仓库的 workflow 指向 GET /api/github/export 即可（PAT 鉴权，含全量文章与媒体清单）。"
+            />
+            <SettingsCardBody>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium mb-1">仓库所有者（GitHub 用户名）</label>
+                  <input
+                    type="text"
+                    value={String(serverConfig.get("github.repo_owner") ?? "")}
+                    placeholder="your-username"
+                    onChange={(e) => setConfigValue("server", "github.repo_owner", e.target.value)}
+                    className="w-full px-3 py-2 border rounded-md dark:border-gray-600 dark:bg-gray-800"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-1">仓库名称</label>
+                  <input
+                    type="text"
+                    value={String(serverConfig.get("github.repo_name") ?? "")}
+                    placeholder="my-blog-content"
+                    onChange={(e) => setConfigValue("server", "github.repo_name", e.target.value)}
+                    className="w-full px-3 py-2 border rounded-md dark:border-gray-600 dark:bg-gray-800"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-1">分支名称</label>
+                  <input
+                    type="text"
+                    value={String(serverConfig.get("github.repo_branch") ?? "main")}
+                    placeholder="main"
+                    onChange={(e) => setConfigValue("server", "github.repo_branch", e.target.value)}
+                    className="w-full px-3 py-2 border rounded-md dark:border-gray-600 dark:bg-gray-800"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-1">Personal Access Token</label>
+                  <input
+                    type="password"
+                    value={String(serverConfig.get("github.pat") ?? "")}
+                    placeholder="ghp_xxxxxxxxxxxx"
+                    onChange={(e) => setConfigValue("server", "github.pat", e.target.value)}
+                    className="w-full px-3 py-2 border rounded-md dark:border-gray-600 dark:bg-gray-800"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">fine-grained token，只给目标仓库的 Contents: Read and write 权限即可</p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-1">自定义 CDN 地址（可选）</label>
+                  <input
+                    type="text"
+                    value={String(serverConfig.get("github.cdn_base_url") ?? "")}
+                    placeholder="https://cdn.example.com 或留空使用 jsDelivr"
+                    onChange={(e) => setConfigValue("server", "github.cdn_base_url", e.target.value)}
+                    className="w-full px-3 py-2 border rounded-md dark:border-gray-600 dark:bg-gray-800"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">留空时默认使用 https://cdn.jsdelivr.net/gh/owner/repo@branch</p>
+                </div>
+              </div>
+            </SettingsCardBody>
+          </SettingsCard>
 
           {hasUnsavedChanges && (
             <SaveBar

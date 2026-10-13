@@ -1,4 +1,5 @@
-const DEFAULT_THEME_COLOR = "#fc466b";
+// 与 @rin/config 的 theme.color 默认值保持一致（单一口径）
+const DEFAULT_THEME_COLOR = "#5ab0d8";
 
 function normalizeHex(value: string | undefined | null) {
   if (!value) return DEFAULT_THEME_COLOR;

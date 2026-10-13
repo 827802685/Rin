@@ -21,11 +21,40 @@ import {
 import { FEED_CARD_VARIANTS, normalizeFeedCardVariant } from "../components/feed-card-options";
 import { FeedCardPreview } from "../components/feed-card-preview";
 import { FEED_LAYOUT_OPTIONS, normalizeFeedLayout } from "../components/feed-layout-options";
-import { BUILTIN_MODELS, newCustomModelId, parseCustomModels } from "../components/theme/live2d/models";
+import { BUILTIN_MODELS, newCustomModelId, parseCustomModels, resolveDefaultName } from "../components/theme/live2d/models";
+import { CURSOR_SCHEME_IDS } from "../components/theme/cursor-registry";
+import { AMBIENT_TYPES, normalizeAmbientType } from "../components/theme/ambient-background";
+import { FPS_CAP_OPTIONS, normalizeFpsCap } from "../components/theme/live2d/perf";
 import { useSiteConfig } from "../hooks/useSiteConfig";
 import { useSettingsDraft } from "../hooks/use-settings-draft";
 import { applyThemeColor, normalizeThemeColor } from "../utils/theme-color";
+import {
+  applyCustomThemeCss,
+  applyThemeConfig,
+  applyThemeScheme,
+  importSchemeFromCss,
+  THEME_SCHEME_IDS,
+  THEME_SCHEMES,
+  type ThemeSchemePack,
+} from "../utils/theme-scheme";
 import { ItemInput, ItemSwitch, ItemTitle, SaveBar } from "./settings-items";
+
+// 配色方案迷你预览：上下并排的深/浅两档小面，色值直接取自方案包（不依赖全局令牌）
+function SchemeMini({ mode, scheme }: { mode: "light" | "dark"; scheme: ThemeSchemePack }) {
+  const colors = scheme[mode];
+  return (
+    <div
+      className="flex-1 rounded-lg border p-1.5"
+      style={{ backgroundColor: colors["surface-page"], borderColor: colors["border-default"] }}
+    >
+      <div className="rounded-md p-1.5" style={{ backgroundColor: colors["surface-raised"] }}>
+        <div className="h-1.5 w-3/4 rounded" style={{ backgroundColor: colors["text-primary"] }} />
+        <div className="mt-1 h-1 w-1/2 rounded" style={{ backgroundColor: colors["text-muted"] }} />
+        <div className="mt-1.5 h-1 w-6 rounded-full" style={{ backgroundColor: scheme.accent }} />
+      </div>
+    </div>
+  );
+}
 
 const THEME_COLOR_OPTIONS = [
   { label: "Furina", value: "#5ab0d8" },
@@ -109,6 +138,8 @@ export function SettingsTheme() {
   const [newModelUrl, setNewModelUrl] = useState("");
 
   const themeColorValue = normalizeThemeColor(String(clientConfig.get("theme.color") ?? "#5ab0d8"));
+  const schemeValue = String(clientConfig.get("theme.scheme") ?? "default");
+  const customCssValue = String(clientConfig.get("theme.custom_css") ?? "");
   const feedLayoutValue = normalizeFeedLayout(String(clientConfig.get("feed.layout") ?? "list"));
   const feedCardVariantValue = normalizeFeedCardVariant(String(clientConfig.get("feed.card_variant") ?? "default"));
   const previewSiteName = String(clientConfig.get("site.name") ?? clientConfig.default("site.name") ?? "Rin");
@@ -117,13 +148,17 @@ export function SettingsTheme() {
   const live2dEnabled = clientConfig.getBoolean("widget.live2d.enabled");
   const live2dPosition = String(clientConfig.get("widget.live2d.position") ?? "right");
   const live2dScale = String(clientConfig.get("widget.live2d.scale") ?? "1");
-  // 默认模型 id（furina / BCSZ1.1 / 自定义模型 id）
-  const live2dDefaultModel = String(clientConfig.get("widget.live2d.defaultModel") ?? "furina");
   // 自定义模型列表配置（JSON 数组 [{ id, name, url }]，解析逻辑统一在 live2d/models.ts）
   const live2dCustomModelsRaw = clientConfig.get("widget.live2d.customModels");
   const live2dCustomModels = useMemo(
     () => parseCustomModels(live2dCustomModelsRaw),
     [live2dCustomModelsRaw],
+  );
+  // 默认模型 id（furina / BCSZ1.1 / 自定义模型 id）：与看板娘加载侧共用同一解析，
+  // 免得两处对非法值/空值各自兜底，界面上高亮的模型和真正加载的模型不一致。
+  const live2dDefaultModel = resolveDefaultName(
+    clientConfig.get("widget.live2d.defaultModel"),
+    live2dCustomModels,
   );
   // 设置页模型列表展示项：内置模型在前（展示名走 i18n），自定义模型在后
   const live2dModelEntries = useMemo(() => {
@@ -137,9 +172,15 @@ export function SettingsTheme() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [live2dCustomModels, t]);
   const cursorEnabled = clientConfig.getBoolean("widget.cursor.enabled");
-  const cursorDefault = String(clientConfig.get("widget.cursor.default") ?? "/cursors/furina/normal.png");
-  const cursorPointer = String(clientConfig.get("widget.cursor.pointer") ?? "/cursors/furina/link.png");
-  const cursorText = String(clientConfig.get("widget.cursor.text") ?? "/cursors/furina/text.png");
+  const cursorScheme = String(clientConfig.get("widget.cursor.scheme") ?? "furina");
+  const cursorTrailEnabled = clientConfig.getBoolean("widget.cursor.trail_enabled");
+  // 三键为逐态覆盖：留空时回落到所选方案的图案
+  const cursorDefault = String(clientConfig.get("widget.cursor.default") || "/cursors/furina/normal.png");
+  const cursorPointer = String(clientConfig.get("widget.cursor.pointer") || "/cursors/furina/link.png");
+  const cursorText = String(clientConfig.get("widget.cursor.text") || "/cursors/furina/text.png");
+  const ambientEnabled = clientConfig.getBoolean("widget.ambient.enabled");
+  const ambientType = normalizeAmbientType(String(clientConfig.get("widget.ambient.type") ?? "snow"));
+  const ambientMobileDisabled = clientConfig.getBoolean("widget.ambient.disable_on_mobile");
   const fireworkEnabled = clientConfig.getBoolean("widget.firework.enabled");
   const fireworkMobileDisabled = clientConfig.getBoolean("widget.firework.disable_on_mobile");
   const playerEnabled = clientConfig.getBoolean("widget.player.enabled");
@@ -189,12 +230,13 @@ export function SettingsTheme() {
     setNewModelUrl("");
   }
 
-  // 删除一个自定义模型；若其为当前默认模型，重置默认模型为 furina
+  // 删除一个自定义模型；若其为当前默认模型，重置到可打包的轻模型 BCSZ1.1
+  // （furina 约 95MB 且只能走远端 CDN，不能当兜底默认）
   function handleRemoveCustomModel(id: string) {
     const next = live2dCustomModels.filter((c) => c.id !== id);
     saveCustomModels(next);
     if (live2dDefaultModel === id) {
-      setConfigValue("widget.live2d.defaultModel", "furina");
+      setConfigValue("widget.live2d.defaultModel", "BCSZ1.1");
     }
   }
 
@@ -205,7 +247,7 @@ export function SettingsTheme() {
       </Helmet>
       <main className="w-full rounded-2xl bg-w" aria-label={t("theme.title")}>
         <div className="flex flex-col items-start space-y-2 pb-24">
-          {(loading || saving) && <ReactLoading width="1em" height="1em" type="spin" color="#FC466B" />}
+          {(loading || saving) && <ReactLoading width="1em" height="1em" type="spin" color="rgb(var(--theme-rgb))" />}
 
           <ItemTitle title={t("settings.personalization.title")} />
           <div className="w-full">
@@ -348,6 +390,119 @@ export function SettingsTheme() {
             </SettingsCard>
           </div>
 
+          <ItemTitle title={t("settings.theme_scheme.title")} />
+          <div className="w-full">
+            <SettingsCard>
+              <SettingsCardRow
+                header={
+                  <SettingsCardHeader
+                    title={t("settings.theme_scheme.title")}
+                    description={t("settings.theme_scheme.desc")}
+                  />
+                }
+                action={
+                  <div className="text-sm font-medium t-primary">
+                    {t(`settings.theme_scheme.options.${schemeValue}`)}
+                  </div>
+                }
+              />
+              <SettingsCardBody>
+                <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
+                  {THEME_SCHEME_IDS.map((id) => {
+                    const scheme = THEME_SCHEMES[id];
+                    const selected = schemeValue === id;
+                    return (
+                      <button
+                        key={id}
+                        type="button"
+                        onClick={() => {
+                          setConfigValue("theme.scheme", id);
+                          setConfigValue("theme.color", scheme.accent);
+                          applyThemeScheme(id, scheme.accent);
+                        }}
+                        className={`rounded-xl border p-2 text-start transition-all ${
+                          selected
+                            ? "border-theme bg-theme/5 shadow-sm shadow-theme/10"
+                            : "border-black/10 hover:border-black/20 dark:border-white/10 dark:hover:border-white/20"
+                        }`}
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-sm font-medium t-primary">
+                            {t(`settings.theme_scheme.options.${id}`)}
+                          </span>
+                          {selected ? <i className="ri-check-line text-theme" /> : null}
+                        </div>
+                        <div className="mt-1 flex gap-1.5">
+                          <SchemeMini mode="light" scheme={scheme} />
+                          <SchemeMini mode="dark" scheme={scheme} />
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </SettingsCardBody>
+            </SettingsCard>
+          </div>
+
+          {/* 外部主题接入（groundwork）：解析色值成方案 + 原样挂载自定义 CSS，仅管理员页内 */}
+          <div className="w-full">
+            <SettingsCard>
+              <SettingsCardRow
+                header={
+                  <SettingsCardHeader
+                    title={t("settings.custom_css.title")}
+                    description={t("settings.custom_css.desc")}
+                  />
+                }
+                action={
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      className="text-sm text-theme hover:underline"
+                      onClick={() => {
+                        setConfigValue("theme.custom_css", customCssValue);
+                        setConfigValue("theme.scheme", "custom");
+                        applyThemeConfig({ scheme: "custom", customCss: customCssValue });
+                        showAlert(
+                          importSchemeFromCss(customCssValue)
+                            ? t("settings.custom_css.parsed")
+                            : t("settings.custom_css.no_tokens"),
+                        );
+                      }}
+                    >
+                      {t("settings.custom_css.preview")}
+                    </button>
+                    <button
+                      type="button"
+                      className="text-sm text-neutral-500 hover:underline dark:text-neutral-400"
+                      onClick={() => {
+                        setConfigValue("theme.custom_css", "");
+                        applyCustomThemeCss("");
+                      }}
+                    >
+                      {t("settings.custom_css.clear")}
+                    </button>
+                  </div>
+                }
+              />
+              <SettingsCardBody>
+                <textarea
+                  value={customCssValue}
+                  onChange={(event) => {
+                    setConfigValue("theme.custom_css", event.target.value);
+                  }}
+                  className={`${fieldBaseClassName} min-h-32 px-4 py-3 font-mono text-xs placeholder:text-neutral-400 dark:placeholder:text-neutral-500`}
+                  placeholder={':root {\n  --surface-page: #f6f7f9;\n  --text-primary: #17181c;\n  --theme-color: #d16180;\n}'}
+                />
+                {customCssValue.includes("@import") ? (
+                  <p className="mt-2 text-xs text-amber-600 dark:text-amber-500">
+                    {t("settings.custom_css.import_warn")}
+                  </p>
+                ) : null}
+              </SettingsCardBody>
+            </SettingsCard>
+          </div>
+
           <ItemTitle title={t("theme.color_section.title")} />
           <div className="w-full">
             <SettingsCard>
@@ -457,6 +612,43 @@ export function SettingsTheme() {
                 placeholder='{"Center Y": 0.05}'
                 onChange={(value) => {
                   setConfigValue("widget.live2d.layout", value);
+                }}
+              />
+              <div className="w-full">
+                <SettingsCard>
+                  <SettingsCardRow
+                    header={
+                      <SettingsCardHeader
+                        title={t("theme.live2d.fps_cap.title")}
+                        description={t("theme.live2d.fps_cap.desc")}
+                      />
+                    }
+                    action={
+                      <SearchableSelect
+                        value={String(normalizeFpsCap(clientConfig.get("widget.live2d.fps_cap")))}
+                        onChange={(value) => {
+                          setConfigValue("widget.live2d.fps_cap", normalizeFpsCap(value));
+                        }}
+                        options={FPS_CAP_OPTIONS.map((value) => ({
+                          value: String(value),
+                          label: value === 0
+                            ? t("theme.live2d.fps_cap.options.off")
+                            : t("theme.live2d.fps_cap.options.fps30"),
+                        }))}
+                        placeholder={t("theme.live2d.fps_cap.title")}
+                        emptyLabel={t("no_more")}
+                        searchable={false}
+                      />
+                    }
+                  />
+                </SettingsCard>
+              </div>
+              <ItemSwitch
+                title={t("theme.live2d.preload.title")}
+                description={t("theme.live2d.preload.desc")}
+                checked={clientConfig.getBoolean("widget.live2d.preload")}
+                onChange={(checked) => {
+                  setConfigValue("widget.live2d.preload", checked);
                 }}
               />
               {/* 模型管理：内置 + 自定义统一列出，点"设为默认"切换默认模型，添加表单在底部 */}
@@ -570,6 +762,36 @@ export function SettingsTheme() {
                   <SettingsCardRow
                     header={
                       <SettingsCardHeader
+                        title={t("theme.cursor.scheme.title")}
+                        description={t("theme.cursor.scheme.desc")}
+                      />
+                    }
+                    action={
+                      <SearchableSelect
+                        value={cursorScheme}
+                        onChange={(value) => {
+                          setConfigValue("widget.cursor.scheme", value);
+                        }}
+                        options={CURSOR_SCHEME_IDS.map((value) => ({
+                          value,
+                          label: t(`theme.cursor.scheme.options.${value}`),
+                        }))}
+                        placeholder={t("theme.cursor.scheme.title")}
+                        emptyLabel={t("no_more")}
+                        searchable={false}
+                      />
+                    }
+                  />
+                </SettingsCard>
+              </div>
+              {/* 逐态覆盖只对 furina 资源集有意义 */}
+              {cursorScheme === "furina" ? (
+                <>
+              <div className="w-full">
+                <SettingsCard>
+                  <SettingsCardRow
+                    header={
+                      <SettingsCardHeader
                         title={t("theme.cursor.default.title")}
                         description={t("theme.cursor.default.desc")}
                       />
@@ -643,8 +865,19 @@ export function SettingsTheme() {
                   </SettingsCardBody>
                 </SettingsCard>
               </div>
+                </>
+              ) : null}
             </>
           ) : null}
+
+          <ItemSwitch
+            title={t("theme.cursor.trail.title")}
+            description={t("theme.cursor.trail.desc")}
+            checked={cursorTrailEnabled}
+            onChange={(checked) => {
+              setConfigValue("widget.cursor.trail_enabled", checked);
+            }}
+          />
 
           <ItemSwitch
             title={t("theme.firework.enable.title")}
@@ -663,6 +896,54 @@ export function SettingsTheme() {
                 setConfigValue("widget.firework.disable_on_mobile", checked);
               }}
             />
+          ) : null}
+
+          <ItemSwitch
+            title={t("theme.ambient.enable.title")}
+            description={t("theme.ambient.enable.desc")}
+            checked={ambientEnabled}
+            onChange={(checked) => {
+              setConfigValue("widget.ambient.enabled", checked);
+            }}
+          />
+          {ambientEnabled ? (
+            <>
+              <div className="w-full">
+                <SettingsCard>
+                  <SettingsCardRow
+                    header={
+                      <SettingsCardHeader
+                        title={t("theme.ambient.type.title")}
+                        description={t("theme.ambient.type.desc")}
+                      />
+                    }
+                    action={
+                      <SearchableSelect
+                        value={ambientType}
+                        onChange={(value) => {
+                          setConfigValue("widget.ambient.type", value);
+                        }}
+                        options={AMBIENT_TYPES.map((value) => ({
+                          value,
+                          label: t(`theme.ambient.type.options.${value}`),
+                        }))}
+                        placeholder={t("theme.ambient.type.title")}
+                        emptyLabel={t("no_more")}
+                        searchable={false}
+                      />
+                    }
+                  />
+                </SettingsCard>
+              </div>
+              <ItemSwitch
+                title={t("theme.ambient.disable_mobile.title")}
+                description={t("theme.ambient.disable_mobile.desc")}
+                checked={ambientMobileDisabled}
+                onChange={(checked) => {
+                  setConfigValue("widget.ambient.disable_on_mobile", checked);
+                }}
+              />
+            </>
           ) : null}
 
           <ItemSwitch

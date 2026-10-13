@@ -64,6 +64,10 @@ RSS_DESCRIPTION = "${env.RSS_DESCRIPTION || "Development Environment"}"
 CACHE_STORAGE_MODE = "${env.CACHE_STORAGE_MODE || "s3"}"
 ADMIN_USERNAME = "${env.ADMIN_USERNAME}"
 ADMIN_PASSWORD = "${env.ADMIN_PASSWORD}"
+GITHUB_REPO_OWNER = "${env.GITHUB_REPO_OWNER || ""}"
+GITHUB_REPO_NAME = "${env.GITHUB_REPO_NAME || ""}"
+GITHUB_REPO_BRANCH = "${env.GITHUB_REPO_BRANCH || "main"}"
+GITHUB_CDN_BASE_URL = "${env.GITHUB_CDN_BASE_URL || ""}"
 
 [[d1_databases]]
 binding = "DB"
@@ -78,6 +82,11 @@ queue = "${env.TASK_QUEUE_NAME || env.AI_SUMMARY_QUEUE_NAME || `${env.WORKER_NAM
 queue = "${env.TASK_QUEUE_NAME || env.AI_SUMMARY_QUEUE_NAME || `${env.WORKER_NAME || "rin-server"}-tasks`}"
 max_batch_size = 1
 max_batch_timeout = 5
+
+[[kv_namespaces]]
+binding = "KV_CACHE"
+id = "local-kv-cache-id"
+preview_id = "local-kv-cache-preview-id"
 ${env.R2_BUCKET_NAME
   ? `
 
@@ -106,7 +115,8 @@ JWT_SECRET=${env.JWT_SECRET}
 ${env.R2_BUCKET_NAME ? "" : `S3_ACCESS_KEY_ID=${env.S3_ACCESS_KEY_ID}
 S3_SECRET_ACCESS_KEY=${env.S3_SECRET_ACCESS_KEY}
 `}
-`,
+${env.GITHUB_PAT ? `GITHUB_PAT=${env.GITHUB_PAT}
+` : ""}`,
   );
 
   console.log("✅ 已生成 wrangler.toml");

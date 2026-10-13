@@ -198,7 +198,7 @@ export function RichTextEditor({ content, setContent, placeholder = "> 开始写
   if (!editor) {
     return (
       <div className="flex h-40 items-center justify-center">
-        <Loading type="spin" color="#FC466B" height={24} width={24} />
+        <Loading type="spin" color="rgb(var(--theme-rgb))" height={24} width={24} />
       </div>
     );
   }

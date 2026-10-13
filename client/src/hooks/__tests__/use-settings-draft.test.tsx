@@ -15,6 +15,20 @@ vi.mock("../../utils/theme-color", () => ({
     applyThemeColor: vi.fn(),
 }));
 
+const applyCustomThemeCss = vi.fn();
+const applyThemeScheme = vi.fn();
+const applyThemeConfig = vi.fn();
+
+vi.mock("../../utils/theme-scheme", async (importOriginal) => {
+    const actual = await importOriginal<Record<string, unknown>>();
+    return {
+        ...actual,
+        applyThemeConfig: (input: unknown) => applyThemeConfig(input),
+        applyCustomThemeCss: (css: unknown) => applyCustomThemeCss(css),
+        applyThemeScheme: (scheme: unknown, color: unknown) => applyThemeScheme(scheme, color),
+    };
+});
+
 const loadSettingsConfigState = vi.fn();
 const saveSettingsConfigState = vi.fn();
 
@@ -27,7 +41,6 @@ vi.mock("../../page/settings-helpers", async (importOriginal) => {
     };
 });
 
-const { applyThemeColor } = await import("../../utils/theme-color");
 const { useSettingsDraft } = await import("../use-settings-draft");
 
 const stored = {
@@ -127,7 +140,63 @@ describe("useSettingsDraft", () => {
         );
         await waitFor(() => expect(result.current.loading).toBe(false));
 
-        expect(applyThemeColor).toHaveBeenCalled();
+        // 加载成功后经 applyThemeConfig 总入口落地主题（内部再派发到配色/方案）
+        expect(applyThemeConfig).toHaveBeenCalledTimes(1);
+        expect(applyThemeConfig).toHaveBeenCalledWith({ scheme: undefined, color: undefined, customCss: undefined });
+
+        applyThemeConfig.mockClear();
+        const { result: plain } = renderHook(() =>
+            useSettingsDraft({ successMessage: "saved" }),
+        );
+        await waitFor(() => expect(plain.current.loading).toBe(false));
+        expect(applyThemeConfig).not.toHaveBeenCalled();
+    });
+
+    it("unmount restores the loaded initial draft via applyThemeConfig", async () => {
+        const storedDraft = {
+            clientConfig: { "site.name": "Rin", "theme.scheme": "sakura", "theme.color": "#d16180", "theme.custom_css": ":root{--surface-page:#102030}" },
+            serverConfig: {},
+        };
+        loadSettingsConfigState.mockResolvedValue({ draft: storedDraft, hasStoredAiApiKey: false });
+
+        const { result, unmount } = renderHook(() =>
+            useSettingsDraft({ successMessage: "saved", liveThemeColor: true }),
+        );
+        await waitFor(() => expect(result.current.loading).toBe(false));
+
+        applyThemeConfig.mockClear();
+        act(() => {
+            result.current.setConfigValue("client", "theme.custom_css", ":root{--surface-page:#000000}");
+        });
+        expect(applyThemeConfig).not.toHaveBeenCalled();
+
+        unmount();
+        expect(applyThemeConfig).toHaveBeenCalledWith({
+            scheme: "sakura",
+            color: "#d16180",
+            customCss: ":root{--surface-page:#102030}",
+        });
+    });
+
+    it("never unmounts: cleanup must not fire mid-session even if unstable deps change", async () => {
+        // 本用例环境下 useTranslation 每次渲染返回新的 t：旧实现把 t 放进加载
+        // effect 依赖，加载后的任意重渲染会触发"重跑的清理"，用仍是空的初始
+        // 草稿把实时主题（含自定义 CSS 预览）清掉。实测表现为预览刚挂上就消失。
+        loadSettingsConfigState.mockResolvedValue({
+            draft: { clientConfig: { "site.name": "Rin", "theme.scheme": "sakura" }, serverConfig: {} },
+            hasStoredAiApiKey: false,
+        });
+
+        const { result, rerender } = renderHook(() =>
+            useSettingsDraft({ successMessage: "saved", liveThemeColor: true }),
+        );
+        await waitFor(() => expect(result.current.loading).toBe(false));
+
+        applyThemeConfig.mockClear();
+        rerender();
+        rerender();
+
+        expect(applyThemeConfig).not.toHaveBeenCalled();
     });
 
     it("runs the onLoaded and onSaved hooks", async () => {

@@ -11,6 +11,10 @@ const MIN_SCALE = 0.1;
 const MAX_SCALE = 2;
 // 插件 #waifu-canvas 的基准尺寸（像素）
 const BASE_BOX = 300;
+// 窄屏阈值与收缩比例、下限（见 widgetBoxSize）
+const NARROW_VIEWPORT = 640;
+const NARROW_RATIO = 0.45;
+const MIN_BOX = 150;
 
 // 缩放配置归一化：缺失/非法 → 1；有限值钳制到 [0.1, 2]。
 export function normalizeScale(raw: unknown): number {
@@ -41,7 +45,18 @@ export function parseLayoutConfig(raw: string): Record<string, number> | null {
 }
 
 // 模型容器边长（宽=高）：300 * scale 四舍五入。
-export function widgetBoxSize(scale: number): { width: number; height: number } {
+//
+// 窄屏收缩（实测）：531px 宽的视口里 300px 画布 + 工具列占了约 63% 的宽度，
+// 看板娘压在正文与设置项上面。宽度不足 NARROW_VIEWPORT 时按视口比例收，
+// 最低不低于 MIN_BOX（再小模型就糊了）。viewportWidth 省略或 0 表示未知 → 保持原尺寸。
+export function widgetBoxSize(
+  scale: number,
+  viewportWidth = 0,
+): { width: number; height: number } {
   const side = Math.round(BASE_BOX * scale);
-  return { width: side, height: side };
+  if (!viewportWidth || viewportWidth >= NARROW_VIEWPORT) {
+    return { width: side, height: side };
+  }
+  const capped = Math.max(MIN_BOX, Math.min(side, Math.round(viewportWidth * NARROW_RATIO)));
+  return { width: capped, height: capped };
 }

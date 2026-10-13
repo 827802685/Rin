@@ -208,6 +208,7 @@
     "api_url": "API_URL in Pages environment variables should be the Worker address. Please check if API_URL in Pages environment variables is correct.",
     "api_url_slash": "API_URL in Pages environment variables should be the Worker address. Please check if API_URL in Pages environment variables is correct and ensure API_URL does not end with a slash (/).",
     "github_callback": "GitHub OAuth callback URL should be `https://<Worker address>/api/user/github/callback`. Please check if the GitHub OAuth callback URL is correct.",
+    "login_required": "Please log in to open this page",
     "not_found": "Page not found",
     "permission_denied": "Permission denied",
     "title": "Error"
@@ -218,6 +219,14 @@
   },
   "footer": {
     "rss": "RSS Subscription Link"
+  },
+  "sidebar": {
+    "loading": "Loading sidebar…",
+    "tags_failed": "Tag data could not be fetched",
+    "retry": "Retry",
+    "tags_title": "Popular tags",
+    "view_tags": "Tags",
+    "view_timeline": "Timeline"
   },
   "friends": {
     "apply": "Apply for Friend Link",
@@ -500,11 +509,13 @@
       "desc": "Choose how the site header is arranged on desktop screens and preview each style below",
       "options": {
         "classic": "Classic centered",
-        "compact": "Minimal"
+        "compact": "Minimal",
+        "sidebar": "Sidebar two-column (experimental)"
       },
       "preview": {
         "classic": "Brand, centered navigation, and actions stay balanced like the current header.",
-        "compact": "A text-first header with almost no decoration, keeping only the essential information."
+        "compact": "A text-first header with almost no decoration, keeping only the essential information.",
+        "sidebar": "Main content on the left with a sticky sidebar (profile, tags, table of contents). Collapses to one column on narrow screens."
       }
     },
     "header_behavior": {
@@ -521,11 +532,13 @@
       "desc": "Choose the visual treatment used by article cards across feed, search, and tag lists",
       "options": {
         "default": "Default",
-        "editorial": "Editorial"
+        "editorial": "Editorial",
+        "cover": "Cover-first (experimental)"
       },
       "preview": {
         "default": "The current compact card with a simple surface and minimal framing.",
-        "editorial": "A more expressive card with a tinted surface, stronger hierarchy, and gallery-like framing."
+        "editorial": "A more expressive card with a tinted surface, stronger hierarchy, and gallery-like framing.",
+        "cover": "A large image spans the card top, with a roomier text block below."
       }
     },
     "feed_layout": {
@@ -534,12 +547,36 @@
       "preview_note": "Preview only. The selected layout is applied after saving settings.",
       "options": {
         "list": "Single column",
-        "masonry": "Masonry"
+        "masonry": "Masonry",
+        "magazine": "Magazine grid (experimental)"
       },
       "preview": {
         "list": "A steady reading flow with one card per row.",
-        "masonry": "A staggered multi-column layout that packs cards by height."
+        "masonry": "A staggered multi-column layout that packs cards by height.",
+        "magazine": "A two-column equal-width grid that pairs with cover-style cards."
       }
+    },
+    "theme_scheme": {
+      "title": "Color scheme",
+      "desc": "Preset page surfaces, text, and border colors (experimental). Click to preview instantly; saving applies it and switches the accent color.",
+      "options": {
+        "default": "Default blue",
+        "sakura": "Sakura",
+        "ocean": "Ocean",
+        "forest": "Forest",
+        "mono": "Ink",
+        "amber": "Amber",
+        "custom": "Custom (imported)"
+      }
+    },
+    "custom_css": {
+      "title": "Custom CSS (experimental)",
+      "desc": "Paste color values from another theme's CSS; parsed into a scheme.",
+      "preview": "Apply preview",
+      "clear": "Clear",
+      "parsed": "Parsed into a custom scheme.",
+      "no_tokens": "No tokens found; the CSS will still be applied.",
+      "import_warn": "@import detected: external stylesheets will be loaded."
     },
     "theme_color": {
       "title": "Theme color",
@@ -848,7 +885,7 @@
     "live2d": {
       "enable": {
         "title": "Live2D mascot",
-        "desc": "Show the Furina Live2D model on your site"
+        "desc": "Show a Live2D mascot on your site; the lightweight model bundled with the site is the default"
       },
       "position": {
         "title": "Mascot on the left",
@@ -864,9 +901,21 @@
         "desc": "JSON injected into the model's Layout to fine-tune its position/scale on the canvas, e.g. to fix neck misalignment. Example: {\"Center Y\": 0.05}",
         "label": "Layout JSON"
       },
+      "fps_cap": {
+        "title": "Frame rate cap",
+        "desc": "Render the Live2D widget at up to 30 fps: about 60% fewer draw calls in our measurement. On a machine already below 30 fps (common with heavy models) the widget itself won't get faster, but the page measured 13 → 29 fps. Applies on save.",
+        "options": {
+          "off": "No cap",
+          "fps30": "30 fps"
+        }
+      },
+      "preload": {
+        "title": "Pre-cache all models",
+        "desc": "Off by default: skips downloading the large remote model (~95MB)."
+      },
       "custom": {
         "title": "Model Management",
-        "desc": "Manage built-in and custom models together: click \"Set as default\" to switch, or add your own model (a .model3.json or index.json URL).",
+        "desc": "Manage built-in and custom models together: click \"Set as default\" to switch, or add your own model (a .model3.json or index.json URL). The default is already the lightweight model bundled with the site; Furina is about 95MB, remote-only, and can drop the whole page to roughly 12fps on weak devices.",
         "add": "Add model",
         "remove": "Remove",
         "defaultFlag": "Default",
@@ -942,6 +991,39 @@
       "text": {
         "title": "Text cursor",
         "desc": "Cursor image used over editable text"
+      },
+      "scheme": {
+        "title": "Cursor scheme",
+        "desc": "Pick a full cursor set; per-state overrides apply to furina only",
+        "options": {
+          "furina": "Furina",
+          "dot": "Dot",
+          "minimal": "System native"
+        }
+      },
+      "trail": {
+        "title": "Cursor trail",
+        "desc": "Fading dots follow mouse movement (experimental)"
+      }
+    },
+    "ambient": {
+      "enable": {
+        "title": "Ambient background",
+        "desc": "Full-screen procedural particle background (experimental), off by default"
+      },
+      "type": {
+        "title": "Ambient style",
+        "desc": "Particle preset used by the ambient background",
+        "options": {
+          "snow": "Snow",
+          "sakura": "Sakura petals",
+          "starry": "Starry night",
+          "bubbles": "Bubbles"
+        }
+      },
+      "disable_mobile": {
+        "title": "Disable on mobile",
+        "desc": "Skip the ambient background on touch devices"
       }
     },
     "firework": {

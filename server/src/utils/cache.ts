@@ -183,6 +183,78 @@ class S3StorageProvider implements StorageProvider {
     }
 }
 
+// KV 存储提供者（高速缓存层）
+class KVStorageProvider implements StorageProvider {
+    constructor(private env: Env, private cacheMap: Map<string, any>, private type: string) {}
+
+    private getCacheKey(key: string): string {
+        return `cache:${this.type}:${key}`;
+    }
+
+    async load(): Promise<void> {
+        if (!this.env.KV_CACHE) {
+            console.warn('KV_CACHE binding not available, falling back to database');
+            return;
+        }
+
+        console.log('Cache load from KV namespace');
+        try {
+            // KV doesn't have list API in workers, so we start with empty cache
+            // and populate on-demand via getOrSet
+            console.log('KV cache initialized (lazy loading mode)');
+        } catch (e: any) {
+            console.error('Cache load from KV failed');
+            console.error(e.message);
+        }
+    }
+
+    async save(): Promise<void> {
+        // KV saves individual keys, not bulk
+        // This is called for compatibility but actual saves happen in set/delete
+    }
+
+    async delete(key: string): Promise<void> {
+        if (!this.env.KV_CACHE) return;
+        
+        try {
+            await this.env.KV_CACHE.delete(this.getCacheKey(key));
+            console.log('Cache deleted from KV:', key);
+        } catch (e: any) {
+            console.error('Cache delete from KV failed');
+            console.error(e.message);
+        }
+    }
+
+    async clear(): Promise<void> {
+        // KV doesn't have bulk delete, would need to track all keys
+        console.warn('KV cache clear not fully supported (no bulk delete)');
+    }
+
+    async get(key: string): Promise<any> {
+        if (!this.env.KV_CACHE) return undefined;
+        
+        try {
+            const value = await this.env.KV_CACHE.get(this.getCacheKey(key), 'json');
+            return value;
+        } catch (e: any) {
+            console.error('Cache get from KV failed');
+            console.error(e.message);
+            return undefined;
+        }
+    }
+
+    async set(key: string, value: any): Promise<void> {
+        if (!this.env.KV_CACHE) return;
+        
+        try {
+            await this.env.KV_CACHE.put(this.getCacheKey(key), JSON.stringify(value));
+        } catch (e: any) {
+            console.error('Cache set to KV failed');
+            console.error(e.message);
+        }
+    }
+}
+
 export class CacheImpl {
     cache: Map<string, any> = new Map<string, any>();
     db: DB;
@@ -190,6 +262,7 @@ export class CacheImpl {
     type: string;
     loaded: boolean = false;
     private storageProvider: StorageProvider;
+    private kvProvider?: KVStorageProvider;
     private cacheEnabled: Promise<boolean> | null = null;
     private configReader?: CacheConfigReader;
 
@@ -218,6 +291,12 @@ export class CacheImpl {
             this.storageProvider = new S3StorageProvider(env, this.cache, type);
         } else {
             this.storageProvider = new DatabaseStorageProvider(db, this.cache, type);
+        }
+
+        // 如果 KV_CACHE 绑定可用，创建 KV 提供者作为高速缓存层
+        if (env.KV_CACHE) {
+            this.kvProvider = new KVStorageProvider(env, this.cache, type);
+            console.log(`KV cache enabled for type: ${type}`);
         }
     }
 
@@ -259,6 +338,19 @@ export class CacheImpl {
         if (!(await this.isEnabled())) {
             return null;
         }
+
+        // Try KV cache first (fast path)
+        if (this.kvProvider) {
+            const kvValue = await this.kvProvider.get(key);
+            if (kvValue !== undefined) {
+                console.log('Cache hit (KV)', key);
+                // Update in-memory cache
+                this.cache.set(key, kvValue);
+                return kvValue;
+            }
+        }
+
+        // Fallback to persistent storage
         if (!this.loaded) {
             await this.load();
         }
@@ -325,7 +417,16 @@ export class CacheImpl {
         }
         if (!this.loaded)
             await this.load();
+        
+        // Update in-memory cache
         this.cache.set(key, value);
+        
+        // Write to KV (fast path) if available
+        if (this.kvProvider) {
+            await this.kvProvider.set(key, value);
+        }
+        
+        // Persist to database/S3 (slow path)
         if (save) {
             await this.save();
         }
@@ -335,6 +436,12 @@ export class CacheImpl {
         if (!this.loaded)
             await this.load();
         this.cache.delete(key);
+        
+        // Delete from KV if available
+        if (this.kvProvider) {
+            await this.kvProvider.delete(key);
+        }
+        
         if (save) {
             await this.storageProvider.delete(key);
         }

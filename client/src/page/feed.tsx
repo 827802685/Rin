@@ -21,6 +21,7 @@ import { ReadingProgress } from "../components/reading-progress";
 import { stripImageUrlMetadata } from "../utils/image-upload";
 import { estimateReading } from "../utils/reading-time";
 import { ShareBar } from "../components/theme/share-bar";
+import { SidebarTocPortal } from "../components/site-sidebar/sidebar-toc-portal";
 
 function extractFirstMarkdownImageUrl(content: string) {
   const match = /!\[.*?\]\((\S+?)(?:\s+"[^"]*")?\)/.exec(content);
@@ -45,6 +46,7 @@ export function FeedPage({ id, TOC, clean }: { id: string, TOC: () => JSX.Elemen
   const [top, setTop] = useState<number>(0);
   const config = useContext(ClientConfigContext);
   const counterEnabled = config.getBoolean('counter.enabled');
+  const sidebarShell = config.get<string>('header.layout') === 'sidebar';
   const hasAISummary = Boolean(feed?.ai_summary?.trim());
   const showAISummaryState = feed?.ai_summary_status === "pending" || feed?.ai_summary_status === "processing" || feed?.ai_summary_status === "failed";
   const hashtags = Array.isArray(feed?.hashtags) ? feed.hashtags : [];
@@ -154,7 +156,7 @@ export function FeedPage({ id, TOC, clean }: { id: string, TOC: () => JSX.Elemen
         {feed && !error && (
           <>
             <ReadingProgress />
-            <div className="xl:w-64" />
+            {!sidebarShell && <div className="xl:w-64" />}
             <main className="wauto">
               <article
                 className="rounded-2xl bg-w m-2 px-6 py-4"
@@ -288,13 +290,19 @@ export function FeedPage({ id, TOC, clean }: { id: string, TOC: () => JSX.Elemen
               {feed && <Comments id={`${feed.id}`} />}
               <div className="h-16" />
             </main>
-            <div className="w-80 hidden lg:block relative">
-              <div
-                className={`start-0 end-0 top-[5.5rem] sticky`}
-              >
+            {sidebarShell ? (
+              <SidebarTocPortal>
                 <TOC />
+              </SidebarTocPortal>
+            ) : (
+              <div className="w-80 hidden lg:block relative">
+                <div
+                  className={`start-0 end-0 top-[5.5rem] sticky`}
+                >
+                  <TOC />
+                </div>
               </div>
-            </div>
+            )}
           </>
         )}
       </div>

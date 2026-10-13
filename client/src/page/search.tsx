@@ -7,6 +7,7 @@ import { Waiting } from "../components/loading"
 import { client } from "../app/runtime"
 
 import { useSiteConfig } from "../hooks/useSiteConfig";
+import { getCardVariantForLayout, getFeedListClass } from "../components/feed/feed-layout";
 import { tryInt } from "../utils/int"
 
 type FeedsData = {
@@ -23,7 +24,7 @@ export function SearchPage({ keyword }: { keyword: string }) {
     const [feeds, setFeeds] = useState<FeedsData>()
     const page = tryInt(1, query.get("page"))
     const limit = tryInt(siteConfig.pageSize, query.get("limit"))
-    const feedListClass = siteConfig.feedLayout === "masonry" ? "wauto columns-1 gap-5 md:columns-2" : "wauto flex flex-col";
+    const feedListClass = getFeedListClass(siteConfig.feedLayout);
     const feedData = Array.isArray(feeds?.data) ? feeds.data : [];
     const ref = useRef("")
     function fetchFeeds() {
@@ -63,7 +64,7 @@ export function SearchPage({ keyword }: { keyword: string }) {
                     <Waiting for={status === 'idle'}>
                         <div className={feedListClass}>
                             {feedData.map(({ id, ...feed }: any) => (
-                                <FeedCard key={id} id={id} {...feed} />
+                                <FeedCard key={id} id={id} {...feed} variant={getCardVariantForLayout(siteConfig.feedLayout)} />
                             ))}
                         </div>
                         <div className="wauto flex flex-row items-center mt-4 ani-show">

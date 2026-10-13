@@ -2,8 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useAlert } from "../components/dialog";
 import {
-    applyThemeColor,
-} from "../utils/theme-color";
+    applyThemeConfig,
+} from "../utils/theme-scheme";
 import {
     areSettingsDraftsEqual,
     createSettingsConfigWrappers,
@@ -31,10 +31,20 @@ export interface UseSettingsDraftOptions {
     onSaved?: (state: SettingsLoadState) => void;
 }
 
-function readThemeColor(draft: SettingsDraft): string | undefined {
-    return typeof draft.clientConfig["theme.color"] === "string"
+function readThemeDraft(draft: SettingsDraft): { scheme: unknown; color?: string; customCss?: unknown } {
+    const color = typeof draft.clientConfig["theme.color"] === "string"
         ? (draft.clientConfig["theme.color"] as string)
         : undefined;
+    return {
+        scheme: draft.clientConfig["theme.scheme"],
+        color,
+        customCss: draft.clientConfig["theme.custom_css"],
+    };
+}
+
+function applyThemeDraft(draft: SettingsDraft) {
+    const { scheme, color, customCss } = readThemeDraft(draft);
+    applyThemeConfig({ scheme, color, customCss });
 }
 
 /**
@@ -61,9 +71,26 @@ export function useSettingsDraft(options: UseSettingsDraftOptions) {
     // Keep the callbacks in a ref so the load effect can stay a one-shot.
     const handlersRef = useRef({ onLoaded, onSaved });
     handlersRef.current = { onLoaded, onSaved };
+    // showAlert/t 的引用稳定性不保证：若把它们放进依赖，effect 会在草稿加载后
+    // 重跑，重跑的清理函数用「仍是空的初始草稿」把实时主题预览清掉（实测：
+    // 自定义 CSS 预览刚挂上就被立即移除）。一律经 ref 读最新值，effect 保持一次性。
+    const loadErrorRef = useRef({ showAlert, t });
+    loadErrorRef.current = { showAlert, t };
+    const liveFlagRef = useRef(liveThemeColor);
+    liveFlagRef.current = liveThemeColor;
 
     useEffect(() => {
-        if (loadedRef.current) return;
+        // 清理函数必须每次挂载都注册。此前 `if (loadedRef.current) return;`
+        // 写在函数体最前，StrictMode 下第二次挂载提前返回、不再返回清理函数，
+        // 卸载时的"恢复初始草稿/卸载自定义 CSS 预览"就永远不会执行（实测预览
+        // 泄漏到前台页面，直到整页刷新才被 bootstrap 重置）。
+        const restore = () => {
+            if (liveFlagRef.current) {
+                applyThemeDraft(initialDraftRef.current);
+            }
+        };
+        if (loadedRef.current) return restore;
+
         loadedRef.current = true;
 
         loadSettingsConfigState()
@@ -72,25 +99,22 @@ export function useSettingsDraft(options: UseSettingsDraftOptions) {
                 setInitialDraft(state.draft);
                 initialDraftRef.current = state.draft;
                 mergeSessionConfig(state.draft.clientConfig);
-                if (liveThemeColor) {
-                    applyThemeColor(readThemeColor(state.draft));
+                if (liveFlagRef.current) {
+                    applyThemeDraft(state.draft);
                 }
                 handlersRef.current.onLoaded?.(state);
             })
             .catch((error: unknown) => {
                 const message = error instanceof Error ? error.message : String(error);
-                showAlert(t("settings.get_config_failed$message", { message }));
+                const { showAlert: alert, t: translate } = loadErrorRef.current;
+                alert(translate("settings.get_config_failed$message", { message }));
             })
             .finally(() => {
                 setLoading(false);
             });
 
-        return () => {
-            if (liveThemeColor) {
-                applyThemeColor(readThemeColor(initialDraftRef.current));
-            }
-        };
-    }, [liveThemeColor, showAlert, t]);
+        return restore;
+    }, []);
 
     const { clientConfig, serverConfig } = useMemo(() => createSettingsConfigWrappers(draft), [draft]);
     const hasUnsavedChanges = !areSettingsDraftsEqual(draft, initialDraft);
@@ -110,7 +134,7 @@ export function useSettingsDraft(options: UseSettingsDraftOptions) {
     const handleReset = useCallback(() => {
         setDraft(initialDraft);
         if (liveThemeColor) {
-            applyThemeColor(readThemeColor(initialDraft));
+            applyThemeDraft(initialDraft);
         }
     }, [initialDraft, liveThemeColor]);
 

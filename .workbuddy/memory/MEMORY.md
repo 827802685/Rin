@@ -42,18 +42,20 @@ cd client      && "$BUN" run tsc --noEmit && "$BUN" run vitest run
 cd packages/api && "$BUN" test
 ```
 
-基线（2026-10-11 02:1x 实测，脚本与包名以当前仓库为准）：
+基线（2026-10-12 02:1x 实测，脚本与包名以当前仓库为准）：
 
 - `packages/api`：19 pass / 0 fail。
 - `server`：`bun run tsc --noEmit` **0 条**（2026-10-09 由 18 条归零，见下）；
-  `bun test` **571 pass / 0 fail**（10-11 由 565 → 571）。
+  `bun test` **624 pass / 0 fail / 45 files**（10-11 565 → 571，10-12 → 577，
+  10-13 → 608，10-14 → 624）。
   ~~旧基线：tsc 恒定 18 条 TS2345/TS2741/TS2352~~ —— 2026-10-09 已查明：
   主因不是 pnpm 残留 hono，而是 `server/src/errors/index.ts` 把
   `ErrorResponse` / `ErrorDetail` 声明成 **interface**，Hono 的 `c.json()`
   要求参数能落到 `JSONValue`，而 TS 只给类型别名隐式索引签名。
   改 `type` + 删零引用死代码后归零。**不要再当成环境噪声忽略**；
   今后 server tsc 出现任何错误都是真回归。
-- `client`：`tsc --noEmit` 0 错；`vitest run` 22 个文件 **162 pass / 0 fail**，exit 0。
+- `client`：`tsc --noEmit` 0 错；`vitest run` 34 个文件 **247 pass / 0 fail**，exit 0
+  （10-14 起，此前为 22 文件 162 pass）。
 
 已知偶发（不算回归）：沙箱到不了 `test.r2.cloudflarestorage.com` 时 `rss.test.ts` /
 `favicon.test.ts` 的 S3 用例会 5000ms 超时，网络通时自己会过。
@@ -106,7 +108,14 @@ cd packages/api && "$BUN" test
   server / client / packages/api 三套 bun 门禁**都能实跑**。看到这条旧记录不要当真。
 - bash 必须先 `export PATH="/usr/bin:/bin:$PATH"`，否则 ls/find/grep/dirname 全部 command not found。
 - PowerShell 工具不返回 stdout，一律用 Bash。
-- 源码是 **CRLF 行尾**，正则处理内容时必须用 `\r?\n`。
+- 源码行尾**按文件而异**：`server/src/services/*.ts` 等新文件是 **LF**，部分老文件是 CRLF。
+  正则/变异脚本一律先 `"\r\n" in text` 探测再拼锚点（git 的 `LF will be replaced by CRLF`
+  警告可反推行尾）。
+- **bun 的 `mock.module` 会跨测试文件残留**（2026-10-13 实测）：只替换一个导出会让同进程的
+  rss / storage / cache 用例拿到残缺模块，全量跑出无关的假红。优先用 **env 注入假 R2_BUCKET**
+  （storage 层在 `env.R2_BUCKET` 存在时直接走 `bucket.get()`），不要用模块 mock。
+- **别和 client vite build 并发跑 server test**：同机并发会出 3 fail / 3 errors（超时型），
+  串行重跑即 0 fail。判定回归前先串行重跑一次。
 - 不要动 `bun.lock`（本机镜像会写脏，需要时 `git checkout -- bun.lock`）。
 - `F:/Documents/GitHub/Rin` 的 `node_modules` 有 pnpm 残留的 `hono@4.13.2`（顶层是 4.12.2），
   会导致那里的 `tsc` 报 `string | undefined` 误报。

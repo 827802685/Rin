@@ -88,4 +88,56 @@ describe("handleFetch", () => {
     expect(await response.text()).toBe("Hi");
     expect(calls).toHaveLength(0);
   });
+
+  it("answers a missing locale file with 404 instead of the SPA entry", async () => {
+    // 只有 zh-CN/zh-TW/en/ja 四个语言包；浏览器语言为裸 zh 时就会打到这个不存在的路径。
+    // 退回 index.html 会让 i18next 拿到 200 的 HTML 去 JSON.parse，故障被伪装成加载成功。
+    const { calls, resolveApp } = createAppStub(() => new Response("app-body", { status: 200 }));
+    const assetFetch = mock(async (request: Request) => {
+      const path = new URL(request.url).pathname;
+      return path === "/"
+        ? new Response("<!DOCTYPE html>", { status: 200 })
+        : new Response("nope", { status: 404 });
+    });
+
+    const response = await handleFetch(
+      new Request("http://localhost/locales/zh/translation.json"),
+      createAssetEnv(assetFetch),
+      resolveApp,
+    );
+
+    expect(response.status).toBe(404);
+    // 只查过一次资源桶，没有被 SPA 兜底再查一次 index.html。
+    expect(assetFetch).toHaveBeenCalledTimes(1);
+    expect(calls).toHaveLength(0);
+  });
+
+  it("still serves an existing locale file and keeps SPA fallback for routes", async () => {
+    const { resolveApp } = createAppStub(() => new Response("app-body", { status: 200 }));
+    const assetFetch = mock(async (request: Request) => {
+      const path = new URL(request.url).pathname;
+      if (path === "/locales/zh-CN/translation.json") {
+        return new Response("{}", { status: 200 });
+      }
+      if (path === "/") return new Response("<!DOCTYPE html>", { status: 200 });
+      return new Response("nope", { status: 404 });
+    });
+
+    const hit = await handleFetch(
+      new Request("http://localhost/locales/zh-CN/translation.json"),
+      createAssetEnv(assetFetch),
+      resolveApp,
+    );
+    expect(hit.status).toBe(200);
+    expect(await hit.text()).toBe("{}");
+
+    // SPA 路由兜底不受影响：无点路径仍然拿 index.html。
+    const spa = await handleFetch(
+      new Request("http://localhost/some/client/route"),
+      createAssetEnv(assetFetch),
+      resolveApp,
+    );
+    expect(spa.status).toBe(200);
+    expect(await spa.text()).toBe("<!DOCTYPE html>");
+  });
 });

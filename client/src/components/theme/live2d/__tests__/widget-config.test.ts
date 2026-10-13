@@ -83,4 +83,19 @@ describe("widgetBoxSize", () => {
     expect(widgetBoxSize(1.25)).toEqual({ width: 375, height: 375 });
     expect(widgetBoxSize(0.1)).toEqual({ width: 30, height: 30 });
   });
+
+  it("宽屏与未知视口保持原尺寸", () => {
+    expect(widgetBoxSize(1, 1280)).toEqual({ width: 300, height: 300 });
+    expect(widgetBoxSize(1, 640)).toEqual({ width: 300, height: 300 });
+    expect(widgetBoxSize(1, 0)).toEqual({ width: 300, height: 300 });
+  });
+
+  it("窄屏按视口比例收缩，且不低于下限、不超过原尺寸", () => {
+    // 531px 视口（实测里看板娘会盖住大半页面）→ 收到 45%
+    expect(widgetBoxSize(1, 531)).toEqual({ width: 239, height: 239 });
+    // 已经比 45% 小就不要再放大
+    expect(widgetBoxSize(0.3, 531)).toEqual({ width: 150, height: 150 });
+    // 极窄视口也不低于可读下限
+    expect(widgetBoxSize(1, 320)).toEqual({ width: 150, height: 150 });
+  });
 });

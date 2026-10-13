@@ -7,6 +7,7 @@ import { AdminLayout } from "../components/admin-layout";
 import Footer from "../components/footer";
 import { Header } from "../components/header";
 import { Padding } from "../components/padding";
+import { Waiting } from "../components/loading";
 import { getHeaderLayoutDefinition } from "../components/site-header/layout-registry";
 import { Tips, TipsPage } from "../components/tips";
 import useTableOfContents from "../hooks/useTableOfContents";
@@ -33,6 +34,7 @@ import { ToolsPage } from "../page/tools";
 const ToolsAdminPage = lazy(() => import("../page/tools-admin").then((m) => ({ default: m.ToolsAdminPage })));
 const WritingPage = lazy(() => import("../page/writing").then((m) => ({ default: m.WritingPage })));
 import { ProfileContext } from "../state/profile";
+import { permissionGateState } from "./permission-gate";
 import { tryInt } from "../utils/int";
 import { useTranslation } from "react-i18next";
 
@@ -169,10 +171,31 @@ function RouteFallback() {
   return (
     <Padding>
       <div className="flex min-h-[40vh] w-full items-center justify-center">
-        <ReactLoading width="2em" height="2em" type="spin" color="#FC466B" />
+        <ReactLoading width="2em" height="2em" type="spin" color="rgb(var(--theme-rgb))" />
       </div>
     </Padding>
   );
+}
+
+// 分档逻辑见 permission-gate.ts：把"还没取到登录状态"和"没权限"分开渲染，
+// 否则慢网络下直接进入受限路由会先闪一次错误页。
+function usePermissionGate(requirePermission?: boolean) {
+  const profile = useContext(ProfileContext);
+  const { t } = useTranslation();
+  const state = permissionGateState(requirePermission, profile);
+
+  return (node: ReactNode): ReactNode => {
+    switch (state) {
+      case "pending":
+        return <Waiting />;
+      case "login_required":
+        return <ErrorPage error={t("error.login_required")} />;
+      case "denied":
+        return <ErrorPage error={t("error.permission_denied")} />;
+      default:
+        return node;
+    }
+  };
 }
 
 function AppRoute({
@@ -188,22 +211,19 @@ function AppRoute({
   paddingClassName?: string;
   requirePermission?: boolean;
 }) {
-  const profile = useContext(ProfileContext);
   const siteConfig = useSiteConfig();
-  const { t } = useTranslation();
-
-  const content =
-    requirePermission && !profile?.permission ? <ErrorPage error={t("error.permission_denied")} /> : children;
+  const gate = usePermissionGate(requirePermission);
 
   return (
     <Route path={path}>
       {(params) => {
-        const resolvedContent = typeof content === "function" ? content(params) : content;
+        const resolvedContent = gate(typeof children === "function" ? children(params) : children);
         const layoutDefinition = getHeaderLayoutDefinition(siteConfig.headerLayout);
 
         return layoutDefinition.renderRouteShell({
           header: <Header>{headerComponent}</Header>,
           content: <Padding className={paddingClassName}>{resolvedContent}</Padding>,
+          rawContent: resolvedContent,
           footer: <Footer />,
           paddingClassName,
         });
@@ -225,16 +245,13 @@ function AdminRoute({
   title: string;
   description: string;
 }) {
-  const profile = useContext(ProfileContext);
-  const { t } = useTranslation();
-  const content =
-    requirePermission && !profile?.permission ? <ErrorPage error={t("error.permission_denied")} /> : children;
+  const gate = usePermissionGate(requirePermission);
 
   return (
     <Route path={path}>
       {(params) => (
         <AdminLayout title={title} description={description}>
-          {typeof content === "function" ? content(params) : content}
+          {gate(typeof children === "function" ? children(params) : children)}
         </AdminLayout>
       )}
     </Route>

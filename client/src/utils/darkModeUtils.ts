@@ -29,6 +29,24 @@ export function getCurrentColorMode(): "light" | "dark" {
   );
 }
 
+const FADE_CLASS = "rin-theme-fade";
+const FADE_MS = 320;
+
+/**
+ * 切深浅档时临时给 html 挂过渡类，让背景/文字/描边交叉淡化。
+ * 类只存活一个过渡周期，避免长期给全树挂 transition 影响滚动性能。
+ * 不引入 View Transitions：与 Wouter SPA 路由的兼容性风险未知，放弃。
+ */
+export function setDataColorModeWithFade(mode: "light" | "dark") {
+  const root = document.documentElement;
+  root.classList.add(FADE_CLASS);
+  root.setAttribute("data-color-mode", mode);
+  window.setTimeout(() => {
+    root.classList.remove(FADE_CLASS);
+  }, FADE_MS);
+  window.dispatchEvent(new Event("colorSchemeChange"));
+}
+
 export function useColorMode() {
   const [colorMode, setColorMode] = useState<"light" | "dark">(
     getCurrentColorMode()

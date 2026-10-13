@@ -1,4 +1,4 @@
-export const FEED_LAYOUT_OPTIONS = ["list", "masonry"] as const;
+export const FEED_LAYOUT_OPTIONS = ["list", "masonry", "magazine"] as const;
 
 export type FeedLayout = (typeof FEED_LAYOUT_OPTIONS)[number];
 

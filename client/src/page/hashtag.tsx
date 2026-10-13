@@ -6,6 +6,7 @@ import { Waiting } from "../components/loading"
 import { client } from "../app/runtime"
 
 import { useSiteConfig } from "../hooks/useSiteConfig";
+import { getCardVariantForLayout, getFeedListClass } from "../components/feed/feed-layout";
 
 
 type FeedsData = {
@@ -37,7 +38,7 @@ export function HashtagPage({ name }: { name: string }) {
     const siteConfig = useSiteConfig();
     const [status, setStatus] = useState<'loading' | 'idle'>('idle')
     const [hashtag, setHashtag] = useState<FeedsData>()
-    const feedListClass = siteConfig.feedLayout === "masonry" ? "wauto columns-1 gap-5 md:columns-2" : "wauto flex flex-col";
+    const feedListClass = getFeedListClass(siteConfig.feedLayout);
     const hashtagFeeds = Array.isArray(hashtag?.feeds) ? hashtag.feeds : [];
     const ref = useRef("")
     function fetchFeeds() {
@@ -72,7 +73,7 @@ export function HashtagPage({ name }: { name: string }) {
                     <Waiting for={status === 'idle'}>
                         <div className={feedListClass}>
                             {hashtagFeeds.map(({ id, ...feed }: any) => (
-                                <FeedCard key={id} id={id} {...feed} />
+                                <FeedCard key={id} id={id} {...feed} variant={getCardVariantForLayout(siteConfig.feedLayout)} />
                             ))}
                         </div>
                     </Waiting>

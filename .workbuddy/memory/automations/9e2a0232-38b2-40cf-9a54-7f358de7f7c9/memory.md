@@ -3,6 +3,110 @@
 > 2026-10-04 起迭代目标已从 daily-blog 子项目切回 Rin 本体（daily-blog 已从主干移除）。
 > 2026-10-07 起改为在 `auto` 分支上迭代，每 5 次成功迭代合并回 `main`（10-11 已完成第 1 轮合并，新一轮 M=1/5）。
 
+## 2026-10-14 02:01 第 10 次执行（auto 分支，第 2 轮第 3 次迭代）
+
+- 进场：工作区脏（54 改 + 15 新文件，约 1500 行），是上一轮遗留的客户端大改。
+  按纪律**先跑门禁再判断**，全绿 → 判定为可收编成果，未 stash。
+- 结果：5 个提交落在 `auto`：`4fd42b9`（server 静态资源不回退 index.html）、
+  `37fbf7a`（client 72 文件收编）、`26f274f`（docs + 贴图压缩）、
+  `0d026ce`（本轮修复）、`87e1673`（日志 + 基线）。workspace 干净。**未触发合并（M=3/5）**。
+- **本轮挖到的真 bug**：`rewriteMediaToCdn` 只判断「是不是站内媒体」、不判断
+  「有没有真的进仓」，任何 /blob/ 图片都被换成 jsDelivr 地址。同步每天一次 →
+  新上传的图、>1MiB 被跳过的图、单次失败的图全部指向仓库里不存在的文件，图片裂开且零报错。
+- 修复：以 `serverConfig` 的 `github.synced_media`（已确认入库 key 清单）为准；
+  `runGitHubSync` 覆盖写成功列表（失败不记）；Actions 拉取路径在 `/export/media`
+  成功返回时补记；`rewriteMediaToCdn` 只改写命中清单的 key（清单缺失/损坏当空集）。
+  取舍：**覆盖而非累加** —— 累加在换仓库后会 404，覆盖的失败模式只是「慢一点但仍能加载」。
+- 门禁：server tsc 0 条／server test **624 pass / 0 fail / 45 files**（608 → 624）／
+  packages/api 19 pass／client tsc 0 错／client vitest **247 pass / 34 files**（162 → 247）。
+- 构建：server exit 0；client `✓ built in 3m 20s`，index.html + 219 assets 齐全
+  （exit 1 是已知的 closeBundle 删 vite 临时配置时 genie-trash 超时，非编译错误）。
+- 变异 **6/6 killed**（去闸门 4 红／不解码 1 红／覆盖代替追加 1 红／累加代替覆盖 1 红／
+  失败也记清单 1 红／路由层不读清单 1 红）。
+- **推送成功**：本次网络通，`git push origin main`（13 个提交）+ `git push origin auto`
+  均 exit 0，本地 main 与 origin/main 已对齐（0 ahead）。
+- 经验（供后续复用）：
+  ① **守卫类修复必须补一层端到端用例** —— 本轮除 github.ts 纯函数单测外，另在
+     feed.test.ts 加了 `GET /feed/:id` 路由级用例；纯函数层测不出「调用方忘了传清单」。
+  ② **变异脚本要先自己跑一遍 baseline**，非绿直接 abort，否则 KILLED 全是假的；
+     每次变异后除比对 restore 文本，还要盯**总用例数是否骤降**（语法错误的假红）。
+  ③ 无回传通道的副作用路径（Actions 拉取）只能在服务端可观测的那一刻记账，属乐观记录，
+     必须在注释里写明前提。
+- 下一目标：① `POST /ai/generate-blog` 只 console.log 不落库（半成品待决）
+  ② 客户端页面级组件测试 ③ `storage.ts` 剩余零覆盖。
+
+---
+
+## 2026-10-13 02:01 第 9 次执行（auto 分支，第 2 轮第 2 次迭代）
+
+- 进场：工作区有 10-12 遗留未提交的 GitHub 同步功能（14 改 + 3 新文件，646 行）。
+  先跑门禁确认：**client tsc 已红**（`settings.tsx` 新卡片 `<SettingsCardRow>`
+  只传 header，`action` 是必填 → TS2741，构建被阻塞）。
+- 结果：5 个提交落在 `auto`：`f7e1c7d`（server 收编 + 三处修复）、`135999c`
+  （client 类型修复）、`e2ff913`（回归用例）、`b4bc0b7`（integrations/）、
+  `d46ec72`（用例强化）。workspace 干净。**未触发合并（M=2/5）**。
+- 本轮修的三个真 bug：① `uploadFile` 的 1MiB 限制只判 ArrayBuffer，Markdown
+  正文（string）完全不检查 → 超长文章白白发一次必然 422 的请求且无日志；
+  改为按 UTF-8 字节数统一判限。② `runGitHubSync` 媒体同步漏了 `isSafeMediaKey`
+  （`/export` 与 `/export/media` 都有）→ 越界上传。③ `githubSyncCrontab`
+  成败都写 `github.last_sync_date` → 整轮失败当天不再重试。
+- 门禁：server tsc 0 条／server test **608 pass / 0 fail / 45 files**（600 → 608）／
+  packages/api 19 pass／client tsc 0 错／client vitest 162 pass。
+- 构建：server exit 0；client `✓ built in 4m 2s` exit 0。
+- 变异 4/4 killed，还原后 8 pass。
+- 经验（供后续复用）：
+  ① **bun 的 `mock.module` 跨测试文件残留** —— 只替换一个导出会让同进程的
+     rss / storage / cache 用例拿到残缺模块，全量跑出 4 条无关假红。
+     改用 env 注入假 `R2_BUCKET`（storage 层在 R2_BUCKET 存在时直接走
+     `bucket.get()`），零全局污染。**优先 env 注入，别用模块 mock。**
+  ② **断言「被安全机制挡下」必须让被挡对象真的存在** —— 首版 traversal 用例
+     假 R2 预置 key 写错（`../evil` vs 实际 `../../evil`），对象取不到走
+     「不存在」分支，与被过滤的 skipped++ 计数相同 → 变异 SURVIVED 的假绿。
+  ③ **别和 client vite build 并发跑 server test** —— 同机并发会出 3 fail / 3 errors
+     （超时型），串行重跑即 0 fail。判定回归前先串行重跑一次。
+  ④ 仓库源码是 **LF** 不是 CRLF（可由 git 的 `LF will be replaced by CRLF`
+     警告反推）；变异脚本继续「先探测行尾」。
+- 下一目标：① `utils/s3.ts` 的 `buildS3ObjectUrl` 零调用点死代码删除
+  ② `POST /ai/generate-blog` 只 console.log 不落库，半成品待决
+  ③ `applyGithubCdn` 无条件重写 /blob/ 为 CDN，未同步到的图片会裂
+  ④ 客户端页面级组件测试。
+
+---
+
+## 2026-10-12 02:01 第 8 次执行（auto 分支，第 2 轮第 1 次迭代）
+
+- 进场：`auto` = `main` + 1 个 docs 提交，工作区干净，先跑门禁确认自洽。
+- 结果：2 个提交落在 `auto`：`5477553`（并发 UV/PV 丢失更新修复）、`1cd07ff`（补 PV 原子性用例）。
+  workspace 干净。**未触发合并（新一轮 M=1/5）**。
+- **本轮挖到的真 bug**：`GET /feed/:id` 的访客计数是 read-modify-write。HLL 寄存器整份
+  序列化在 `visit_stats.hll_data` 一列，两个并发请求读到同一份旧 blob 后无条件写回，
+  后写的整份覆盖先写的 —— 先到的访客从 UV 里彻底消失；PV 同样按读到的旧值 `+1`，并发少加。
+- 修复：抽到新文件 `server/src/utils/visit-stats.ts` 的 `recordVisit()`：
+  ① PV 走 SQL 层 `sql\`${visitStats.pv} + 1\``；② HLL 写回带 CAS 条件
+  `hll_data = <旧值>`，`.returning({pv})` **返回空数组即判定失败**，失败重读重加重写
+  （上限 5 次，最后一次退化成不带 CAS 的覆盖写）；③ 建行撞唯一约束不再 500，回循环走更新分支。
+- 新增 `server/src/utils/__tests__/visit-stats.test.ts`（6 条）。
+- 门禁（bun 1.4.2）：server tsc **0 条**／server test **577 pass / 0 fail**（571 → 577）／
+  packages/api 19 pass／client tsc 0 错／client vitest **162 pass / 22 files**。
+- 构建：**server PASS + client PASS**（日志 `✓ built in`，outDir 下 index.html + assets 218）。
+- 变异 4/4 killed（去 CAS → 1 红／PV 改回 stats.pv+1 → 1 红／建行照旧抛出 → 1 红／
+  CAS 失败不重试 → 1 红），还原后 6 pass。
+- 经验（供后续复用）：
+  ① **并发竞态在单线程里撞不出来，要主动把窗口打开**：patch
+     `db.query.visitStats.findFirst`，在返回旧 row 之前用 `sqlite.exec` 注入一次竞争写入，
+     再把旧值交回被测代码 —— 确定性复现 read-modify-write 丢失更新，比 `Promise.all` 靠谱。
+  ② **并发用例必须同时覆盖「CAS 命中」和「CAS 失败」两条路径**。本轮首版只有
+     hll_data 变化的场景，CAS 失败重读会顺带回新 pv，导致「PV 改回 stats.pv+1」变异
+     SURVIVED；补一条「竞争请求是回访（只改 pv、hll_data 一字不变，CAS 照样命中）」才杀掉。
+  ③ 判断 drizzle UPDATE 是否命中：`where(...).returning({...})` 返回空数组即可，
+     不用去碰各驱动的 `changes`/`meta.changes` 差异（bun-sqlite 与 D1 形状不一样）。
+  ④ 交叉验证：`.returning()` 与 `sql\`${col} + 1\`` 都是仓库里已有的写法
+     （`feed.ts` insert、`rate-limit.ts` 计数），不引入新依赖。
+- 下一目标：① `server/src/utils/s3.ts` 的 `buildS3ObjectUrl` 仍是零调用点死代码，按约定删除
+  ② 客户端页面级组件测试（分页 / 评论列表 / 设置页表单）③ `storage.ts` / `s3.ts` 剩余零覆盖。
+
+---
+
 ## 2026-10-11 02:09 第 7 次执行（auto 分支第 5 次迭代，**已触发合并**）
 
 - 进场：分支 `auto`，比 `main` 领先 10 个提交；工作区只有 memory 文件改动 + 上一轮
@@ -32,6 +136,9 @@
      变异的残留，白记一次。循环里要 `mutate → test → restore` 三步成套。
   ③ R2 替身要同时实现 `head`/`get`/`put`/`delete`，并把 put/delete 的 key 记进数组，
      断言「清理了哪些、没清理哪个」比断言状态码有力得多。
+- 合并：`auto` → `main` 走 `--no-ff` 合并提交 `8b98d78`，随后 `auto` 快进到同一提交，
+  `git diff main..auto` 为空。`git push origin main` 因 `github.com:443` 21 秒连不上失败
+  （本机既有网络问题，非回归），本地 main 已领先 origin/main 12 个提交，待网络恢复再推。
 - 下一目标：① `utils/s3.ts` 剩余零覆盖（`buildS3ObjectUrl` 仍无调用点，考虑处置）
   ② UV 并发写 HLL 丢失更新（已知未修）③ 客户端页面级组件测试（分页 / 评论列表 / 设置页表单）。
 

@@ -210,6 +210,48 @@ describe('FeedService', () => {
             expect(data.content).toBe('Target Content');
         });
 
+        // 端到端回归：CDN 重写只应作用于已确认进仓的媒体。
+        // 同步是每天一次，未入库的图片被无条件改写就会直接裂开。
+        it('only rewrites to the GitHub CDN media that was actually synced', async () => {
+            await serverConfig.set('github.enabled', 'true');
+            await serverConfig.set('github.repo_owner', 'some-user');
+            await serverConfig.set('github.repo_name', 'blog-content');
+            await serverConfig.set('github.repo_branch', 'main');
+            await serverConfig.set('github.pat', 'tok');
+            await serverConfig.set(
+                'github.synced_media',
+                JSON.stringify(['images/synced.png']),
+            );
+
+            const createRes = await app.request('/', {
+                method: 'POST',
+                headers: {
+                    'Authorization': 'Bearer mock_token_1',
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    title: 'CDN Feed',
+                    content: '![ok](/blob/images/synced.png) ![broken](/blob/images/never-synced.png)',
+                    listed: true,
+                    draft: false,
+                    tags: [],
+                }),
+            }, env);
+            expect(createRes.status).toBe(200);
+            const { insertedId } = await createRes.json() as any;
+
+            const getRes = await app.request(`/${insertedId}`, { method: 'GET' }, env);
+            expect(getRes.status).toBe(200);
+            const data = await getRes.json() as any;
+
+            expect(data.content).toContain(
+                'https://cdn.jsdelivr.net/gh/some-user/blog-content@main/media/images/synced.png',
+            );
+            // 没进仓的必须留在原址，走本站存储仍然打得开
+            expect(data.content).toContain('/blob/images/never-synced.png');
+            expect(data.content).not.toContain('media/images/never-synced.png');
+        });
+
         it('should return feed by non-numeric alias', async () => {
             const createRes = await app.request('/', {
                 method: 'POST',
