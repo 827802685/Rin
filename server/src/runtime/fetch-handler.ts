@@ -33,6 +33,12 @@ function isStaticAssetRequest(pathname: string) {
   return /\.\w+$/.test(pathname);
 }
 
+// 这些前缀下的路径只可能是构建产物里的真实文件，未命中时不能退回 index.html：
+// 200 + HTML 会让调用方把兜底页当成资源解析，故障被伪装成加载成功。i18next 就是
+// 因此静默失败过 —— 浏览器语言为裸 `zh` 时请求 /locales/zh/translation.json，拿回
+// index.html 仍报 200，解析失败后整页退化成显示 article.title 这类 key。
+const STATIC_ONLY_PATTERN = /^\/(locales|cursors|live2d-bundled|assets)\//;
+
 async function tryServeAsset(request: Request, env: Env) {
   if (!env.ASSETS) {
     return null;
@@ -89,6 +95,9 @@ export async function handleFetch(
     const asset = await tryServeAsset(request, env);
     if (asset) {
       return asset;
+    }
+    if (STATIC_ONLY_PATTERN.test(pathname)) {
+      return new Response("Not found", { status: 404 });
     }
   }
 
