@@ -2,9 +2,19 @@ import { useEffect, useRef, useState } from "react";
 import { ConfigWrapper } from "@rin/config";
 import type { Profile } from "../state/profile";
 import { defaultClientConfig } from "../state/config";
-import { applyThemeColor } from "../utils/theme-color";
+import { applyThemeConfig } from "../utils/theme-scheme";
 import { readBootstrappedClientConfig } from "./bootstrap-config";
 import { client } from "./runtime";
+
+function applyThemeFromConfig(configObject: Record<string, unknown>) {
+  const accent = typeof configObject["theme.color"] === "string" ? configObject["theme.color"] : undefined;
+  // theme.color 未被用户显式改动时跟随色板默认主色
+  applyThemeConfig({
+    scheme: configObject["theme.scheme"],
+    color: accent,
+    customCss: configObject["theme.custom_css"],
+  });
+}
 
 function applyViewportScaling() {
   const highResolutionThreshold = 2560;
@@ -40,7 +50,7 @@ export function useAppBootstrap() {
     const updateClientConfig = (nextConfig: Record<string, unknown>) => {
       sessionStorage.setItem("config", JSON.stringify(nextConfig));
       setConfig(new ConfigWrapper(nextConfig, defaultClientConfig));
-      applyThemeColor(typeof nextConfig["theme.color"] === "string" ? nextConfig["theme.color"] : undefined);
+      applyThemeFromConfig(nextConfig);
     };
 
     client.user.profile().then(({ data, error }) => {
@@ -63,7 +73,7 @@ export function useAppBootstrap() {
       updateClientConfig(bootstrappedConfig);
     } else if (cachedConfig) {
       setConfig(new ConfigWrapper(cachedConfig, defaultClientConfig));
-      applyThemeColor(typeof cachedConfig["theme.color"] === "string" ? cachedConfig["theme.color"] : undefined);
+      applyThemeFromConfig(cachedConfig);
     }
 
     initializedRef.current = true;
@@ -77,7 +87,7 @@ export function useAppBootstrap() {
       }
 
       setConfig(new ConfigWrapper(configObject, defaultClientConfig));
-      applyThemeColor(typeof configObject["theme.color"] === "string" ? configObject["theme.color"] : undefined);
+      applyThemeFromConfig(configObject);
     };
 
     window.addEventListener("storage", handleConfigUpdate);

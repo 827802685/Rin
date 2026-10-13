@@ -17,7 +17,9 @@ function FeedCardImage({ src, variant }: { src: string; variant: FeedCardVariant
     const imageFrameClass =
         variant === "editorial"
             ? "relative flex max-h-80 w-full flex-row items-center overflow-hidden rounded-[20px]"
-            : "relative mb-2 flex max-h-80 w-full flex-row items-center overflow-hidden rounded-xl";
+            : variant === "cover"
+                ? "relative flex w-full items-center overflow-hidden"
+                : "relative mb-2 flex max-h-80 w-full flex-row items-center overflow-hidden rounded-xl";
 
     useEffect(() => {
         if (!blurhash || !canvasRef.current) {
@@ -61,6 +63,7 @@ const FEED_CARD_STYLES: Record<
     FeedCardVariant,
     {
         card: string;
+        content: string;
         imageWrap: string;
         meta: string;
         summary: string;
@@ -69,17 +72,27 @@ const FEED_CARD_STYLES: Record<
 > = {
     default: {
         card: "my-2 inline-block w-full break-inside-avoid rounded-2xl bg-w p-6 duration-300 bg-button",
+        content: "",
         imageWrap: "",
-        meta: "text-gray-400 text-sm",
-        summary: "line-clamp-4 text-pretty overflow-hidden dark:text-neutral-500",
-        title: "text-xl font-bold text-gray-700 dark:text-white text-pretty overflow-hidden",
+        meta: "text-sm t-muted",
+        summary: "line-clamp-4 text-pretty overflow-hidden t-secondary",
+        title: "text-xl font-bold t-primary text-pretty overflow-hidden",
     },
     editorial: {
         card: "my-3 inline-block w-full break-inside-avoid overflow-hidden rounded-[28px] border border-black/10 bg-w p-3 shadow-[0_24px_60px_rgba(15,23,42,0.08)] transition-all hover:-translate-y-0.5 hover:shadow-[0_28px_70px_rgba(15,23,42,0.12)] dark:border-white/10",
+        content: "px-2 pb-2",
         imageWrap: "mb-3 overflow-hidden rounded-[22px] border border-black/5 dark:border-white/10",
-        meta: "text-[12px] font-medium uppercase tracking-[0.18em] text-neutral-500 dark:text-neutral-400",
-        summary: "line-clamp-5 text-pretty text-[15px] leading-7 text-neutral-600 dark:text-neutral-300",
-        title: "text-2xl font-semibold tracking-[-0.02em] text-neutral-900 dark:text-white text-pretty overflow-hidden",
+        meta: "text-[12px] font-medium uppercase tracking-[0.18em] t-muted",
+        summary: "line-clamp-5 text-pretty text-[15px] leading-7 t-secondary",
+        title: "text-2xl font-semibold tracking-[-0.02em] t-primary text-pretty overflow-hidden",
+    },
+    cover: {
+        card: "my-2 inline-block w-full break-inside-avoid overflow-hidden rounded-2xl border border-black/5 bg-w shadow-light transition-all duration-300 hover:-translate-y-0.5 hover:shadow-deep dark:border-white/10",
+        content: "px-4 pt-2 pb-4",
+        imageWrap: "",
+        meta: "text-xs t-muted",
+        summary: "line-clamp-3 text-sm t-secondary",
+        title: "text-lg font-bold t-primary text-pretty overflow-hidden",
     },
 };
 
@@ -111,7 +124,7 @@ export function FeedCard({ id, title, avatar, draft, listed, top, summary, hasht
                     <FeedCardImage src={avatar} variant={activeVariant} />
                 </div>
             ) : null}
-            <div className={activeVariant === "editorial" ? "px-2 pb-2" : ""}>
+            <div className={styles.content}>
                 <h1 className={styles.title}>{title}</h1>
                 <p className={`space-x-2 ${styles.meta}`}>
                     <span title={new Date(createdAt).toLocaleString()}>
@@ -123,14 +136,14 @@ export function FeedCard({ id, title, avatar, draft, listed, top, summary, hasht
                         </span>
                     }
                 </p>
-                <p className={`space-x-2 ${styles.meta} ${activeVariant === "editorial" ? "mt-2" : ""}`}>
+                <p className={`space-x-2 ${styles.meta} ${activeVariant === "default" ? "" : "mt-2"}`}>
                     {draft === 1 && <span>{t("draft")}</span>}
                     {listed === 0 && <span>{t("unlisted")}</span>}
                     {top === 1 && <span className="text-theme">{t('article.top.title')}</span>}
                 </p>
-                <p className={`whitespace-pre-line ${styles.summary} ${activeVariant === "editorial" ? "mt-4 max-w-3xl" : ""}`}>{summary}</p>
+                <p className={`whitespace-pre-line ${styles.summary} ${activeVariant === "editorial" ? "mt-4 max-w-3xl" : activeVariant === "cover" ? "mt-2" : ""}`}>{summary}</p>
                 {safeHashtags.length > 0 &&
-                    <div className={`flex flex-row flex-wrap justify-start gap-2 ${activeVariant === "editorial" ? "mt-4" : "mt-2 gap-x-2"}`}>
+                    <div className={`flex flex-row flex-wrap justify-start gap-2 ${activeVariant === "editorial" ? "mt-4" : activeVariant === "cover" ? "mt-3" : "mt-2 gap-x-2"}`}>
                         {safeHashtags.map(({ name }, index) => (
                             <HashTag key={index} name={name} />
                         ))}

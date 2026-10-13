@@ -35,7 +35,7 @@ export function ToolsAdminPage() {
         <title>{`${t("tools.title")} - ${siteConfig.name}`}</title>
       </Helmet>
 
-      {(loading || saving) && <ReactLoading width="1em" height="1em" type="spin" color="#FC466B" />}
+      {(loading || saving) && <ReactLoading width="1em" height="1em" type="spin" color="rgb(var(--theme-rgb))" />}
 
       <ToolsSettings value={toolsValue} onChange={handleToolsChange} />
 

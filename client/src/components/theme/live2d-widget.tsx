@@ -16,6 +16,15 @@ import {
 } from "./live2d/actions";
 import { bundledRootFor, pickCdnRoot, precacheAllModels, prefetchModel } from "./live2d/cache";
 import {
+  capSubdelegateDpr,
+  capSubdelegateFps,
+  createDprCapWrapper,
+  createPixelAlphaProbe,
+  normalizeFpsCap,
+  releaseDragSetDragging,
+  takeOverDragSetDragging,
+} from "./live2d/perf";
+import {
   BUILTIN_MODELS,
   type CustomModel,
   EXPECTED_TOTAL_BY_NAME,
@@ -87,7 +96,15 @@ const DRAG_START_THRESHOLD = 6;
 // 下片元开销成倍增长，是大模型卡顿的主要来源之一。对所有内部用到 devicePixelRatio
 // 的渲染器方法，在调用期间把 window.devicePixelRatio 临时封顶为该值（画布尺寸与
 // 坐标映射同步生效，模型视角/点击命中保持一致），调用结束立即还原，不影响页面其它部分。
+// 两个落点缺一不可：原型层 capRendererDpr 管坐标，实例层 capSubdelegateDpr 管帧缓冲
+//（实测只包原型时 dpr≈2.67 的机器上 300px 容器仍开成 800x800）。
 const MAX_RENDER_DPR = 1.5;
+
+// 我们挂出去的原型/实例方法带的标记，用来跨挂载识别"自己包过的"并避免叠包
+type CapMarkedFunction = ((...args: unknown[]) => unknown) & {
+  rinDprCap?: boolean;
+  rinExpose?: boolean;
+};
 
 // initWidget 的配置结构（对应 stevenjoezhang/live2d-widget 的 dist/autoload.js）
 type InitWidgetConfig = {
@@ -182,36 +199,22 @@ function restoreGlobalImage() {
 }
 
 /**
- * 给渲染器做渲染分辨率封顶：遍历 AppDelegate 原型上源码含 devicePixelRatio 的方法，
- * 在其执行期间把 window.devicePixelRatio 临时替换为 min(真实值, MAX_RENDER_DPR)。
- * 画布尺寸（resizeCanvas）与触摸/点击坐标（onTouches 系列与 getPointAsView）用同一个封顶值，
- * 视角矩阵、点击命中全部保持一致；调用结束立即还原，不影响页面其它部分。
+ * 给渲染器做渲染分辨率封顶（坐标侧）：遍历 AppDelegate 原型上源码含 devicePixelRatio
+ * 的方法，在其执行期间把 window.devicePixelRatio 临时替换为 min(真实值, MAX_RENDER_DPR)。
+ * 画布物理分辨率的封顶不在这里——resizeCanvas 属于 subdelegate（实测类链 Cs），
+ * 原型上没有这个名字，由就绪门控里的 capSubdelegateDpr 按实例补上。
  */
 function capRendererDpr(proto: Record<string, unknown>): void {
-  // devicePixelRatio 是 Window.prototype 上的访问器；在 window 实例上定义同名
-  // own property 即可临时遮蔽，finally 里 delete 还原到原型 getter。
-  const patch = (orig: (...args: unknown[]) => unknown) => {
-    return function (this: unknown, ...args: unknown[]) {
-      const realDpr = window.devicePixelRatio;
-      if (realDpr <= MAX_RENDER_DPR) {
-        return orig.apply(this, args);
-      }
-      try {
-        Object.defineProperty(window, "devicePixelRatio", {
-          configurable: true,
-          get: () => MAX_RENDER_DPR,
-        });
-        return orig.apply(this, args);
-      } finally {
-        delete (window as unknown as { devicePixelRatio?: number }).devicePixelRatio;
-      }
-    };
-  };
   for (const key of Object.getOwnPropertyNames(proto)) {
-    const value = proto[key];
+    const value = proto[key] as CapMarkedFunction | undefined;
     if (typeof value !== "function") continue;
+    // AppDelegate.prototype 是跨挂载共享的模块级对象：换模型、隐藏后再显示都会
+    // 再跑一次 patchLive2dApp，跳过自己挂过的包装才不会让调用链逐层叠加。
+    if (value.rinDprCap) continue;
     if (!value.toString().includes("devicePixelRatio")) continue;
-    proto[key] = patch(value as (...args: unknown[]) => unknown);
+    const wrapped = createDprCapWrapper(value, MAX_RENDER_DPR) as CapMarkedFunction;
+    wrapped.rinDprCap = true;
+    proto[key] = wrapped;
   }
 }
 
@@ -232,10 +235,18 @@ async function patchLive2dApp(): Promise<boolean> {
     if (!proto) {
       return false;
     }
-    // 渲染分辨率封顶（HiDPI 性能），必须先于其它补丁，覆盖全部含 devicePixelRatio 的方法
+    // 渲染分辨率封顶（HiDPI 性能）：覆盖原型上全部含 devicePixelRatio 的方法（坐标侧）。
+    // 另外两个落点都不在这里：帧缓冲尺寸在 subdelegate.resizeCanvas（实例层，
+    // 见 applyRenderCaps 里的 capSubdelegateDpr），帧率热点在 subdelegate.update
+    //（实测循环入口 run 只调用一次，包它不影响帧率）。
     capRendererDpr(proto);
+    const currentRun = proto.run as CapMarkedFunction | undefined;
+    if (typeof currentRun === "function" && currentRun.rinExpose) {
+      // 原型跨挂载共享，已经暴露过实例就不再包一层
+      return true;
+    }
     const origRun = proto.run as (...args: unknown[]) => unknown;
-    proto.run = function (this: unknown, ...args: unknown[]) {
+    const exposedRun = function (this: unknown, ...args: unknown[]) {
       (window as unknown as { __rinLive2dApp?: unknown }).__rinLive2dApp = this;
       // 兜底：监听 WebGL context lost，阻止默认行为（默认会导致上下文永久丢失），
       // 让浏览器有机会自动恢复。正常场景下隐藏用的是 visibility 方案不会触发，
@@ -260,7 +271,9 @@ async function patchLive2dApp(): Promise<boolean> {
         }, 500);
       }
       return (origRun as (...a: unknown[]) => unknown).apply(this, args);
-    };
+    } as CapMarkedFunction;
+    exposedRun.rinExpose = true;
+    proto.run = exposedRun;
     return true;
   } catch {
     return false;
@@ -399,6 +412,10 @@ function readPixelAlpha(clientX: number, clientY: number): number {
   return pixel[3];
 }
 
+// readPixels 只在 pointerdown 时发生（非逐帧轮询），但仍可能连点。
+// 100ms 内、8px 邻近范围内复用上一次采样结果，省掉重复的同步 GPU 读回。
+const probePixelAlpha = createPixelAlphaProbe(readPixelAlpha);
+
 // 把点击透传给画布后面的元素（透明区域不挡后面的链接/按钮）
 function passClickThrough(clientX: number, clientY: number, widget: HTMLElement | null) {
   if (!widget) return;
@@ -428,6 +445,11 @@ function passClickThrough(clientX: number, clientY: number, widget: HTMLElement 
 
 export function Live2DWidget() {
   const config = useContext(ClientConfigContext);
+  // 长生命周期 effect（挂载 effect 的 deps 是 [modelVersion]）里读配置必须走这个镜像：
+  // 设置保存后 Provider 换成新的 ConfigWrapper 实例，闭包捕获的旧实例持的是快照，
+  // 读不到刚保存的值（实测「帧率上限」保存后不生效）。
+  const configRef = useRef(config);
+  configRef.current = config;
   const { t } = useTranslation();
   const [, setLocation] = useLocation();
   const [hidden, setHidden] = useState(false);
@@ -435,10 +457,13 @@ export function Live2DWidget() {
   const [rendered, setRendered] = useState(false);
   const [progress, setProgress] = useState<ProgressState | null>(null);
   const [dragging, setDragging] = useState(false);
-  const [activeModel, setActiveModel] = useState<string>("furina");
-  // 默认模型引用：供 useEffect 初始化读取。缺省 furina；可被设置项 widget.live2d.defaultModel 覆盖
-  // （"furina" / "BCSZ1.1" / 自定义模型 id）。仅在挂载时读取一次，后续切换不受影响。
-  const defaultModelRef = useRef<string>(
+  // 默认模型：配置项 widget.live2d.defaultModel（"furina" / "BCSZ1.1" / 自定义模型 id），
+  // 非法值回退轻模型 BCSZ1.1（见 live2d/models.ts 的 resolveDefaultName）。必须在首次渲染
+  // 就解析出正确值——加载 effect（deps [modelVersion]）
+  // 闭包读取 activeModel 且只在挂载时运行一次，若放在 effect 里 setActiveModel，
+  // 异步体拿到的仍是旧闭局值（实测配置 BCSZ1.1 却静默加载远端 furina 95MB）。
+  // 配置在 React 挂载前已由 /api/config/client/bootstrap.js 同步注入，渲染期读取安全。
+  const [activeModel, setActiveModel] = useState<string>(() =>
     resolveDefaultName(
       config.get("widget.live2d.defaultModel"),
       parseCustomModels(config.get("widget.live2d.customModels")),
@@ -453,10 +478,18 @@ export function Live2DWidget() {
   const [modelVersion, setModelVersion] = useState(0);
   // 当前生效模型的 CDN 根地址（initWidget 探测成功后写入，供切换模型拼接 index.json）
   const cdnRootRef = useRef<string>("");
+  // 渲染循环是否被"页面隐藏/失焦"暂停（恢复时只在暂停过的情况下才重启，避免双开循环）
+  const renderLoopPausedRef = useRef(false);
+  // 定时器组（就绪轮询 / 停滞兜底 / 空闲轮播）当前是否处于失焦暂停状态，
+  // 用来保证 stop/start 严格配对、且只在模型就绪后发生
+  const timersPausedRef = useRef(false);
   // 渲染"就绪门控"轮询的启动 / 停止句柄（首屏与切换模型共用，切换会复用同一个
   // WebGL 渲染器实例并重新轮询，彻底避免"重挂载组件 → 第二个 WebGL 上下文"的隐患）
   const readyPollStartRef = useRef<(() => void) | null>(null);
   const readyPollStopRef = useRef<(() => void) | null>(null);
+  // 渲染封顶（帧缓冲分辨率 + 帧率）的重新应用句柄：模型就绪时由就绪门控调用，
+  // 设置里改帧率数值时由下方 effect 调用
+  const applyRenderCapsRef = useRef<(() => void) | null>(null);
   const [showActions, setShowActions] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
   const [chatMessages, setChatMessages] = useState<AIChatMessage[]>([]);
@@ -485,8 +518,18 @@ export function Live2DWidget() {
     origTop: number;
     clientX: number;
     clientY: number;
+    moved: number;
   } | null>(null);
   const [pos, setPos] = useState<{ left: number; top: number } | null>(() => loadSavedPos());
+  // 视口宽度：窄屏要给看板娘让位（见 widgetBoxSize）
+  const [viewportWidth, setViewportWidth] = useState(() =>
+    typeof window === "undefined" ? 0 : window.innerWidth,
+  );
+  useEffect(() => {
+    const onResize = () => setViewportWidth(window.innerWidth);
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
 
   const position = String(config.get("widget.live2d.position") ?? "right");
   // 防止配置被误调成超大值导致模型挡住整个页面：限制在安全范围内
@@ -496,8 +539,8 @@ export function Live2DWidget() {
   // 颈部/位置微调：widget.live2d.layout（JSON），注入模型配置的 Layout 段
   const layoutConfig = parseLayoutConfig(String(config.get("widget.live2d.layout") ?? ""));
 
-  // 模型容器尺寸：与插件 #waifu-canvas 的 300x300 一致，随配置缩放
-  const { width: boxW, height: boxH } = widgetBoxSize(scaleValue);
+  // 模型容器尺寸：与插件 #waifu-canvas 的 300x300 一致，随配置缩放；窄屏按视口收缩
+  const { width: boxW, height: boxH } = widgetBoxSize(scaleValue, viewportWidth);
 
   // 当前模型的展示名（内置模型用 i18n，自定义模型用其配置的角色名），
   // 供聊天面板标题/提示文案使用，保证人设与显示的模型一致。
@@ -694,14 +737,13 @@ export function Live2DWidget() {
     let disposed = false;
 
     // ---- 首次挂载，清掉可能残留的插件会话状态，保证每次挂载都从干净状态开始 ----
-    // 读取本次挂载要加载的默认模型（缺省 furina）。首屏由 pickCdnRoot(activeModel)
+    // 本次挂载加载 activeModel（首屏即渲染期解析出的默认模型）。首屏由 pickCdnRoot(activeModel)
     // 自动选根：furina 走远端 CDN，BCSZ1.1 走本地打包根。下方 loader 前还会按
     // "命中根的实际 model_list"解析真实下标并写入 localStorage.modelId（唯一写入点）。
     try {
       localStorage.removeItem("waifu-disabled");
       localStorage.removeItem("waifu-display");
       sessionStorage.removeItem("waifu-message-priority");
-      setActiveModel(defaultModelRef.current);
     } catch {
       // ignore
     }
@@ -736,6 +778,19 @@ export function Live2DWidget() {
     // 用共享 Promise 保证 initWidget 前补丁已就绪，避免插件先创建实例导致动作/物理失效。
     const patchPromise = patchLive2dApp();
 
+    // 渲染封顶按实例应用（帧缓冲分辨率 + 帧率）。换模型后 subdelegate 会重建，
+    // 所以每次模型就绪都要重新调用一次。
+    const applyRenderCaps = () => {
+      const app = (window as unknown as { __rinLive2dApp?: unknown }).__rinLive2dApp;
+      // 帧缓冲分辨率：resizeCanvas 不在 AppDelegate.prototype 上，原型补丁覆盖不到它
+      capSubdelegateDpr(app, MAX_RENDER_DPR);
+      const fpsCap = normalizeFpsCap(configRef.current.get("widget.live2d.fps_cap"));
+      const capped = capSubdelegateFps(app, fpsCap);
+      if (fpsCap > 0 && capped === 0) {
+        console.warn("[rin-live2d] 帧率封顶未能挂上（渲染器结构不识别），实际仍按全屏帧率渲染");
+      }
+    };
+
     // ---- 渲染"就绪门控"：轮询模型状态，CompleteSetup(22) 后才放行 ----
     // 原实现监听 live2d:rendered（渲染循环一启动就触发，并非模型真正渲染完成），
     // 导致遮罩过早消失、露出没加载完的模型。改为轮询模型实例状态更准确。
@@ -769,6 +824,8 @@ export function Live2DWidget() {
           document.getElementById("live2d")?.classList.add("rin-live2d-ready");
           // 给当前模型实例包一层 update，注入动作参数动画
           patchModelForActions(model);
+          // 渲染封顶落在渲染循环每帧调用的 subdelegate 上（实测定位的热点与盲区）
+          applyRenderCaps();
           // 模型就绪后打个招呼（挥手）
           window.setTimeout(() => {
             if (!disposed) playAction("wave");
@@ -779,46 +836,129 @@ export function Live2DWidget() {
     };
     readyPollStartRef.current = startReadyPoll;
     readyPollStopRef.current = stopReadyPoll;
+    applyRenderCapsRef.current = applyRenderCaps;
     startReadyPoll();
 
     // ---- 兜底：下载停滞（连续 2 分钟无进展且未渲染）时提示用户 ----
-    const stallTimer = window.setInterval(() => {
-      if (disposed) return;
-      if (renderedRef.current) {
+    let stallTimer = 0;
+    const stopStallTimer = () => {
+      if (stallTimer) {
         window.clearInterval(stallTimer);
-        return;
+        stallTimer = 0;
       }
-      if (Date.now() - lastProgressAtRef.current > 120000) {
-        setError(t("theme.live2d.loading.stalled"));
-        window.clearInterval(stallTimer);
-      }
-    }, 30000);
+    };
+    const startStallTimer = () => {
+      if (stallTimer) return;
+      stallTimer = window.setInterval(() => {
+        if (disposed) return;
+        if (renderedRef.current) {
+          stopStallTimer();
+          return;
+        }
+        if (Date.now() - lastProgressAtRef.current > 120000) {
+          setError(t("theme.live2d.loading.stalled"));
+          stopStallTimer();
+        }
+      }, 30000);
+    };
+    startStallTimer();
 
     // ---- 空闲动作/表情轮播：让模型偶尔自己挥手/摇头/跳舞、换表情 ----
-    const idleTimer = window.setInterval(() => {
-      if (disposed || !renderedRef.current) return;
-      const model = getLive2dModel();
-      if (!model) return;
-      // 正在播放动作时不打断
-      if (isActionPlaying()) return;
-      const roll = Math.random();
-      if (roll < 0.22) {
-        // 偶尔随机做一个动作
-        const names: ActionName[] = ["wave", "shake", "dance"];
-        playAction(names[Math.floor(Math.random() * names.length)]);
-      } else {
-        // 其余时间轮播一个安全表情，3 秒后清除
-        const name = IDLE_EXPRESSIONS[Math.floor(Math.random() * IDLE_EXPRESSIONS.length)];
+    let idleTimer = 0;
+    const stopIdleTimer = () => {
+      if (idleTimer) {
+        window.clearInterval(idleTimer);
+        idleTimer = 0;
+      }
+    };
+    const startIdleTimer = () => {
+      if (idleTimer) return;
+      idleTimer = window.setInterval(() => {
+        if (disposed || !renderedRef.current) return;
+        const model = getLive2dModel();
+        if (!model) return;
+        // 正在播放动作时不打断
+        if (isActionPlaying()) return;
+        const roll = Math.random();
+        if (roll < 0.22) {
+          // 偶尔随机做一个动作
+          const names: ActionName[] = ["wave", "shake", "dance"];
+          playAction(names[Math.floor(Math.random() * names.length)]);
+        } else {
+          // 其余时间轮播一个安全表情，3 秒后清除
+          const name = IDLE_EXPRESSIONS[Math.floor(Math.random() * IDLE_EXPRESSIONS.length)];
+          try {
+            model.setExpression?.(name);
+            window.setTimeout(() => {
+              if (!disposed) stopAllMotions(model);
+            }, 3000);
+          } catch {
+            // ignore
+          }
+        }
+      }, 12000);
+    };
+    startIdleTimer();
+
+    // ---- 页面不可见 / 窗口失焦时自动暂停轮询与渲染循环 ----
+    // 三个定时器（就绪轮询 / 停滞兜底 / 空闲轮播）在后台没有可见收益：
+    // 空闲轮播甚至会驱动模型持续动画。切回前台时按当前状态恢复。
+    //
+    // 渲染循环的暂停是实测后才加上的真优化：引擎的自绘循环由插件自己按帧
+    // requestAnimationFrame 驱动（看板娘 canvas 每帧约 49 次 drawElements，
+    // 实测 ≈2950 次/秒）。引擎自带 stop()/run()（stop 里 cancelAnimationFrame
+    // 掉 _drawFrameId），实测 stop 后 drawElements 归零、run 恢复回 ≈2950 次/秒
+    // 且不会双开循环——恢复只由 renderLoopPausedRef 触发一次。
+    const setRenderLoopPaused = (paused: boolean) => {
+      const app = (window as unknown as { __rinLive2dApp?: unknown })
+        .__rinLive2dApp as
+        | { stop?: () => unknown; run?: () => unknown; _drawFrameId?: number | null }
+        | undefined;
+      if (!app) return;
+      if (paused) {
+        if (typeof app.stop === "function") {
+          app.stop();
+        } else if (app._drawFrameId) {
+          cancelAnimationFrame(app._drawFrameId);
+          app._drawFrameId = null;
+        }
+        renderLoopPausedRef.current = true;
+      } else if (renderLoopPausedRef.current) {
+        renderLoopPausedRef.current = false;
         try {
-          model.setExpression?.(name);
-          window.setTimeout(() => {
-            if (!disposed) stopAllMotions(model);
-          }, 3000);
+          app.run?.();
         } catch {
-          // ignore
+          // 恢复失败不阻塞：最坏情况是模型停在最后一帧
         }
       }
-    }, 12000);
+    };
+    // 只有模型已经画出来（renderedRef）之后才允许暂停：加载中停掉就绪轮询会让
+    // 看板娘永远不淡入（实测踩到：加载期间窗口失焦、focus 没再来，模型 _state=22
+    // 却因为没有轮询而一直隐藏）。失焦时若还在加载就什么都不做。
+    const setTimersPaused = (paused: boolean) => {
+      if (paused) {
+        if (!renderedRef.current || timersPausedRef.current) return;
+        timersPausedRef.current = true;
+        stopStallTimer();
+        stopIdleTimer();
+        readyPollStopRef.current?.();
+        setRenderLoopPaused(true);
+      } else if (timersPausedRef.current && !disposed) {
+        timersPausedRef.current = false;
+        if (!renderedRef.current) readyPollStartRef.current?.();
+        startStallTimer();
+        startIdleTimer();
+        setRenderLoopPaused(false);
+      }
+    };
+    const onVisibilityChange = () => setTimersPaused(document.hidden);
+    const onWindowBlur = () => setTimersPaused(true);
+    const onWindowFocus = () => {
+      if (!document.hidden) setTimersPaused(false);
+    };
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    window.addEventListener("blur", onWindowBlur);
+    window.addEventListener("focus", onWindowFocus);
 
     (async () => {
       try {
@@ -834,10 +974,12 @@ export function Live2DWidget() {
         //    不等插件脚本加载，让大体积 moc3 尽早开始下载
         prefetchModel(cdnRoot, activeModel);
 
-        // 2.5) 后台全量预缓存全部内置模型（furina + BCSZ1.1）：把每个模型的全部资源
+        // 2.5) 后台全量预缓存全部内置模型：把每个模型的全部资源
         //      （moc3/贴图/动作/物理/口型）写入本地 Cache Storage。首次进入即下载一次，
         //      之后切换模型都命中本地缓存、不再重复下载。（不阻塞主流程）
-        precacheAllModels();
+        //      widget.live2d.preload 关闭时跳过仅远端可得的大模型（furina 约 95MB），
+        //      当前正在展示的模型仍由上面的 prefetchModel 正常下载。
+        precacheAllModels(config.getBoolean("widget.live2d.preload"));
 
         // 3) 加载样式与插件脚本（均为判重，可安全重复挂载）
         await loadStylesheet(WIDGET_CSS);
@@ -862,7 +1004,11 @@ export function Live2DWidget() {
 
         // 5.5) 若首次默认模型是"自定义模型"（不在内置链表里），无法用 loader 的
         //      cdnPath+modelId 拉取（那是基于内置 model_list 的）。此时先用 loader 加载
-        //      一个内置占位（furina），随后立即 changeModel(自定义 url) 切到目标模型。
+        //      一个"该根实际含有"的内置模型当占位，随后立即 changeModel(自定义 url)
+        //      切到目标模型。占位优先轻的 BCSZ1.1：写死 furina 会让自定义模型用户
+        //      先下 95MB 才切到自己的模型，而且在生产打包根里取不到它——该根的
+        //      model_list 按 vite.config.ts 只声明 ["BCSZ1.1"]，indexOf("furina") 直接 -1
+        //      会抛 model_missing；只有 dev 根（rinLive2dLocalCdn）同时列出两者。
         const customTarget = customModelsRef.current.find((c) => c.id === activeModel);
         const isCustomDefault = !!customTarget;
 
@@ -876,7 +1022,6 @@ export function Live2DWidget() {
         // 说明打包资源没随站点发布，此时应明确报错而非静默改加载别的模型
         // （否则 state 说 BCSZ、插件却加载 furina、进度用 BCSZ 的 22.6MB 当分母 →
         // 22MB 就显示 100%，其实 furina 的 95MB 还没下完 → 表现就是"卡在 100%不显示"）。
-        const loadFor = isCustomDefault ? "furina" : activeModel;
         const modelListRes = await fetch(`${cdnRoot}model_list.json`, { mode: "cors" });
         if (!modelListRes.ok) {
           throw new Error(
@@ -884,7 +1029,11 @@ export function Live2DWidget() {
           );
         }
         const modelList = (await modelListRes.json()) as { models?: unknown[] };
-        const resolvedId = modelList.models?.indexOf(loadFor) ?? -1;
+        const listedModels = modelList.models ?? [];
+        // 占位取"这个根真的有"的内置模型：优先轻的 BCSZ1.1，只有远端根才需要退回 furina。
+        const placeholderModel = listedModels.includes("BCSZ1.1") ? "BCSZ1.1" : "furina";
+        const loadFor = isCustomDefault ? placeholderModel : activeModel;
+        const resolvedId = listedModels.indexOf(loadFor);
         if (resolvedId < 0) {
           throw new Error(
             t("theme.live2d.error.model_missing", {
@@ -937,8 +1086,16 @@ export function Live2DWidget() {
     return () => {
       disposed = true;
       readyPollStopRef.current?.();
-      window.clearInterval(stallTimer);
-      window.clearInterval(idleTimer);
+      stopStallTimer();
+      stopIdleTimer();
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+      window.removeEventListener("blur", onWindowBlur);
+      window.removeEventListener("focus", onWindowFocus);
+      // 卸载时不要把引擎留在停止状态：循环归零会连累后续复用同一实例的路径
+      setRenderLoopPaused(false);
+      // 新一轮 effect 挂载时会自己把定时器全开，暂停标记要跟着清零
+      timersPausedRef.current = false;
+      renderLoopPausedRef.current = false;
       window.removeEventListener("pointermove", onWindowMoveRef.current);
       window.removeEventListener("pointerup", onWindowUpRef.current);
       window.removeEventListener("pointercancel", onWindowUpRef.current);
@@ -983,31 +1140,37 @@ export function Live2DWidget() {
     // 跳过首次挂载（首屏已按默认加载）
     if (prev === undefined) return;
     if (prev === settingsModelsSig) return;
-    // 模型配置变化：重置到默认模型并重载
-    setActiveModel(defaultModelRef.current);
+    // 模型配置变化：重置到新的默认模型并重载
+    setActiveModel(
+      resolveDefaultName(
+        config.get("widget.live2d.defaultModel"),
+        parseCustomModels(config.get("widget.live2d.customModels")),
+      ),
+    );
     setModelVersion((v) => v + 1);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [settingsModelsSig]);
+
+  // 设置里改动帧率封顶后立刻重新应用，不必等看板娘重载。
+  // 模型还没就绪时 capSubdelegateFps 取不到实例，返回 0 不做任何事，就绪门控会再补一次。
+  const fpsCapValue = normalizeFpsCap(config.get("widget.live2d.fps_cap"));
+  useEffect(() => {
+    applyRenderCapsRef.current?.();
+  }, [fpsCapValue]);
 
   /**
    * 拖动时驱动衣服/头发飘动的物理：接管模型的 setDragging，用真实指针速度喂值，
    * 让布料在拖动过程中跟着鼠标惯性飘动（模型自带 physics3 重力 Y=-1 会自然带动衣服）。
    * 松手后恢复原函数，拖拽管理器会自然回弹，产生重力惯性感。
+   * 接管与收尾的可测实现（含「必须以 model 为 this 调原方法」这条约束）在 perf.ts。
    */
   function startDragFlutter() {
     const model = getLive2dModel();
     if (!model) return;
-    const setDragging = model.setDragging;
-    if (typeof setDragging !== "function") return;
-    dragOrigSetDraggingRef.current = setDragging;
     dragVelocityRef.current = { x: 0, y: 0 };
-    // 拖动期间忽略渲染器传入的位置值，改用真实指针速度驱动
-    model.setDragging = (x: number, y: number) => {
-      void x;
-      void y;
-      const v = dragVelocityRef.current;
-      setDragging(clamp(v.x, -1, 1), clamp(v.y, -1, 1));
-    };
+    const orig = takeOverDragSetDragging(model, () => dragVelocityRef.current);
+    if (!orig) return;
+    dragOrigSetDraggingRef.current = orig;
     draggingRef.current = true;
   }
 
@@ -1016,25 +1179,9 @@ export function Live2DWidget() {
     draggingRef.current = false;
     const model = getLive2dModel();
     const orig = dragOrigSetDraggingRef.current;
-    if (!model || !orig) {
-      dragOrigSetDraggingRef.current = null;
-      return;
-    }
-    let frames = 0;
-    const tick = () => {
-      if (frames >= 20) {
-        model.setDragging = orig;
-        dragOrigSetDraggingRef.current = null;
-        orig(0, 0);
-        return;
-      }
-      frames++;
-      const decay = Math.max(0, 1 - frames / 20);
-      const v = dragVelocityRef.current;
-      orig(v.x * decay, v.y * decay);
-      requestAnimationFrame(tick);
-    };
-    tick();
+    dragOrigSetDraggingRef.current = null;
+    if (!model || !orig) return;
+    releaseDragSetDragging(model, orig, () => dragVelocityRef.current);
   }
 
   // window 级指针监听：保证拖动过程中指针移出 DOM 也不丢失
@@ -1068,6 +1215,7 @@ export function Live2DWidget() {
           origTop: wrapper.offsetTop,
           clientX: 0,
           clientY: 0,
+          moved: Math.hypot(dx, dy),
         };
         startDragFlutter();
         setDragging(true);
@@ -1081,6 +1229,7 @@ export function Live2DWidget() {
     // 拖拽移动
     const deltaX = event.clientX - state.startX;
     const deltaY = event.clientY - state.startY;
+    state.moved = Math.max(state.moved, Math.hypot(deltaX, deltaY));
     const nextLeft = state.origLeft + deltaX;
     const nextTop = state.origTop + deltaY;
     // 限位：不超过视口右下，且顶部不高于 0
@@ -1115,7 +1264,21 @@ export function Live2DWidget() {
     document.body.style.cursor = "";
     document.body.style.userSelect = "";
     delete document.body.dataset.live2dDragging;
+    // 按在模型上但几乎没移动 → 视为"抚摸"点击，而不是拖拽
+    if (state.moved < DRAG_START_THRESHOLD) tapPet();
   };
+
+  // 轻点模型本体触发抚摸动作（JS 参数曲线驱动，见 live2d/actions.ts）。
+  // 说明：远端 widget fork 未暴露 HitArea 分区信息，无法区分摸头/摸身体等
+  // 不同区域的反馈，只能做整体统一的抚摸动画。
+  const lastPetAtRef = useRef(0);
+  function tapPet() {
+    const now = Date.now();
+    if (now - lastPetAtRef.current < 1500) return; // 连点冷却，避免动作排队
+    if (!renderedRef.current || isActionPlaying()) return;
+    lastPetAtRef.current = now;
+    playAction("pet");
+  }
 
   // 用 ref 保存最新 handler，便于在 effect 清理里移除
   const onWindowMoveRef = useRef(onWindowMove);
@@ -1133,7 +1296,7 @@ export function Live2DWidget() {
       return;
     }
     // 透明区域点击穿透：读取该点像素 alpha，透明则先挂起，等指针抬起时透传
-    const alpha = readPixelAlpha(event.clientX, event.clientY);
+    const alpha = probePixelAlpha(event.clientX, event.clientY);
     if (alpha < CLICK_ALPHA_THRESHOLD) {
       interactionRef.current = {
         kind: "pending",
@@ -1143,6 +1306,7 @@ export function Live2DWidget() {
         origTop: wrapper.offsetTop,
         clientX: event.clientX,
         clientY: event.clientY,
+        moved: 0,
       };
     } else {
       // 不透明（模型本体）：直接开始拖拽
@@ -1154,6 +1318,7 @@ export function Live2DWidget() {
         origTop: wrapper.offsetTop,
         clientX: 0,
         clientY: 0,
+        moved: 0,
       };
       startDragFlutter();
       setDragging(true);

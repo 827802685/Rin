@@ -259,7 +259,7 @@ export function MomentsPage() {
                         <Suspense
                             fallback={
                                 <div className="flex h-[300px] w-full items-center justify-center">
-                                    <ReactLoading width="1.5em" height="1.5em" type="spin" color="#FC466B" />
+                                    <ReactLoading width="1.5em" height="1.5em" type="spin" color="rgb(var(--theme-rgb))" />
                                 </div>
                             }
                         >

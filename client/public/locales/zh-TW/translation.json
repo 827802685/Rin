@@ -208,6 +208,7 @@
     "api_url": "Pages 環境變數中 API_URL 應為 Worker 地址，請檢查 Pages 環境變數中 API_URL 是否正確",
     "api_url_slash": "Pages 環境變數中 API_URL 應為 Worker 地址，請檢查 Pages 環境變數中 API_URL 是否正確，且 API_URL 末尾不能有 /",
     "github_callback": "GitHub OAuth 回調地址應為 `https://<Worker 地址>/api/user/github/callback`，請檢查 GitHub OAuth 回調地址是否正確",
+    "login_required": "需要登入後才能開啟這個頁面",
     "not_found": "頁面未找到",
     "permission_denied": "權限不足",
     "title": "錯誤"
@@ -218,6 +219,14 @@
   },
   "footer": {
     "rss": "RSS 訂閱連結"
+  },
+  "sidebar": {
+    "loading": "側欄內容載入中…",
+    "tags_failed": "標籤資料未取得",
+    "retry": "重試",
+    "tags_title": "熱門標籤",
+    "view_tags": "查看標籤",
+    "view_timeline": "查看時間軸"
   },
   "friends": {
     "apply": "申請友情連結",
@@ -500,11 +509,13 @@
       "desc": "選擇桌面端網站頂部的排列方式，並在下方預覽效果",
       "options": {
         "classic": "經典置中",
-        "compact": "極簡純文字"
+        "compact": "極簡純文字",
+        "sidebar": "側欄雙列（實驗性）"
       },
       "preview": {
         "classic": "品牌、置中導覽與操作區維持目前這套平衡配置。",
-        "compact": "幾乎移除所有裝飾，只保留最必要的資訊與操作。"
+        "compact": "幾乎移除所有裝飾，只保留最必要的資訊與操作。",
+        "sidebar": "左正文右側欄，窄欄摺疊單列。"
       }
     },
     "header_behavior": {
@@ -521,11 +532,13 @@
       "desc": "選擇文章列表、搜尋結果與標籤頁中卡片的視覺風格",
       "options": {
         "default": "預設",
-        "editorial": "雜誌風"
+        "editorial": "雜誌風",
+        "cover": "大圖封面（實驗性）"
       },
       "preview": {
         "default": "目前這套緊湊卡片，表面乾淨，裝飾最少。",
-        "editorial": "更有展示感的卡片，帶有淡淡主題染色、更強層次，以及類似畫冊的 framing。"
+        "editorial": "更有展示感的卡片，帶有淡淡主題染色、更強層次，以及類似畫冊的 framing。",
+        "cover": "大圖封面置頂，正文在下。"
       }
     },
     "feed_layout": {
@@ -534,12 +547,36 @@
       "preview_note": "僅供預覽。儲存設定後才會套用到站點。",
       "options": {
         "list": "單欄",
-        "masonry": "瀑布流"
+        "masonry": "瀑布流",
+        "magazine": "雜誌網格（實驗性）"
       },
       "preview": {
         "list": "穩定的單欄閱讀節奏，每列只放一張卡片。",
-        "masonry": "依卡片高度自動拼接的多欄版面，適合長短不一的內容。"
+        "masonry": "依卡片高度自動拼接的多欄版面，適合長短不一的內容。",
+        "magazine": "兩列等寬網格，搭配封面卡。"
       }
+    },
+    "theme_scheme": {
+      "title": "配色方案",
+      "desc": "頁面配色預設（實驗性），點擊即時預覽",
+      "options": {
+        "default": "預設藍",
+        "sakura": "櫻粉",
+        "ocean": "海鹽",
+        "forest": "林綠",
+        "mono": "墨灰",
+        "amber": "暖砂",
+        "custom": "自訂"
+      }
+    },
+    "custom_css": {
+      "title": "自訂 CSS（實驗性）",
+      "desc": "貼上其他主題的 CSS 色值，解析為配色方案。",
+      "preview": "套用預覽",
+      "clear": "清除",
+      "parsed": "已解析為自訂配色方案。",
+      "no_tokens": "未解析到令牌色值，仍會原樣掛載 CSS。",
+      "import_warn": "偵測到 @import，將載入外部位址資源。"
     },
     "theme_color": {
       "title": "主題色",
@@ -848,7 +885,7 @@
     "live2d": {
       "enable": {
         "title": "Live2D 看板娘",
-        "desc": "在站點上展示芙寧娜 Live2D 模型"
+        "desc": "在站點上展示 Live2D 看板娘，預設使用隨站點打包的輕量模型"
       },
       "position": {
         "title": "看板娘靠左",
@@ -864,9 +901,21 @@
         "desc": "注入模型 Layout 的 JSON，用於微調模型在畫布中的位置/縮放，可解決頸部錯位等問題。範例：{\"Center Y\": 0.05}",
         "label": "Layout JSON"
       },
+      "fps_cap": {
+        "title": "影格上限",
+        "desc": "限制看板娘的渲染頻率（上限 30 影格）：繪製呼叫實測約降六成。在本來就跑不滿 30 影格的機器上（重型模型常見），看板娘不會變快，但整頁影格率實測從 13 升到 29；儲存後即時生效。",
+        "options": {
+          "off": "不封頂",
+          "fps30": "30 影格"
+        }
+      },
+      "preload": {
+        "title": "預緩存所有模型",
+        "desc": "關閉時不預下載遠端大模型（約95MB）。"
+      },
       "custom": {
         "title": "模型管理",
-        "desc": "內建與自訂模型統一管理：點「設為預設」切換預設模型，也可以新增自己的模型（模型清單地址為 .model3.json 或 index.json）。",
+        "desc": "內建與自訂模型統一管理：點「設為預設」切換預設模型，也可以新增自己的模型（模型清單網址為 .model3.json 或 index.json）。預設已是隨站點打包的輕量模型；芙寧娜約 95MB、僅能走遠端，低效能裝置整頁會掉到約 12 幀。",
         "add": "加入模型",
         "remove": "刪除",
         "defaultFlag": "預設",
@@ -942,6 +991,39 @@
       "text": {
         "title": "文字指標",
         "desc": "可編輯文字上的指標圖片"
+      },
+      "scheme": {
+        "title": "指標方案",
+        "desc": "選擇整套指標風格，furina 可逐態覆蓋",
+        "options": {
+          "furina": "芙寧娜",
+          "dot": "小圓點",
+          "minimal": "系統原生"
+        }
+      },
+      "trail": {
+        "title": "指標拖尾",
+        "desc": "滑鼠移動留下漸隱光點（實驗性）"
+      }
+    },
+    "ambient": {
+      "enable": {
+        "title": "氛圍背景",
+        "desc": "全屏粒子背景（實驗性），預設關閉"
+      },
+      "type": {
+        "title": "背景樣式",
+        "desc": "氛圍背景使用的粒子預設",
+        "options": {
+          "snow": "飄雪",
+          "sakura": "落櫻",
+          "starry": "星夜",
+          "bubbles": "氣泡"
+        }
+      },
+      "disable_mobile": {
+        "title": "行動端關閉",
+        "desc": "觸控裝置不渲染氛圍背景"
       }
     },
     "firework": {

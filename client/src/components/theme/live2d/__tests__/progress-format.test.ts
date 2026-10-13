@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { formatProgressMb, progressPercent } from "../progress-format";
 
-// 用例取自拆分前 live2d-widget.tsx 的真实进度值：
-// furina 总量 103740290 字节、BCSZ1.1 总量 22639505 字节（EXPECTED_TOTAL_BY_NAME）。
+// 用例取自拆分前 live2d-widget.tsx 的真实进度值（历史样本，只喂格式化函数，
+// 不代表当前 EXPECTED_TOTAL_BY_NAME —— 那个值会随模型资产变化）。
 
 describe("progressPercent", () => {
   it("returns null before the first progress tick", () => {

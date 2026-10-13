@@ -122,4 +122,20 @@ describe("FeedCard", () => {
     it("tolerates a missing hashtag list", () => {
         expect(() => renderCard({ hashtags: undefined })).not.toThrow();
     });
+
+    it("renders the cover variant with its own card treatment", () => {
+        const { container } = renderCard({ variant: "cover", avatar: "https://example.com/a.png" });
+
+        const card = container.querySelector('[class*="shadow-light"]');
+        expect(card).not.toBeNull();
+        // 封面卡正文区有自己的内边距组合
+        expect(container.querySelector('[class*="pt-2"][class*="pb-4"]')).not.toBeNull();
+    });
+
+    it("lets an explicit variant override the site-wide card style", () => {
+        // useSiteConfig 被 mock 成 default，显式传 editorial 时应生效
+        const { container } = renderCard({ variant: "editorial" });
+
+        expect(container.querySelector('[class*="rounded-[28px]"]')).not.toBeNull();
+    });
 });

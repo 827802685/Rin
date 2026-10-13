@@ -112,7 +112,7 @@ export function Settings() {
       </Helmet>
       <main className="w-full rounded-2xl bg-w" aria-label={t("main_content")}>
         <div className="flex flex-col items-start space-y-2 pb-24">
-          {(loading || saving) && <ReactLoading width="1em" height="1em" type="spin" color="#FC466B" />}
+          {(loading || saving) && <ReactLoading width="1em" height="1em" type="spin" color="rgb(var(--theme-rgb))" />}
           <ItemTitle title={t("settings.site.title")} />
           <ItemInput
             title={t("settings.site.name.title")}

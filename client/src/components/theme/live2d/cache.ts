@@ -116,11 +116,15 @@ async function precacheModel(cdnRoot: string, name: string): Promise<void> {
   }
 }
 
-// 首次进入后，后台并行预缓存所有内置模型（furina 远端 + BCSZ1.1 本地）。
+// 首次进入后，后台并行预缓存内置模型（furina 远端 + BCSZ1.1 本地）。
 // 每个模型用各自最优根（BCSZ→打包根，furina→远端 CDN）。
 // 清单只维护在 live2d/models.ts 的 BUILTIN_MODELS，此处不再重复枚举。
-export function precacheAllModels(): void {
-  const jobs = BUILTIN_MODELS.map(async (name) => {
+// includeRemoteLarge=false（widget.live2d.preload 关闭时）：跳过只能走远端的大模型
+// （furina moc3 约 95MB），不提前占用带宽与磁盘；当前展示模型仍会正常下载。
+export function precacheAllModels(includeRemoteLarge = true): void {
+  const jobs = BUILTIN_MODELS.filter(
+    (name) => includeRemoteLarge || bundledRootFor(name) !== "",
+  ).map(async (name) => {
     try {
       const root = await pickCdnRoot(name);
       await precacheModel(root, name);

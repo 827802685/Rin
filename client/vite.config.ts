@@ -4,7 +4,7 @@ import {
   writeFileSync, cpSync,
 } from 'node:fs'
 import { fileURLToPath } from 'node:url'
-import { dirname, join, normalize } from 'node:path'
+import { dirname, join, normalize, relative } from 'node:path'
 import react from '@vitejs/plugin-react-swc'
 import { visualizer } from "rollup-plugin-visualizer";
 // 前端模型清单唯一来源（避免与 live2d-widget.tsx 各自硬编码一份顺序）
@@ -32,6 +32,13 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
  */
 function rinLive2dLocalCdn(): Plugin {
   const modelsDir = join(__dirname, "../models");
+  // 防目录穿越：跨平台判断 child 是否在 parent 目录内。
+  // 不能写 child.startsWith(parent + "/") —— Windows 上 normalize 产出反斜杠，
+  // 该判断恒为 false，会把所有模型文件误判成越界（实测整站 404、只能回落远端大模型）。
+  const isInside = (parent: string, child: string) => {
+    const rel = relative(normalize(parent), normalize(child));
+    return rel !== "" && !rel.startsWith("..") && !rel.includes(":");
+  };
   // 本地模型漫游顺序：与前端 live2d/models.ts 的 BUILTIN_MODELS 完全一致
   // （["furina","BCSZ1.1"]），不要用目录字典序（会排成 ["BCSZ1.1","furina"]），
   // 否则插件用 modelId 下标解析模型名会取错。
@@ -82,7 +89,7 @@ function rinLive2dLocalCdn(): Plugin {
         }
         const name = decodeURIComponent(afterMarker.slice(0, slash));
         const modelDir = normalize(join(modelsDir, name));
-        if (!modelDir.startsWith(normalize(modelsDir) + "/") || !statSync(modelDir, { throwIfNoEntry: false })?.isDirectory()) {
+        if (!isInside(modelsDir, modelDir) || !statSync(modelDir, { throwIfNoEntry: false })?.isDirectory()) {
           res.statusCode = 404;
           res.end("not found");
           return;
@@ -92,7 +99,7 @@ function rinLive2dLocalCdn(): Plugin {
         const model3Index = indexConfigFor(modelDir, name);
         if (rel === "index.json" && model3Index) rel = model3Index;
         const file = normalize(join(modelDir, rel));
-        if (!file.startsWith(normalize(modelDir) + "/")) {
+        if (!isInside(modelDir, file)) {
           res.statusCode = 403;
           res.end("forbidden");
           return;
@@ -173,9 +180,10 @@ function monacoLongDistanceHintShim(): Plugin {
 /**
  * Live2D 看板娘模型打进产物（仅 build）。
  *
- * Cloudflare Pages 单文件上限 25MiB：furina 的 moc3 单文件约 95MB 超限，只能走远端
- * CDN；但 BCSZ1.1 整个模型约 22MB、单文件最大约 2.1MB，完全可随博客静态资源一起
- * 分发（同域、全球 CDN、毫秒级，彻底摆脱远端 github.io 的小水管）。
+ * Cloudflare 单文件上限 25MiB：furina 的 moc3 单文件约 95MB 超限，只能走远端
+ * CDN；但 BCSZ1.1 整个模型约 11.8MB、单文件最大约 3.4MB（贴图已降到 4096²），
+ * 完全可随博客静态资源一起分发（同域、全球 CDN、毫秒级，彻底摆脱远端 github.io
+ * 的小水管）。
  *
  * 产物结构（与插件期望的 CDN 布局一致）：
  *   <root>/live2d-bundled/model_list.json          -> {"messages":[],"models":["BCSZ1.1"]}

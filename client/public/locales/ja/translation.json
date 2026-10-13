@@ -208,6 +208,7 @@
     "api_url": "Pages 環境変数のAPI_URLはWorkerアドレスである必要があります。Pages環境変数のAPI_URLが正しいか確認してください。",
     "api_url_slash": "Pages 環境変数のAPI_URLはWorkerアドレスである必要があります。Pages環境変数のAPI_URLが正しいか、またAPI_URLの末尾にスラッシュ（/）がないか確認してください。",
     "github_callback": "GitHub OAuthコールバックURLは`https://<Workerアドレス>/api/user/github/callback`である必要があります。GitHub OAuthコールバックURLが正しいか確認してください。",
+    "login_required": "このページを開くにはログインが必要です",
     "not_found": "ページが見つかりません",
     "permission_denied": "権限がありません",
     "title": "エラー"
@@ -218,6 +219,14 @@
   },
   "footer": {
     "rss": "RSS 購読リンク"
+  },
+  "sidebar": {
+    "loading": "サイドバーを読み込み中…",
+    "tags_failed": "タグを取得できませんでした",
+    "retry": "再試行",
+    "tags_title": "人気タグ",
+    "view_tags": "タグを見る",
+    "view_timeline": "年表を見る"
   },
   "friends": {
     "apply": "友人リンクを申請",
@@ -500,11 +509,13 @@
       "desc": "デスクトップでのサイトヘッダー配置を選び、下でプレビューできます",
       "options": {
         "classic": "クラシック中央配置",
-        "compact": "ミニマル"
+        "compact": "ミニマル",
+        "sidebar": "サイドバー2列（実験的）"
       },
       "preview": {
         "classic": "ブランド、中央ナビ、操作エリアを現在に近いバランスで保ちます。",
-        "compact": "装飾をほぼ外し、必要最小限の情報と操作だけを見せる構成です。"
+        "compact": "装飾をほぼ外し、必要最小限の情報と操作だけを見せる構成です。",
+        "sidebar": "本文とサイドバーの2列構成。"
       }
     },
     "header_behavior": {
@@ -521,11 +532,13 @@
       "desc": "記事一覧、検索結果、タグ一覧で使うカード表現を選びます",
       "options": {
         "default": "標準",
-        "editorial": "エディトリアル"
+        "editorial": "エディトリアル",
+        "cover": "カバー大型（実験的）"
       },
       "preview": {
         "default": "現在のコンパクトなカード。装飾は少なく、シンプルな見た目です。",
-        "editorial": "淡いテーマカラー、強めの階層感、誌面のような額装感を持つ表現です。"
+        "editorial": "淡いテーマカラー、強めの階層感、誌面のような額装感を持つ表現です。",
+        "cover": "大きな画像を上部に、本文を下に。"
       }
     },
     "feed_layout": {
@@ -534,12 +547,36 @@
       "preview_note": "プレビュー専用です。保存後にサイトへ適用されます。",
       "options": {
         "list": "1カラム",
-        "masonry": "Masonry"
+        "masonry": "Masonry",
+        "magazine": "マガジングリッド（実験的）"
       },
       "preview": {
         "list": "1行に1枚ずつ並ぶ、安定した読みやすいレイアウトです。",
-        "masonry": "カードの高さに応じて詰める、多段の瀑布型レイアウトです。"
+        "masonry": "カードの高さに応じて詰める、多段の瀑布型レイアウトです。",
+        "magazine": "等幅2列グリッド、カードはカバー型。"
       }
+    },
+    "theme_scheme": {
+      "title": "カラーパターン",
+      "desc": "ページ配色のプリセット（実験的）",
+      "options": {
+        "default": "標準ブルー",
+        "sakura": "桜",
+        "ocean": "海",
+        "forest": "森",
+        "mono": "墨",
+        "amber": "暖砂",
+        "custom": "カスタム"
+      }
+    },
+    "custom_css": {
+      "title": "カスタム CSS（実験的）",
+      "desc": "外部テーマの CSS 色を配色に取り込み。",
+      "preview": "プレビュー適用",
+      "clear": "クリア",
+      "parsed": "カスタム配色として適用。",
+      "no_tokens": "令牌が見つからず、CSS は適用されます。",
+      "import_warn": "@import 検出：外部アドレスを読み込みます。"
     },
     "theme_color": {
       "title": "テーマカラー",
@@ -848,7 +885,7 @@
     "live2d": {
       "enable": {
         "title": "Live2D マスコット",
-        "desc": "サイトにフリーナの Live2D モデルを表示します"
+        "desc": "サイトに Live2D 看板娘を表示します。デフォルトはサイト同梱の軽量モデル"
       },
       "position": {
         "title": "マスコットを左に",
@@ -864,9 +901,21 @@
         "desc": "モデルの Layout に注入する JSON で、キャンバス上の位置・拡大率を微調整します（首のズレ解消など）。例：{\"Center Y\": 0.05}",
         "label": "Layout JSON"
       },
+      "fps_cap": {
+        "title": "フレーム上限",
+        "desc": "Live2Dウィジェットの描画を上限30フレームに抑制（実測で描画呼び出しが約6割減）。もともと30フレーム出ない環境（重いモデルでは一般的）ではウィジェット自体は速くなりませんが、ページ全体は実測13→29フレーム。保存後すぐ反映。",
+        "options": {
+          "off": "制限なし",
+          "fps30": "30 フレーム"
+        }
+      },
+      "preload": {
+        "title": "全モデルを事前キャッシュ",
+        "desc": "有効時は約95MBの大容量モデルを事前取得。"
+      },
       "custom": {
         "title": "モデル管理",
-        "desc": "内蔵モデルとカスタムモデルを一括管理：「デフォルトに設定」で切り替え、独自のモデル（.model3.json または index.json の URL）も追加できます。",
+        "desc": "内蔵モデルとカスタムモデルを一括管理：「デフォルトに設定」で切り替え、独自のモデル（.model3.json または index.json の URL）も追加できます。デフォルトはサイト同梱の軽量モデルです。フリーナは約 95MB でリモート配信のみ、低性能環境ではページ全体が約 12fps まで落ちます。",
         "add": "モデルを追加",
         "remove": "削除",
         "defaultFlag": "デフォルト",
@@ -942,6 +991,39 @@
       "text": {
         "title": "テキストカーソル",
         "desc": "編集可能なテキスト上で使うカーソル画像"
+      },
+      "scheme": {
+        "title": "カーソル方式",
+        "desc": "カーソル一式を選択（furina のみ個別上書き可）",
+        "options": {
+          "furina": "フリーナ",
+          "dot": "ドット",
+          "minimal": "システム標準"
+        }
+      },
+      "trail": {
+        "title": "カーソルの残像",
+        "desc": "マウス移動に淡く残る軌跡（実験的）"
+      }
+    },
+    "ambient": {
+      "enable": {
+        "title": "アンビエント背景",
+        "desc": "画面全体のパーティクル背景（実験的・既定でOFF）"
+      },
+      "type": {
+        "title": "背景のスタイル",
+        "desc": "アンビエント背景のパーティクル種別",
+        "options": {
+          "snow": "雪",
+          "sakura": "花びら",
+          "starry": "星空",
+          "bubbles": "泡"
+        }
+      },
+      "disable_mobile": {
+        "title": "モバイルではOFF",
+        "desc": "タッチ端末では背景を描画しません"
       }
     },
     "firework": {

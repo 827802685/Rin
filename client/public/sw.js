@@ -6,7 +6,11 @@
  * 仅缓存 Live2D 模型资源，不影响页面 navigations / API / 其它静态资源。
  */
 
-const CACHE_NAME = "rin-live2d-v2";
+// 模型资产的字节变了就必须升这个版本号：贴图/语音等文件的 URL 路径不变，
+// cache-first 会永远命中旧字节 —— 例如 8192² 贴图换成 4096² 后，老访客仍会
+// 从本地缓存拿到 13.25MB 的原图，表现为"改了但没生效、还是卡"。
+// activate 阶段会删掉所有非当前名的缓存（见下方 cleanup）。
+const CACHE_NAME = "rin-live2d-v3";
 
 // Live2D 模型资源来源特征：
 // 1) 远端 GitHub 加速代理 / github.io 直连（furina 等未随站打包的模型）；

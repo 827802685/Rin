@@ -48,12 +48,14 @@ export function allModelIds(custom: CustomModel[] = []): string[] {
   return [...BUILTIN_MODELS, ...custom.map((c) => c.id)];
 }
 
-// 默认模型 id：配置值合法（内置 id 或自定义 id）则用之，否则回退 furina。
+// 默认模型 id：配置值合法（内置 id 或自定义 id）则用之，否则回退 BCSZ1.1。
+// 回退目标必须是可随站打包的轻模型：furina 的 moc3 约 95MB，只能走远端 CDN，
+// 拿它当兜底会让一个未配置的访客直接下载 95MB 并把整页拖到约 12 帧。
 export function resolveDefaultName(configured: unknown, custom: CustomModel[] = []): string {
   const s = typeof configured === "string" ? configured.trim() : "";
   if ((BUILTIN_MODELS as readonly string[]).includes(s)) return s;
   if (custom.some((c) => c.id === s)) return s;
-  return "furina";
+  return "BCSZ1.1";
 }
 
 // 自定义模型的唯一 id（设置页"添加模型"时生成）
@@ -67,11 +69,15 @@ export const MODEL_FILES_BY_NAME: Record<string, string[]> = {
   "BCSZ1.1": ["BCSZ1.1.moc3", "textures/texture_00.png"],
 };
 
-// 各模型进度分母（moc3 + 贴图 + 其它核心文件）。仅内置模型有精确值；
-// 自定义模型以 0 作为"总字节未知"，进度仅显示已下载量。
+// 各模型进度分母 = 加载看板娘真正会请求的字节（moc3 + 贴图 + motion/physics 等），
+// **不含语音 wav**：插件只在播放语音时才请求它们。旧值把 6.2MB 语音也算进分母，导致
+// 进度条最高只能走到约 72%，看着就像"卡在 72% 不动"。
+// 自定义模型以 0 表示"总字节未知"，进度只显示已下载量。
+// BCSZ1.1 的贴图已从 8192² 降到 4096²（13.25MB → 3.41MB，无损 RGBA）：桌面帧时与贴图
+// 无关（取决于 moc3 的 ArtMesh 数量），但移动端省掉的是带宽和 268MB → 67MB 的纹理显存。
 export const EXPECTED_TOTAL_BY_NAME: Record<string, number> = {
   furina: 103740290,
-  "BCSZ1.1": 22639505,
+  "BCSZ1.1": 5911380,
 };
 
 // 内置模型的聊天人设：注入给设置里绑定的 AI（ai_summary 配置）

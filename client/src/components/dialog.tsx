@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import Modal from "react-modal";
 import { Button, ButtonWithLoading } from "./button";
@@ -19,18 +19,25 @@ export type ShowAlertType = (msg: string, onConfirm?: () => (Promise<void> | voi
 export function useAlert() {
     const [alert, setAlert] = useState<Alert | null>(null)
     const [isOpen, setIsOpen] = useState(false)
-    const close = () => {
-        alert?.onConfirm()
+    // useCallback 固定引用：showAlert 原本每次渲染都是新函数，会把它的引用传给
+    // 依赖它的 useEffect（如 useSettingsDraft）造成意外重跑。
+    // close 经 ref 读当前弹窗，避免空依赖闭包拿到旧 alert、丢掉 onConfirm。
+    const alertRef = useRef<Alert | null>(null)
+    const close = useCallback(() => {
+        alertRef.current?.onConfirm()
+        alertRef.current = null
         setIsOpen(false)
         setAlert(null)
-    }
-    const showAlert = (alert: string, onConfirm?: () => void) => {
-        setAlert({
-            message: alert,
+    }, [])
+    const showAlert = useCallback((msg: string, onConfirm?: () => void) => {
+        const next: Alert = {
+            message: msg,
             onConfirm: onConfirm ?? (() => { })
-        })
+        }
+        alertRef.current = next
+        setAlert(next)
         setIsOpen(true)
-    }
+    }, [])
     const { t } = useTranslation()
     const AlertUI = () => (
         <Modal isOpen={isOpen}
