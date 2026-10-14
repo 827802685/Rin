@@ -73,12 +73,24 @@ export const MODEL_FILES_BY_NAME: Record<string, string[]> = {
 // **不含语音 wav**：插件只在播放语音时才请求它们。旧值把 6.2MB 语音也算进分母，导致
 // 进度条最高只能走到约 72%，看着就像"卡在 72% 不动"。
 // 自定义模型以 0 表示"总字节未知"，进度只显示已下载量。
+//
+// 口径必须和分子一致：分子是 fetch 流式读到的**解码后**字节，所以分母取磁盘/源站
+// 未压缩大小（传输层的 gzip 不影响）。BCSZ1.1 = models/BCSZ1.1 目录去掉 wav 的字节和
+//（含 index.json）；furina = 源站 model/furina 全部文件 + index.json（无语音文件）。
 // BCSZ1.1 的贴图已从 8192² 降到 4096²（13.25MB → 3.41MB，无损 RGBA）：桌面帧时与贴图
 // 无关（取决于 moc3 的 ArtMesh 数量），但移动端省掉的是带宽和 268MB → 67MB 的纹理显存。
 export const EXPECTED_TOTAL_BY_NAME: Record<string, number> = {
-  furina: 103740290,
+  furina: 103754246,
   "BCSZ1.1": 5911380,
 };
+
+// 进度统计的目标（分子按名字过滤、分母按表取字节）。换模型走的是"复用渲染器实例"
+// 的快路径（不重挂载加载 effect），只在挂载时算一次会让分母停在上一个模型——实测
+// 切到 furina 后显示"100% + 73.8 / 5.6 MB"。首屏与切换都从这里取，口径唯一。
+export function progressTargetFor(name: string): { name: string | null; total: number } {
+  if (!(BUILTIN_MODELS as readonly string[]).includes(name)) return { name: null, total: 0 };
+  return { name, total: EXPECTED_TOTAL_BY_NAME[name] ?? 0 };
+}
 
 // 内置模型的聊天人设：注入给设置里绑定的 AI（ai_summary 配置）
 const FURINA_SYSTEM_PROMPT =

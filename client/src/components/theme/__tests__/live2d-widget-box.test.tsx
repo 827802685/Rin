@@ -13,19 +13,31 @@ vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key }),
 }));
 
-function setViewportWidth(width: number) {
+function setViewport(width: number, height: number) {
   Object.defineProperty(window, "innerWidth", {
     configurable: true,
     writable: true,
     value: width,
   });
+  Object.defineProperty(window, "innerHeight", {
+    configurable: true,
+    writable: true,
+    value: height,
+  });
 }
 
-// 模型容器：#waifu 的宿主 div（className="relative" + inline 宽高），
-// 其唯一子节点是绝对定位的模型区（cursor-grab）。
+function setViewportWidth(width: number) {
+  setViewport(width, 768);
+}
+
+// 模型容器：#waifu 的宿主 div，是渲染树里唯一同时带 inline 宽高的 div。
+// 不靠 class 定位（Tailwind 类名会被美化改动），只看它自己的尺寸样式。
 function boxOf(container: HTMLElement): HTMLElement | null {
-  const cage = container.querySelector<HTMLElement>(".cursor-grab");
-  return cage?.parentElement ?? null;
+  return (
+    [...container.querySelectorAll<HTMLElement>("div[style]")].find(
+      (el) => el.style.width !== "" && el.style.height !== "",
+    ) ?? null
+  );
 }
 
 function renderWidget(scale: unknown) {
@@ -41,8 +53,21 @@ describe("Live2DWidget 容器尺寸", () => {
   it("窄视口挂载时按视口收缩，宽视口保持配置尺寸", () => {
     setViewportWidth(531);
     const narrow = renderWidget(1);
-    expect(boxOf(narrow.container)?.style.width).toBe("239px");
-    expect(boxOf(narrow.container)?.style.height).toBe("239px");
+    // 窄屏比例 0.55、上限 240（见 widgetBoxSize）
+    expect(boxOf(narrow.container)?.style.width).toBe("240px");
+    expect(boxOf(narrow.container)?.style.height).toBe("240px");
+    // 整棵子树默认不吃事件：方形模型区与它的祖先（看板娘根节点）都是
+    // pointer-events-none，只有画布由 override-style 的 #live2d{pointer-events:auto} 接管。
+    const box = boxOf(narrow.container);
+    expect(box?.className).toContain("pointer-events-none");
+    let inertAncestor: HTMLElement | null = null;
+    for (let el = box?.parentElement ?? null; el; el = el.parentElement) {
+      if (el.className.toString().includes("pointer-events-none")) {
+        inertAncestor = el;
+        break;
+      }
+    }
+    expect(inertAncestor).not.toBeNull();
     narrow.unmount();
 
     setViewportWidth(1280);
@@ -60,10 +85,32 @@ describe("Live2DWidget 容器尺寸", () => {
       setViewportWidth(400);
       window.dispatchEvent(new Event("resize"));
     });
-    expect(boxOf(container)?.style.width).toBe("180px");
+    expect(boxOf(container)?.style.width).toBe("220px");
 
     act(() => {
       setViewportWidth(1280);
+      window.dispatchEvent(new Event("resize"));
+    });
+    expect(boxOf(container)?.style.width).toBe("300px");
+  });
+
+  it("横屏手机（宽度够但很矮）挂载与转屏都按高度让位", () => {
+    // 实测 851×393：宽度 851 不触发窄屏规则，旧口径容器仍是 300，
+    // 人物高 293 占屏高 75%，加上竖排工具栏正好顶满屏幕。
+    setViewport(851, 393);
+    const { container } = renderWidget(1);
+    expect(boxOf(container)?.style.width).toBe("216px");
+
+    // 转回竖屏（393×851）：高度不再收，仍由宽度收到 216
+    act(() => {
+      setViewport(393, 851);
+      window.dispatchEvent(new Event("resize"));
+    });
+    expect(boxOf(container)?.style.width).toBe("216px");
+
+    // 回到平板横屏（1024×768）：两个方向都够，恢复配置尺寸
+    act(() => {
+      setViewport(1024, 768);
       window.dispatchEvent(new Event("resize"));
     });
     expect(boxOf(container)?.style.width).toBe("300px");

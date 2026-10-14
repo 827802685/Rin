@@ -18,7 +18,17 @@ describe("buildOverrideStyleCss", () => {
       "#waifu{position:absolute !important;top:0;left:0;bottom:auto !important;",
     );
     expect(css).toContain("width:100%;height:100%;margin:0}");
-    expect(css).toContain("#waifu-canvas{width:100% !important;height:100% !important;margin:0}");
+    expect(css).toContain(
+      "#waifu-canvas{width:100% !important;height:100% !important;margin:0;position:relative}",
+    );
+  });
+
+  it("只让画布接收事件：容器留白不再吃掉点击与滚动", () => {
+    // 实测：容器是正方形，人物只占中间一块，旧样式整片正方形都吃事件（手机上进还
+    // 因为 touch-action:none 挡住页面滚动）。现在命中区收到画布，再由 clip-path
+    // 裁成人物那块矩形（见 live2d/silhouette.ts）。
+    expect(css).toContain("#waifu,#waifu-canvas{pointer-events:none}");
+    expect(css).toContain("pointer-events:auto;touch-action:pan-y;cursor:grab;");
   });
 
   it("gates canvas visibility until the model is ready (fade-in)", () => {
@@ -58,7 +68,8 @@ describe("buildOverrideStyleCss", () => {
       [
         "#waifu{bottom:0 !important;transform:none !important;}",
         "#live2d{transform:scale(1.45);transform-origin:50% 100%;",
-        "clip-path:inset(10% 0 32% 0);}",
+        "clip-path:inset(10% 0 32% 0);",
+        "-webkit-clip-path:inset(10% 0 32% 0);}",
         '#waifu::after{content:"";position:absolute;left:0;right:0;bottom:0;',
         "height:10px;background:linear-gradient(180deg,rgba(0,0,0,0) 0%,",
         "rgba(255,255,255,.25) 40%,rgba(0,0,0,.12) 100%);",

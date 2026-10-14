@@ -90,12 +90,29 @@ describe("widgetBoxSize", () => {
     expect(widgetBoxSize(1, 0)).toEqual({ width: 300, height: 300 });
   });
 
-  it("窄屏按视口比例收缩，且不低于下限、不超过原尺寸", () => {
-    // 531px 视口（实测里看板娘会盖住大半页面）→ 收到 45%
-    expect(widgetBoxSize(1, 531)).toEqual({ width: 239, height: 239 });
-    // 已经比 45% 小就不要再放大
-    expect(widgetBoxSize(0.3, 531)).toEqual({ width: 150, height: 150 });
-    // 极窄视口也不低于可读下限
-    expect(widgetBoxSize(1, 320)).toEqual({ width: 150, height: 150 });
+  it("窄屏按视口比例收缩，夹在上下限内、且不超过用户 scale", () => {
+    // 手机 393px 视口：0.55 → 216 见方。旧口径 0.45 只有 177，实测人物仅 99×134，
+    // 比竖排工具栏的一半还小（用户反馈「模型怎么变小了」）。
+    expect(widgetBoxSize(1, 393)).toEqual({ width: 216, height: 216 });
+    // 宽一点的窄屏由上限 240 兜住，不随视口无限放大
+    expect(widgetBoxSize(1, 531)).toEqual({ width: 240, height: 240 });
+    // 用户显式调小的 scale 优先，不强行放大回去
+    expect(widgetBoxSize(0.3, 531)).toEqual({ width: 90, height: 90 });
+    // 极窄视口不低于可读下限 180
+    expect(widgetBoxSize(1, 320)).toEqual({ width: 180, height: 180 });
+  });
+
+  it("矮视口（横屏手机）按高度收缩，够高时不受影响", () => {
+    // 实测横屏 851×393：宽度 851 走不到窄屏分支，300 见方的容器里人物高 293、
+    // 占屏高 75%，加竖排工具栏正好顶满屏幕 ⇒ 按高度收一次。
+    expect(widgetBoxSize(1, 851, 393)).toEqual({ width: 216, height: 216 });
+    // 竖屏同机型高度 851 足够，只按宽度收
+    expect(widgetBoxSize(1, 393, 851)).toEqual({ width: 216, height: 216 });
+    // 平板横屏 1024×768 高度够，保持配置尺寸
+    expect(widgetBoxSize(1, 1024, 768)).toEqual({ width: 300, height: 300 });
+    // 两个方向都窄时取更小的那个，且不低于 180
+    expect(widgetBoxSize(1, 320, 300)).toEqual({ width: 180, height: 180 });
+    // 省略高度（未知）→ 与旧口径完全一致
+    expect(widgetBoxSize(1, 851, 0)).toEqual({ width: 300, height: 300 });
   });
 });
