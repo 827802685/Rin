@@ -3,6 +3,45 @@
 > 2026-10-04 起迭代目标已从 daily-blog 子项目切回 Rin 本体（daily-blog 已从主干移除）。
 > 2026-10-07 起改为在 `auto` 分支上迭代，每 5 次成功迭代合并回 `main`（10-11 已完成第 1 轮合并，新一轮 M=1/5）。
 
+## 2026-10-15 02:01 第 11 次执行（auto 分支，第 2 轮第 4 次迭代）
+
+- 进场：main 已有新的合并提交 c39c50d，auto 落后 1 个 → ff 更新。工作区有 10-14
+  夜间遗留的 client 改动（live2d 轮廓贴合，9 改 + 2 新文件、约 600 行）。
+  按纪律先跑门禁：全绿 → 收编为 `571e32c`，未 stash。
+- 本轮修复（提交 `da81655`）：**AI 博文生成结果只打日志不落库**（上轮列的待办 ①）。
+- **根因两条，都在必经路径上**：
+  ① `queue-handler.ts` 的 `FEED_AI_GENERATE_TASK` 分支只有 console.log + TODO ——
+     管理员触发一次生成、付一次 AI 调用，结果什么都不剩；
+  ② 就算落库也是空文：`utils/ai.ts` 的 `parseGeneratedBlog` 用 `/\[标签\][\s\S]*$/`
+     提取正文，而提示词约定的顺序是「标题 → 摘要 → 标签 → 正文」⇒ 一刀切把正文删光，
+     `content` 恒为 null。这个 bug 从功能落地起就在，只是以前不落库所以看不出来。
+- 修复：新增 `services/feed-ai-generate.ts` 的 `processFeedAIGenerateTask()`
+  （调 AI → 校验作者 → 写 feeds，draft=1 → 绑标签 → 清 feeds_ 缓存）；
+  作者 uid 由路由带进 payload 并在入库前查 users，缺失/不存在即明确失败
+  （`feeds.uid` 是 NOT NULL 外键，硬插会抛 SQL 错误 → 整批消息重试到 max_retries）；
+  生成结果自带摘要 ⇒ 直接写 ai_summary + completed，不再多排一次摘要任务；
+  防御性截断（标题 200 字、标签去重限长 32 限 8 个）；标签段正则改为「只删到第一个空行」。
+- 门禁：server tsc 0 条／server test **639 pass / 0 fail / 47 files**（624 → 639）／
+  packages/api 19 pass／client tsc 0 错／client vitest **260 pass / 35 files**。
+- 构建：server exit 0；client `✓ built in 4m`，index.html + 219 assets 齐全
+  （exit 1 是已知的 closeBundle genie-trash 超时）。
+- 变异 **6/6 killed**（draft=1→0 1 红／去作者校验 1 红／标题不截断 1 红／
+  标签不限数 1 红／恢复旧的一刀切正则 7 红／不清缓存前缀 1 红），还原后 15 pass。
+- **未触发合并（M=4/5）**，下一次（第 12 次）迭代后合并回 main。
+- 经验（供后续复用）：
+  ① **变异脚本里含正则的锚点必须走 raw 分支**：拼 CRLF 的 `replace("\n","\r\n")`
+     会把正则里的 `\n` 换成真换行，打碎源码 → 用例总数骤降的「假红」。
+  ② **判「语法错误型假红」不能用 pass 数当总数**：bun 输出是 `N pass` / `N fail`
+     两行，`pass` 数在变异后本来就会降；总数是 `Ran N tests`（或 pass+fail）。
+  ③ **解析类函数的 bug 会被「下游没接上」掩盖**：正文提取坏了一年没人发现，
+     因为消费端根本没用这个字段。补上层功能时先单测底层解析器，能一次挖出两个 bug。
+  ④ 测「缓存前缀被清」要用不带 clientConfig 的 `new TestCacheImpl()`：
+     fixtures 里 `ctx.cache` 默认「缓存未启用」，get/set 都是空操作，断言永远假绿。
+- 下一目标：① 客户端页面级组件测试 ② `storage.ts` / `s3.ts` 剩余零覆盖
+  ③ AI 草稿生成后的可见性（后台如何一眼看到新草稿）。
+
+---
+
 ## 2026-10-14 02:01 第 10 次执行（auto 分支，第 2 轮第 3 次迭代）
 
 - 进场：工作区脏（54 改 + 15 新文件，约 1500 行），是上一轮遗留的客户端大改。
