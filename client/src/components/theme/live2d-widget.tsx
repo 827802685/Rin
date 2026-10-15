@@ -15,6 +15,7 @@ import {
   stopAllMotions,
 } from "./live2d/actions";
 import { bundledRootFor, pickCdnRoot, precacheAllModels, prefetchModel } from "./live2d/cache";
+import { enginePathsFor, pickSameOriginEngineRoot } from "./live2d/engine";
 import {
   capSubdelegateDpr,
   capSubdelegateFps,
@@ -81,15 +82,13 @@ import {
  *   - 保留 React 外壳：文件夹拖拽、换模型/摸一摸/隐藏按钮、加载进度、错误提示。
  */
 
-// 插件资源根目录（相对 waifu-tips.js 所在处）
-const DIST = "https://827802685.github.io/Live2D/dist/";
-const WIDGET_CSS = `${DIST}waifu.css`;
-const WIDGET_SCRIPT = `${DIST}waifu-tips.js`;
-const WIDGET_JSON = `${DIST}waifu-tips.json`;
-const CUBISM2_PATH = `${DIST}live2d.min.js`;
-const CUBISM5_PATH = `${DIST}live2dcubismcore.min.js`;
-// 渲染器 chunk（AppDelegate 所在模块），用于捕获模型实例以驱动衣服/头发物理
-const CHUNK_URL = `${DIST}chunk/index2.js`;
+// 插件引擎来源：同源镜像优先，取不到才回退远端（见 live2d/engine.ts）。
+// 缓存成共享 Promise，多次挂载只探一次。
+let engineRootPromise: Promise<string> | null = null;
+function resolveEngineRoot(): Promise<string> {
+  if (!engineRootPromise) engineRootPromise = pickSameOriginEngineRoot();
+  return engineRootPromise;
+}
 
 // 透明像素判定阈值：alpha 低于该值视为"透明区域"，点击透传给后面的元素。
 // 同时用作轮廓测量的阈值（见 live2d/silhouette.ts）。
@@ -239,7 +238,7 @@ function capRendererDpr(proto: Record<string, unknown>): void {
  */
 async function patchLive2dApp(): Promise<boolean> {
   try {
-    const mod = (await import(/* @vite-ignore */ CHUNK_URL)) as {
+    const mod = (await import(/* @vite-ignore */ enginePathsFor(await resolveEngineRoot()).chunk)) as {
       AppDelegate?: { prototype: Record<string, unknown> & { run?: (...args: unknown[]) => unknown } };
     };
     const proto = mod.AppDelegate?.prototype;
@@ -1097,12 +1096,14 @@ export function Live2DWidget() {
         precacheAllModels(config.getBoolean("widget.live2d.preload"));
 
         // 3) 加载样式与插件脚本（均为判重，可安全重复挂载）
-        await loadStylesheet(WIDGET_CSS);
+        // 引擎根在 effect 一开头就由 patchLive2dApp 发起探测，这里只是取结果。
+        const paths = enginePathsFor(await resolveEngineRoot());
+        await loadStylesheet(paths.css);
         // 插件 waifu.css 加载完成后，把我们的覆盖样式重新追加到 <head> 末尾，
         // 确保它在 DOM 顺序上位于插件样式之后（配合 !important 双保险，避免被米色默认样式覆盖）。
         document.getElementById(OVERRIDE_STYLE_ID)?.remove();
         document.head.appendChild(overrideStyle);
-        await loadModuleScript(WIDGET_SCRIPT);
+        await loadModuleScript(paths.script);
         if (disposed) return;
 
         // 4) 等待渲染器补丁就绪（捕获模型实例），再初始化插件
@@ -1113,7 +1114,7 @@ export function Live2DWidget() {
         const loader = (window as unknown as { initWidget?: WidgetLoader }).initWidget;
         if (typeof loader !== "function") {
           throw new Error(
-            "initWidget is not available. Check that waifu-tips.js was loaded from " + DIST,
+            `initWidget is not available. Check that ${paths.script} was loaded`,
           );
         }
 
@@ -1165,10 +1166,10 @@ export function Live2DWidget() {
           // ignore
         }
         loader({
-          waifuPath: WIDGET_JSON,
+          waifuPath: paths.tips,
           cdnPath: cdnRoot,
-          cubism2Path: CUBISM2_PATH,
-          cubism5Path: CUBISM5_PATH,
+          cubism2Path: paths.cubism2,
+          cubism5Path: paths.cubism5,
           modelId: resolvedId,
           logLevel: "info",
           // 插件自带拖拽关闭，交给 React 文件夹拖拽统一处理

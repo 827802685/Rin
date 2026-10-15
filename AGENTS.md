@@ -125,6 +125,7 @@ Verified against the code; treat this as the current contract before refactoring
 - Async work goes through the `TASK_QUEUE` binding (AI summary / cache-clearing consumers); cron is `*/20 * * * *`.
 - R2 is optional (`[[r2_buckets]]` only when `R2_BUCKET_NAME` is set); storage otherwise uses the S3-compatible path.
 - Live2D models: `client/src/components/theme/live2d/models.ts` holds `BUILTIN_MODELS` as the single source. A moc3 larger than the Pages 25MiB limit (furina, ~95MB) is served from a remote CDN instead of being bundled.
+- Live2D widget *engine* (7 files: waifu.css, waifu-tips.js, waifu-tips.json, live2d.min.js, live2dcubismcore.min.js, chunk/index.js, chunk/index2.js) is mirrored into `dist/client/live2d-widget/dist/` at build time (`client/vite.config.ts` → `rinLive2dEngineBundle`; downloads cached in `client/.live2d-engine/`, gitignored; the dev server serves the same path from `rinLive2dEngineDevMiddleware`). Runtime resolves that same-origin root first and falls back to `https://827802685.github.io/Live2D/dist/` — see `client/src/components/theme/live2d/engine.ts`. Keep the `chunk/` directory level: the chunks import each other by relative path.
 
 ### Refactor Direction
 
