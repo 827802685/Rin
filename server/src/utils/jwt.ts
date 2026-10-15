@@ -39,7 +39,12 @@ export function createJWT(secret: string | Uint8Array | KeyLike): JWTUtils {
             if (!jwt) return false;
 
             try {
-                const data = (await jwtVerify(jwt, key)).payload;
+                // The algorithm has to be pinned explicitly. `jwtVerify` only
+                // narrows the candidates to the key type, which still lets a
+                // token ask for another HMAC variant of the same secret; a
+                // token whose header does not match `alg` is rejected instead
+                // of being verified with whatever it declares.
+                const data = (await jwtVerify(jwt, key, { algorithms: [alg] })).payload;
                 return data;
             } catch (_) {
                 return false;

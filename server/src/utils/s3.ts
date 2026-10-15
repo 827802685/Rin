@@ -21,6 +21,27 @@ export function createS3Client(env: Env): S3Client {
   });
 }
 
+/**
+ * S3 bodies have to be fully buffered before they are handed to the SDK.
+ *
+ * `File`/`Blob` are accepted by the type but go down the streaming path: the
+ * checksum middleware tries to hash a flowing readable stream and throws
+ * `Unable to calculate hash for flowing readable stream` before the request
+ * ever leaves the process. Converting once here keeps every caller from having
+ * to remember that rule.
+ */
+async function toS3Body(body: Blob | ArrayBuffer | Uint8Array | string) {
+  if (typeof body === "string" || body instanceof Uint8Array) {
+    return body;
+  }
+
+  if (body instanceof ArrayBuffer) {
+    return new Uint8Array(body);
+  }
+
+  return new Uint8Array(await body.arrayBuffer());
+}
+
 export async function putObject(
   client: S3Client,
   env: Env,
@@ -32,7 +53,7 @@ export async function putObject(
     new PutObjectCommand({
       Bucket: env.S3_BUCKET,
       Key: key,
-      Body: body as string | Uint8Array | Blob,
+      Body: await toS3Body(body),
       ContentType: contentType,
     })
   );
