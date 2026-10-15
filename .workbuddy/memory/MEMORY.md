@@ -46,16 +46,16 @@ cd packages/api && "$BUN" test
 
 - `packages/api`：19 pass / 0 fail。
 - `server`：`bun run tsc --noEmit` **0 条**（2026-10-09 由 18 条归零，见下）；
-  `bun test` **639 pass / 0 fail / 47 files**（10-11 565 → 571，10-12 → 577，
-  10-13 → 608，10-14 → 624，10-15 → 639）。
+  `bun test` **679 pass / 0 fail / 50 files**（10-11 565 → 571，10-12 → 577，
+  10-13 → 608，10-14 → 624，10-15 → 639，10-16 → 679）。
   ~~旧基线：tsc 恒定 18 条 TS2345/TS2741/TS2352~~ —— 2026-10-09 已查明：
   主因不是 pnpm 残留 hono，而是 `server/src/errors/index.ts` 把
   `ErrorResponse` / `ErrorDetail` 声明成 **interface**，Hono 的 `c.json()`
   要求参数能落到 `JSONValue`，而 TS 只给类型别名隐式索引签名。
   改 `type` + 删零引用死代码后归零。**不要再当成环境噪声忽略**；
   今后 server tsc 出现任何错误都是真回归。
-- `client`：`tsc --noEmit` 0 错；`vitest run` 35 个文件 **260 pass / 0 fail**，exit 0
-  （10-15 起；10-14 为 34 文件 247 pass，此前 22 文件 162 pass）。
+- `client`：`tsc --noEmit` 0 错；`vitest run` **36 个文件 271 pass / 0 fail**，exit 0
+  （10-16 起；10-15 为 35 文件 260 pass，10-14 为 34 文件 247 pass，此前 22 文件 162 pass）。
 
 已知偶发（不算回归）：沙箱到不了 `test.r2.cloudflarestorage.com` 时 `rss.test.ts` /
 `favicon.test.ts` 的 S3 用例会 5000ms 超时，网络通时自己会过。
@@ -124,6 +124,12 @@ cd packages/api && "$BUN" test
   （`@smithy/hash-stream-node` → `getAwsChunkedEncodingStream`）。一律先
   `new Uint8Array(await file.arrayBuffer())`。2026-10-10 修 favicon 上传时踩到。
 - 变异脚本里**别硬编码 `\n`**：先 `"\r\n" in text` 探测行尾再拼锚点。
+- **只测 AWS SDK 封装层的输入时，传一个假 `client`（`{ send: async (cmd) => ... }`）比 mock
+  `globalThis.fetch` 稳**：能直接断言 `command.input`，不经签名/重试/沙箱可达性，
+  也不会像 `mock.module` 那样跨文件污染。注意别把「命令」用解构取出来——
+  `const { client, command } = rec()` 在调用前就求值，恒为 undefined；要返回 holder 对象。
+- **多信号分支（如 `isNotFoundError` 的 name / status 两种判据）必须每个用例只给一个信号**，
+  否则删掉任一分支都会被另一条兜住 → 变异 SURVIVED 的假绿。
   2026-10-10 首跑因为硬编码 `\n` 得到 `anchor count=0`，白跑一轮。
 - 测「写入对象存储带了什么头」最省事的写法：替换 `globalThis.fetch`，按
   `method === 'PUT'` 收集 `{url, contentType}`（smithy 传的是 `Request` 对象，

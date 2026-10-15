@@ -2,6 +2,44 @@
 
 > 2026-10-04 起迭代目标已从 daily-blog 子项目切回 Rin 本体（daily-blog 已从主干移除）。
 > 2026-10-07 起改为在 `auto` 分支上迭代，每 5 次成功迭代合并回 `main`（10-11 已完成第 1 轮合并，新一轮 M=1/5）。
+> 2026-10-15 15:55 `auto` 已被外部合并进 `main`（`40ba3ac`），第 2 轮计数随之重置。
+
+## 2026-10-16 02:01 第 12 次执行（auto 分支，新一轮第 1 次迭代）
+
+- 进场：`main` 已有外部合并提交 `40ba3ac`，`auto` 落后 1 个 → ff 更新；工作区干净。
+  M 计数重置为新一轮（M=1/5），**未触发合并**。
+- 目标：三个零覆盖的 server utils —— `request.ts` / `jwt.ts` / `s3.ts`。
+- 结果：1 个提交落在 `auto`：`506f6ee`（6 files，+468）。workspace 干净。
+- **挖到的 3 个真缺陷**：
+  ① `getClientIP` 采信 XFF **最左**条目 —— 该值完全由调用方填写，攻击者每换一个前缀
+     就拿到全新限流桶，直接废掉 `auth.ts` 登录限流与 `ai.ts` AI 聊天限流
+     （生产走 CF 时 `cf-connecting-ip` 优先且被覆写，本地/自托管才是真实受影响面）。
+     改为取**最右**条目。
+  ② `jwtVerify` 未固定 `algorithms` —— jose 只按密钥类型收窄候选，同密钥 HS512 签的
+     token 会被接受。改为 `algorithms: [alg]`。
+  ③ `putObject` 把 File/Blob 直接给 S3 SDK —— 走流式校验和，Node 下请求发出前就抛
+     `Unable to calculate hash for flowing readable stream`；此前只在 favicon 一处绕开。
+     改为在 s3 层统一 `toS3Body` 缓冲，根除复发。
+- 新增 3 个测试文件共 40 条：`request.test.ts`(11) / `jwt.test.ts`(11，含 HS512 与
+  alg:none 拒绝) / `s3.test.ts`(18)。
+- 门禁：server tsc 0 条／server test **679 pass / 0 fail / 50 files**（639 → 679）／
+  packages/api 19 pass／client tsc 0 错／client vitest **271 pass / 36 files**。
+- 构建：server exit 0；client `✓ built in 3m 14s`，index.html + 219 assets 齐全（exit 0）。
+- 变异 **6/6 killed**。
+- **推送失败**：`github.com:443` 21 秒连不上（既有网络问题，非回归），未重试。
+- 经验（供后续复用）：
+  ① **只测 SDK 封装层「传下去什么」时，用假 client `{ send: async (cmd) => ... }`
+     比 mock `globalThis.fetch` 稳得多**：直接断言 `command.input`，不经签名/重试/
+     沙箱可达性，也没有 `mock.module` 的跨文件污染。
+  ② **别用 `const { client, command } = recorder()` 取命令** —— 解构在调用前求值，
+     恒为 undefined（本轮首跑 8 fail 全是这个）；recorder 要返回 holder 对象。
+  ③ **多信号兜底分支（如 `isNotFoundError` 的 name｜status）每个用例只能给一个信号**，
+     否则删掉任一分支都被另一条兜住 → SURVIVED 假绿。本轮首跑就是这样漏过去的，
+     把 NoSuchKey/NotFound 用例里的 `$metadata.httpStatusCode` 摘掉才 6/6。
+- 下一目标：① 客户端页面级组件测试 ② `services/storage.ts`（唯一零覆盖的 service）
+  ③ `utils/{config,db-config}.ts` 零覆盖。
+
+---
 
 ## 2026-10-15 02:01 第 11 次执行（auto 分支，第 2 轮第 4 次迭代）
 
