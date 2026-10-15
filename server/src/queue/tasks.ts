@@ -25,6 +25,9 @@ export interface FeedAIGenerateTaskPayload {
   keywords?: string[];   // 关键词
   style?: "technical" | "casual" | "tutorial" | "review"; // 文章风格
   maxLength?: number;    // 最大字数
+  // 作者：生成结果要落成 feeds 行，而 feeds.uid 是 NOT NULL 外键。
+  // 可选是为了兼容没有 uid 的旧消息（那种会明确失败而不是 500 重试）。
+  uid?: number;
 }
 
 export interface FeedAIGenerateTask {

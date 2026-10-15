@@ -46,16 +46,16 @@ cd packages/api && "$BUN" test
 
 - `packages/api`：19 pass / 0 fail。
 - `server`：`bun run tsc --noEmit` **0 条**（2026-10-09 由 18 条归零，见下）；
-  `bun test` **624 pass / 0 fail / 45 files**（10-11 565 → 571，10-12 → 577，
-  10-13 → 608，10-14 → 624）。
+  `bun test` **639 pass / 0 fail / 47 files**（10-11 565 → 571，10-12 → 577，
+  10-13 → 608，10-14 → 624，10-15 → 639）。
   ~~旧基线：tsc 恒定 18 条 TS2345/TS2741/TS2352~~ —— 2026-10-09 已查明：
   主因不是 pnpm 残留 hono，而是 `server/src/errors/index.ts` 把
   `ErrorResponse` / `ErrorDetail` 声明成 **interface**，Hono 的 `c.json()`
   要求参数能落到 `JSONValue`，而 TS 只给类型别名隐式索引签名。
   改 `type` + 删零引用死代码后归零。**不要再当成环境噪声忽略**；
   今后 server tsc 出现任何错误都是真回归。
-- `client`：`tsc --noEmit` 0 错；`vitest run` 34 个文件 **247 pass / 0 fail**，exit 0
-  （10-14 起，此前为 22 文件 162 pass）。
+- `client`：`tsc --noEmit` 0 错；`vitest run` 35 个文件 **260 pass / 0 fail**，exit 0
+  （10-15 起；10-14 为 34 文件 247 pass，此前 22 文件 162 pass）。
 
 已知偶发（不算回归）：沙箱到不了 `test.r2.cloudflarestorage.com` 时 `rss.test.ts` /
 `favicon.test.ts` 的 S3 用例会 5000ms 超时，网络通时自己会过。

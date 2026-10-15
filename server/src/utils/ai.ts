@@ -539,8 +539,12 @@ function parseGeneratedBlog(text: string): {
     if (titleMatch) {
         content = content.replace(titleMatch[0], "").trim();
     }
-    content = content.replace(/\[摘要\][\s\S]*?(?=\n\n|\[|$)/, "").trim();
-    content = content.replace(/\[标签\][\s\S]*$/, "").trim();
+    // `[标签]` 只删那一行：期望格式里正文就排在标签之后，旧实现用
+    // /\[标签\][\s\S]*$/ 一刀切到结尾，只要响应带 [标签] 段，正文就被整体删光
+    // （content 恒为 null —— 这也是 AI 博文此前"生成了却什么都没有"的另一半原因）。
+    content = content.replace(/\[摘要\][\s\S]*?(?=\n\n|\[标签\]|$)/, "").trim();
+    // 标签值按约定在 [标签] 的下一行，删到第一个空行为止，否则标签会留在正文里。
+    content = content.replace(/\[标签\][\s\S]*?(?=\n\n|$)/, "").trim();
     
     // 如果没有单独提取到摘要，使用前 200 字作为摘要
     if (!summary && content.length > 200) {

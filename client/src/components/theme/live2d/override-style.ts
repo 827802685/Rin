@@ -24,9 +24,14 @@ export function buildOverrideStyleCss(edgeRest: boolean): string {
     `width:100%;height:100%;margin:0}`,
     `#waifu.waifu-active{bottom:auto !important}`,
     `#waifu:hover{transform:none !important}`,
-    `#waifu-canvas{width:100% !important;height:100% !important;margin:0}`,
+    // 命中区域只留画布本体：容器/插件外壳一律不吃事件，否则正方形留白会挡住下面的
+    // 点击与滚动（实测手机留白占容器 58%，用户反馈「那部分区域无法点击」）。
+    // 画布自身的 pointer-events 由轮廓贴合的 clip-path 限定成人物那块矩形。
+    `#waifu,#waifu-canvas{pointer-events:none}`,
+    `#waifu-canvas{width:100% !important;height:100% !important;margin:0;position:relative}`,
     // 渲染门控：模型完整加载前画布透明（避免露出半成品），就绪后淡入
-    `#live2d{width:100% !important;height:100% !important;position:relative;display:block;`,
+    `#live2d{width:100% !important;height:100% !important;position:absolute;`,
+    `pointer-events:auto;touch-action:pan-y;cursor:grab;`,
     `opacity:0;transition:opacity .4s ease;}`,
     `#live2d.rin-live2d-ready{opacity:1;}`,
     // 气泡：浮在模型上方，淡蓝色半透明背景（保持透明效果，仅改颜色为淡蓝）。
@@ -55,7 +60,9 @@ export function buildOverrideStyleCss(edgeRest: boolean): string {
       // 容器底部对齐屏幕底边，模型整体放大并锚定底部
       `#waifu{bottom:0 !important;transform:none !important;}`,
       `#live2d{transform:scale(${EDGE_SCALE});transform-origin:50% 100%;`,
-      `clip-path:inset(${EDGE_CLIP_TOP} 0 ${EDGE_CLIP_BOTTOM} 0);}`,
+      // 双写带前缀版本：iOS 13.0 及以下只认 -webkit-clip-path，缺了它下半身就露出来
+      `clip-path:inset(${EDGE_CLIP_TOP} 0 ${EDGE_CLIP_BOTTOM} 0);`,
+      `-webkit-clip-path:inset(${EDGE_CLIP_TOP} 0 ${EDGE_CLIP_BOTTOM} 0);}`,
       // 桌面边缘：模型下方一条细高光，模拟桌面反射/厚度
       `#waifu::after{content:"";position:absolute;left:0;right:0;bottom:0;`,
       `height:10px;background:linear-gradient(180deg,rgba(0,0,0,0) 0%,`,

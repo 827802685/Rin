@@ -13,6 +13,8 @@ test.ts
 .wrangler-secrets.json
 wrangler.toml
 .vite
+# Live2D 插件引擎的本地镜像缓存（构建时从远端拉一次，产物里带上，不进 git）
+client/.live2d-engine/
 # Logs
 logs
 npm-debug.log*

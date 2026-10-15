@@ -130,6 +130,8 @@ export function AIService(): Hono<{
                     keywords: body?.keywords || [],
                     style: body?.style || "technical",
                     maxLength: body?.maxLength || 2000,
+                    // 带上作者：消费端要把生成结果落成该用户的草稿
+                    uid,
                 }),
             );
 

@@ -9,8 +9,111 @@ import react from '@vitejs/plugin-react-swc'
 import { visualizer } from "rollup-plugin-visualizer";
 // 前端模型清单唯一来源（避免与 live2d-widget.tsx 各自硬编码一份顺序）
 import { BUILTIN_MODELS } from './src/components/theme/live2d/models'
+// 引擎文件清单唯一来源（镜像与运行时探测共用同一份，避免两处各写一遍）
+import { ENGINE_FILES, LOCAL_ENGINE_DIST, REMOTE_ENGINE_DIST } from './src/components/theme/live2d/engine'
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
+
+/**
+ * Live2D 看板娘插件引擎（waifu.css / waifu-tips.js / chunk / Cubism core）的本地镜像。
+ *
+ * 这 7 个小文件决定看板娘是否存在，原先只从 github.io 拉；对国内读者 github.io 经常不通，
+ * 结果是整个挂件不出现。这里把它们缓存到 client/.live2d-engine/（gitignored），
+ * dev 由中间件同源直出、build 拷进产物，运行时（live2d/engine.ts）先探同源、取不到才回退远端。
+ * 离线时下载失败只是退回改动前的行为，不会把构建弄挂。
+ */
+const ENGINE_CACHE_DIR = join(__dirname, ".live2d-engine");
+
+async function ensureEngineFile(rel: string): Promise<string | null> {
+  const file = join(ENGINE_CACHE_DIR, rel);
+  // 认「已存在且非空」：上次写坏/写断的 0 字节文件会重新下载
+  if (existsSync(file) && statSync(file).size > 0) return file;
+  try {
+    const res = await fetch(`${REMOTE_ENGINE_DIST}${rel}`, { signal: AbortSignal.timeout(30000) });
+    if (!res.ok) {
+      console.warn(`[rin] 引擎镜像取不到 ${rel}：HTTP ${res.status}`);
+      return null;
+    }
+    const buf = new Uint8Array(await res.arrayBuffer());
+    if (buf.byteLength === 0) {
+      console.warn(`[rin] 引擎镜像取到空文件 ${rel}`);
+      return null;
+    }
+    mkdirSync(dirname(file), { recursive: true });
+    writeFileSync(file, buf);
+    return file;
+  } catch (e) {
+    console.warn(`[rin] 引擎镜像取不到 ${rel}：${String(e).slice(0, 120)}`);
+    return null;
+  }
+}
+
+function rinLive2dEngineDevMiddleware(): Plugin {
+  const mime = (rel: string) =>
+    rel.endsWith(".css") ? "text/css" : rel.endsWith(".json") ? "application/json" : "application/javascript";
+  return {
+    name: 'rin:live2d-engine-mirror',
+    apply: 'serve',
+    configureServer(server) {
+      server.middlewares.use((req, res, next) => {
+        const url = (req.url || "").split("?")[0];
+        if (!url.startsWith(LOCAL_ENGINE_DIST)) return next();
+        let rel: string;
+        try {
+          rel = decodeURIComponent(url.slice(LOCAL_ENGINE_DIST.length));
+        } catch {
+          rel = url.slice(LOCAL_ENGINE_DIST.length);
+        }
+        // 只认清单里的路径（不做通用文件映射，杜绝目录穿越）
+        const wanted = ENGINE_FILES.find((f) => f === rel);
+        if (!wanted) {
+          res.statusCode = 404;
+          res.end("not found");
+          return;
+        }
+        void ensureEngineFile(wanted).then((file) => {
+          if (!file) {
+            // 让前端的同源探测失败 → 回退远端，与改动前一致
+            res.statusCode = 502;
+            res.end("engine mirror unavailable");
+            return;
+          }
+          // MIME 必须是真正的 JS/CSS：运行时按 content-type 判资源可用（见 live2d/engine.ts）
+          res.setHeader("content-type", mime(wanted));
+          res.setHeader("cache-control", "no-store");
+          createReadStream(file).pipe(res);
+        });
+        return;
+      });
+    },
+  };
+}
+
+function rinLive2dEngineBundle(): Plugin {
+  return {
+    name: 'rin:live2d-engine-bundle',
+    apply: 'build',
+    async closeBundle() {
+      const out = join(__dirname, "..", "dist", "client", ...LOCAL_ENGINE_DIST.split("/").filter(Boolean));
+      const missing: string[] = [];
+      for (const rel of ENGINE_FILES) {
+        const file = await ensureEngineFile(rel);
+        if (!file) {
+          missing.push(rel);
+          continue;
+        }
+        const dest = join(out, rel);
+        mkdirSync(dirname(dest), { recursive: true });
+        cpSync(file, dest);
+      }
+      if (missing.length) {
+        console.warn(`[rin] 看板娘引擎镜像缺 ${missing.length} 个文件（${missing.join(", ")}）：运行时回退远端 CDN`);
+      } else {
+        console.log(`[rin] 看板娘插件引擎已随产物打包: ${LOCAL_ENGINE_DIST}（${ENGINE_FILES.length} 个文件）`);
+      }
+    },
+  };
+}
 
 /**
  * Live2D 看板娘本地模型源（仅 dev）。
@@ -238,8 +341,9 @@ export default defineConfig(({ mode }) => {
     plugins: [
       react(),
       monacoLongDistanceHintShim(),
-      ...(isDev ? [rinLive2dLocalCdn()] : []),
+      ...(isDev ? [rinLive2dLocalCdn(), rinLive2dEngineDevMiddleware()] : []),
       rinLive2dBundledModel(),
+      rinLive2dEngineBundle(),
       // Only open visualizer in build mode
       visualizer({ open: !isDev })
     ],

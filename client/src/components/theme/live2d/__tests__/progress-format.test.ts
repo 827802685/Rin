@@ -40,4 +40,13 @@ describe("formatProgressMb", () => {
     expect(formatProgressMb({ loaded: 5242880, total: 0 })).toBe("5.0 MB");
     expect(formatProgressMb({ loaded: 0, total: 0 })).toBe("0.0 MB");
   });
+
+  it("分子超过分母时丢掉不可信的分母（线上「73.8 / 5.6 MB」回归）", () => {
+    // 换模型走复用渲染器的快路径，曾经只换分子不换分母：furina 的字节对着 BCSZ1.1
+    // 的 5.6MB 分母显示成「100% + 73.8 / 5.6 MB」。
+    const inconsistent = { loaded: 77386188, total: 5911380 };
+    expect(formatProgressMb(inconsistent)).toBe("73.8 MB");
+    // 百分比不闪回 0：按"至少已下完"读作 100
+    expect(progressPercent(inconsistent)).toBe(100);
+  });
 });

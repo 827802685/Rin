@@ -1,4 +1,4 @@
-import { useContext, useEffect, useRef, useState } from "react";
+import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useLocation } from "wouter";
 import type { AIChatMessage } from "@rin/api";
@@ -15,6 +15,7 @@ import {
   stopAllMotions,
 } from "./live2d/actions";
 import { bundledRootFor, pickCdnRoot, precacheAllModels, prefetchModel } from "./live2d/cache";
+import { enginePathsFor, pickSameOriginEngineRoot } from "./live2d/engine";
 import {
   capSubdelegateDpr,
   capSubdelegateFps,
@@ -27,15 +28,21 @@ import {
 import {
   BUILTIN_MODELS,
   type CustomModel,
-  EXPECTED_TOTAL_BY_NAME,
   allModelIds,
   chatPromptFor,
   parseCustomModels,
+  progressTargetFor,
   resolveDefaultName,
 } from "./live2d/models";
 import { buildOverrideStyleCss, OVERRIDE_STYLE_ID } from "./live2d/override-style";
 import { type ProgressState, formatProgressMb, progressPercent } from "./live2d/progress-format";
 import { clampDragPosition, loadSavedPos, saveSavedPos } from "./live2d/saved-pos";
+import {
+  type SilhouetteRect,
+  computeSilhouetteFit,
+  measureSilhouette,
+  supportsClipPath,
+} from "./live2d/silhouette";
 import {
   isEdgeRestEnabled,
   normalizeScale,
@@ -75,18 +82,21 @@ import {
  *   - 保留 React 外壳：文件夹拖拽、换模型/摸一摸/隐藏按钮、加载进度、错误提示。
  */
 
-// 插件资源根目录（相对 waifu-tips.js 所在处）
-const DIST = "https://827802685.github.io/Live2D/dist/";
-const WIDGET_CSS = `${DIST}waifu.css`;
-const WIDGET_SCRIPT = `${DIST}waifu-tips.js`;
-const WIDGET_JSON = `${DIST}waifu-tips.json`;
-const CUBISM2_PATH = `${DIST}live2d.min.js`;
-const CUBISM5_PATH = `${DIST}live2dcubismcore.min.js`;
-// 渲染器 chunk（AppDelegate 所在模块），用于捕获模型实例以驱动衣服/头发物理
-const CHUNK_URL = `${DIST}chunk/index2.js`;
+// 插件引擎来源：同源镜像优先，取不到才回退远端（见 live2d/engine.ts）。
+// 缓存成共享 Promise，多次挂载只探一次。
+let engineRootPromise: Promise<string> | null = null;
+function resolveEngineRoot(): Promise<string> {
+  if (!engineRootPromise) engineRootPromise = pickSameOriginEngineRoot();
+  return engineRootPromise;
+}
 
-// 透明像素判定阈值：alpha 低于该值视为"透明区域"，点击透传给后面的元素
+// 透明像素判定阈值：alpha 低于该值视为"透明区域"，点击透传给后面的元素。
+// 同时用作轮廓测量的阈值（见 live2d/silhouette.ts）。
 const CLICK_ALPHA_THRESHOLD = 16;
+
+// 轮廓贴合会写进画布行内样式的属性（卸载/换模型时按这份清单清理）。
+// -webkit-clip-path 是给只认前缀的老内核（iOS 13.0 及以下）的双写，两者同时生效。
+const SILHOUETTE_STYLE_PROPS = ["width", "height", "left", "top", "clip-path", "-webkit-clip-path"] as const;
 // 点击 vs 拖拽的判定阈值（像素）
 const DRAG_START_THRESHOLD = 6;
 
@@ -228,7 +238,7 @@ function capRendererDpr(proto: Record<string, unknown>): void {
  */
 async function patchLive2dApp(): Promise<boolean> {
   try {
-    const mod = (await import(/* @vite-ignore */ CHUNK_URL)) as {
+    const mod = (await import(/* @vite-ignore */ enginePathsFor(await resolveEngineRoot()).chunk)) as {
       AppDelegate?: { prototype: Record<string, unknown> & { run?: (...args: unknown[]) => unknown } };
     };
     const proto = mod.AppDelegate?.prototype;
@@ -281,23 +291,41 @@ async function patchLive2dApp(): Promise<boolean> {
 }
 
 /**
- * 全局 fetch 包装：统计 /model/ 请求的下载字节数（流式计数，不缓冲整个文件）。
- * 返回卸载时恢复 window.fetch 的函数。
+ * 全局 fetch 包装：统计模型文件的下载字节数（流式计数，不缓冲整个文件）。
  *
  * 额外职责：
  *   - 对模型配置文件（index.json / .model3.json）注入 Layout（用于微调模型位置/缩放）；
- *   - 对同一 URL 的去重：预取与插件加载同一文件时只计一次字节数。
+ *   - 对同一 URL 的去重：预取与插件加载同一文件时只计一次字节数；
+ *   - retarget()：换模型时原地换分母并清零分子（见下方 ProgressTracker 注释）。
  */
+type ProgressTarget = {
+  // 目标模型名；null 表示自定义模型（URL 认不出名字，退回"含 /model/ 即计"的老口径）
+  name: string | null;
+  // 分母（总字节）；0 表示未知，UI 只显示已下载量
+  total: number;
+};
+type ProgressTracker = {
+  restore: () => void;
+  retarget: (next: ProgressTarget) => void;
+};
+
 function installProgressTracker(
   onProgress: (p: ProgressState) => void,
-  total: number,
+  initial: ProgressTarget,
   layoutConfig?: Record<string, number> | null,
-): () => void {
-  const state: ProgressState = { loaded: 0, total };
+): ProgressTracker {
+  const state: ProgressState = { loaded: 0, total: initial.total };
+  let target = initial;
   const origFetch = window.fetch.bind(window);
   // 已开始计数的 URL（同一文件只计一次，避免预取 + 插件加载重复计数）
   const countingUrls = new Set<string>();
   let rafPending = false;
+
+  // 分子只统计"当前目标模型"的文件：换模型后旧模型的在途流、别的模型的预取都不该计进来
+  // （否则会出现"73.8 / 5.6 MB"这种分子分母来自两个模型的读数）。
+  const countsFor = (url: string) =>
+    url.indexOf("/model/") !== -1 &&
+    (!target.name || url.indexOf(`/model/${target.name}/`) !== -1);
 
   const notify = () => {
     if (rafPending) return;
@@ -316,7 +344,7 @@ function installProgressTracker(
           ? input.href
           : (input as Request).url || "";
     // 只拦截模型文件请求（URL 含 /model/），其余请求原样放行
-    if (url.indexOf("/model/") === -1) {
+    if (!countsFor(url)) {
       return origFetch(input, init);
     }
 
@@ -358,8 +386,11 @@ function installProgressTracker(
                   controller.close();
                   break;
                 }
-                state.loaded += r.value.byteLength;
-                notify();
+                // 逐块复核：中途换模型时，旧模型的在途流继续转发但不再计数
+                if (countsFor(url)) {
+                  state.loaded += r.value.byteLength;
+                  notify();
+                }
                 controller.enqueue(r.value);
               }
             } catch (err) {
@@ -382,8 +413,17 @@ function installProgressTracker(
   };
 
   window.fetch = wrapped;
-  return () => {
-    window.fetch = origFetch;
+  return {
+    restore: () => {
+      window.fetch = origFetch;
+    },
+    retarget: (next) => {
+      target = next;
+      state.total = next.total;
+      state.loaded = 0;
+      countingUrls.clear();
+      notify();
+    },
   };
 }
 
@@ -455,6 +495,8 @@ export function Live2DWidget() {
   const [hidden, setHidden] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [rendered, setRendered] = useState(false);
+  // 当前模型的不透明包围盒（比例），null = 未测到 / 无需贴合
+  const [silhouette, setSilhouette] = useState<SilhouetteRect | null>(null);
   const [progress, setProgress] = useState<ProgressState | null>(null);
   const [dragging, setDragging] = useState(false);
   // 默认模型：配置项 widget.live2d.defaultModel（"furina" / "BCSZ1.1" / 自定义模型 id），
@@ -478,6 +520,8 @@ export function Live2DWidget() {
   const [modelVersion, setModelVersion] = useState(0);
   // 当前生效模型的 CDN 根地址（initWidget 探测成功后写入，供切换模型拼接 index.json）
   const cdnRootRef = useRef<string>("");
+  // 进度统计句柄：换模型（不重挂载）时用它原地换分母 + 清零分子
+  const progressTrackerRef = useRef<ProgressTracker | null>(null);
   // 渲染循环是否被"页面隐藏/失焦"暂停（恢复时只在暂停过的情况下才重启，避免双开循环）
   const renderLoopPausedRef = useRef(false);
   // 定时器组（就绪轮询 / 停滞兜底 / 空闲轮播）当前是否处于失焦暂停状态，
@@ -521,12 +565,15 @@ export function Live2DWidget() {
     moved: number;
   } | null>(null);
   const [pos, setPos] = useState<{ left: number; top: number } | null>(() => loadSavedPos());
-  // 视口宽度：窄屏要给看板娘让位（见 widgetBoxSize）
-  const [viewportWidth, setViewportWidth] = useState(() =>
-    typeof window === "undefined" ? 0 : window.innerWidth,
+  // 视口尺寸：窄屏（竖屏手机）和矮屏（横屏手机、窗口化桌面）都要给页面让位
+  const [viewport, setViewport] = useState(() =>
+    typeof window === "undefined"
+      ? { width: 0, height: 0 }
+      : { width: window.innerWidth, height: window.innerHeight },
   );
   useEffect(() => {
-    const onResize = () => setViewportWidth(window.innerWidth);
+    const onResize = () =>
+      setViewport({ width: window.innerWidth, height: window.innerHeight });
     window.addEventListener("resize", onResize);
     return () => window.removeEventListener("resize", onResize);
   }, []);
@@ -540,7 +587,68 @@ export function Live2DWidget() {
   const layoutConfig = parseLayoutConfig(String(config.get("widget.live2d.layout") ?? ""));
 
   // 模型容器尺寸：与插件 #waifu-canvas 的 300x300 一致，随配置缩放；窄屏按视口收缩
-  const { width: boxW, height: boxH } = widgetBoxSize(scaleValue, viewportWidth);
+  const { width: boxW, height: boxH } = widgetBoxSize(scaleValue, viewport.width, viewport.height);
+
+  // ---- 轮廓贴合：把人物放大到填满容器，命中区也跟着裁成人物那块矩形 ----
+  // 不测就不知道留白有多大：实测 393px 视口里 177 见方的画布只有 99×134 是人物本体。
+  // 包围盒是比例值，容器改尺寸（缩放配置 / 转屏）只重算样式，不必重新测量。
+  // 不支持 clip-path 的内核直接跳过测量：反正不裁剪，读了像素也只能维持原样。
+  const clipOk = useMemo(
+    () => supportsClipPath(typeof CSS === "undefined" ? undefined : CSS),
+    [],
+  );
+  useEffect(() => {
+    setSilhouette(null);
+    if (!rendered || !clipOk) return;
+    let cancelled = false;
+    let attempts = 0;
+    const probe = () => {
+      if (cancelled) return;
+      const canvas = document.getElementById("live2d") as HTMLCanvasElement | null;
+      const rect = canvas ? measureSilhouette(canvas, CLICK_ALPHA_THRESHOLD) : null;
+      if (rect) {
+        setSilhouette(rect);
+        return;
+      }
+      // 刚 CompleteSetup 时可能还没提交过一帧（或整幅透明），稍后重试
+      attempts += 1;
+      if (attempts < 6) window.setTimeout(probe, 250);
+    };
+    probe();
+    return () => {
+      cancelled = true;
+    };
+  }, [rendered, clipOk, activeModel]);
+
+  useEffect(() => {
+    const canvas = document.getElementById("live2d");
+    if (!canvas) return;
+    // edgeRest 自带"放大 + 裁下半身"，两种模式互斥，不叠加
+    const fit =
+      edgeRest || !clipOk
+        ? null
+        : computeSilhouetteFit(silhouette, { width: boxW, height: boxH });
+    const clip = fit
+      ? `inset(${Math.round(fit.clip.top)}px ${Math.round(fit.clip.right)}px ${Math.round(fit.clip.bottom)}px ${Math.round(fit.clip.left)}px)`
+      : "";
+    const styles: Record<string, string> = fit
+      ? {
+          width: `${Math.round(fit.width)}px`,
+          height: `${Math.round(fit.height)}px`,
+          left: `${Math.round(fit.left)}px`,
+          top: `${Math.round(fit.top)}px`,
+          "clip-path": clip,
+          "-webkit-clip-path": clip,
+        }
+      : {};
+    for (const prop of SILHOUETTE_STYLE_PROPS) {
+      const value = styles[prop];
+      // 必须用「行内 !important」：插件初始化时会把 style.width 写成位图 px，我们的覆盖
+      // 样式表也是 !important，只有行内 important 能同时压过这两处。
+      if (value) canvas.style.setProperty(prop, value, "important");
+      else canvas.style.removeProperty(prop);
+    }
+  }, [silhouette, boxW, boxH, edgeRest, clipOk, rendered, activeModel]);
 
   // 当前模型的展示名（内置模型用 i18n，自定义模型用其配置的角色名），
   // 供聊天面板标题/提示文案使用，保证人设与显示的模型一致。
@@ -601,6 +709,10 @@ export function Live2DWidget() {
     const custom = customModelsRef.current.find((c) => c.id === name);
     if (!isBase && !custom) return;
     setActiveModel(name);
+    // 进度口径跟着换目标：分母换成目标模型的字节、分子清零。快路径复用的是同一个
+    // tracker（不重挂载加载 effect），不换就会「分子是新模型、分母是旧模型」。
+    progressTrackerRef.current?.retarget(progressTargetFor(name));
+    setProgress(null);
     showTips(t("theme.live2d.switch.switching"), 3000);
 
     const app = (window as unknown as { __rinLive2dApp?: unknown }).__rinLive2dApp;
@@ -762,16 +874,18 @@ export function Live2DWidget() {
 
     // ---- 下载进度追踪（必须在 initWidget 之前安装；流式计数 + Layout 注入）----
     // 进度分母：内置模型用精确总字节数；自定义模型未知 → 传 0，UI 只显示已下载量。
-    const isBaseActive = (BUILTIN_MODELS as readonly string[]).includes(activeModel);
-    const progressTotal = isBaseActive ? EXPECTED_TOTAL_BY_NAME[activeModel] : 0;
-    const restoreFetch = installProgressTracker(
+    // 目标写进 tracker 而不是只传数字：换模型走的是"复用渲染器实例"的快路径
+    //（不重挂载本 effect），必须能原地换分母并清零分子，否则切到 furina 后
+    // 分子按 furina 涨、分母还是上一个模型的，界面显示"100% + 73.8 / 5.6 MB"。
+    const tracker = installProgressTracker(
       (p) => {
         lastProgressAtRef.current = Date.now();
         if (!disposed) setProgress(p);
       },
-      progressTotal,
+      progressTargetFor(activeModel),
       layoutConfig,
     );
+    progressTrackerRef.current = tracker;
 
     // ---- 预加载渲染器 chunk 并打补丁，捕获模型实例（必须在 initWidget 之前）----
     // 失败不阻塞渲染：加载不到也只是少了"拖动飘动"这一锦上添花的物理效果。
@@ -982,12 +1096,14 @@ export function Live2DWidget() {
         precacheAllModels(config.getBoolean("widget.live2d.preload"));
 
         // 3) 加载样式与插件脚本（均为判重，可安全重复挂载）
-        await loadStylesheet(WIDGET_CSS);
+        // 引擎根在 effect 一开头就由 patchLive2dApp 发起探测，这里只是取结果。
+        const paths = enginePathsFor(await resolveEngineRoot());
+        await loadStylesheet(paths.css);
         // 插件 waifu.css 加载完成后，把我们的覆盖样式重新追加到 <head> 末尾，
         // 确保它在 DOM 顺序上位于插件样式之后（配合 !important 双保险，避免被米色默认样式覆盖）。
         document.getElementById(OVERRIDE_STYLE_ID)?.remove();
         document.head.appendChild(overrideStyle);
-        await loadModuleScript(WIDGET_SCRIPT);
+        await loadModuleScript(paths.script);
         if (disposed) return;
 
         // 4) 等待渲染器补丁就绪（捕获模型实例），再初始化插件
@@ -998,7 +1114,7 @@ export function Live2DWidget() {
         const loader = (window as unknown as { initWidget?: WidgetLoader }).initWidget;
         if (typeof loader !== "function") {
           throw new Error(
-            "initWidget is not available. Check that waifu-tips.js was loaded from " + DIST,
+            `initWidget is not available. Check that ${paths.script} was loaded`,
           );
         }
 
@@ -1050,10 +1166,10 @@ export function Live2DWidget() {
           // ignore
         }
         loader({
-          waifuPath: WIDGET_JSON,
+          waifuPath: paths.tips,
           cdnPath: cdnRoot,
-          cubism2Path: CUBISM2_PATH,
-          cubism5Path: CUBISM5_PATH,
+          cubism2Path: paths.cubism2,
+          cubism5Path: paths.cubism5,
           modelId: resolvedId,
           logLevel: "info",
           // 插件自带拖拽关闭，交给 React 文件夹拖拽统一处理
@@ -1099,7 +1215,8 @@ export function Live2DWidget() {
       window.removeEventListener("pointermove", onWindowMoveRef.current);
       window.removeEventListener("pointerup", onWindowUpRef.current);
       window.removeEventListener("pointercancel", onWindowUpRef.current);
-      restoreFetch();
+      tracker.restore();
+      if (progressTrackerRef.current === tracker) progressTrackerRef.current = null;
       stopDragFlutter();
       if (tipsTimerRef.current) {
         window.clearTimeout(tipsTimerRef.current);
@@ -1356,9 +1473,13 @@ export function Live2DWidget() {
           <i className="ri-magic-line" />
         </button>
       ) : null}
+      {/* pointer-events-none：整个看板娘占位块比可见人物大得多（方形模型区 + 行容器留白），
+          默认让整棵子树不吃事件，只有真正可交互的子树显式接管：工具栏、聊天面板、画布
+          （画布由 override-style 的 #live2d{pointer-events:auto} 负责）。
+          pointer-events 可被后代用 auto 覆盖，所以穿透不影响模型拖动与点击。 */}
       <div
         ref={outerRef}
-        className="fixed bottom-2 z-40"
+        className="pointer-events-none fixed bottom-2 z-40"
         style={{
           ...positionStyle,
           // 隐藏时不能用 display:none：canvas 尺寸归零会导致 WebGL 上下文丢失，
@@ -1371,7 +1492,7 @@ export function Live2DWidget() {
       >
         <div className={`flex items-end gap-1 ${dragging ? "pointer-events-none" : ""}`}>
           {/* 竖排工具栏：首页 / 聊天 / 换模型 / 摸一摸 / 动作 / 隐藏（从上到下） */}
-          <div className="relative flex flex-col items-center gap-1">
+          <div className="pointer-events-auto relative flex flex-col items-center gap-1">
             {showActions && !error ? (
               <div className="absolute right-full top-1/2 mr-2 flex -translate-y-1/2 flex-col gap-1 rounded-2xl border border-black/10 bg-w p-1.5 shadow dark:border-white/10">
                 {(["wave", "shake", "dance"] as ActionName[]).map((name) => (
@@ -1456,20 +1577,25 @@ export function Live2DWidget() {
             <p className="max-w-44 text-xs text-red-500">{error}</p>
           ) : (
             <div
-              className="relative"
+              className="pointer-events-none relative"
               style={{ width: boxW, height: boxH }}
             >
               {/* 模型容器：插件生成的 #waifu 会被移入这里。
                   注意：此容器不能有 React 子节点，否则手动 appendChild 的 #waifu 会在 re-render 时被 React 清掉。
-                  不能加 overflow-hidden，否则浮在模型上方的 #waifu-tips 气泡会被裁掉。 */}
+                  不能加 overflow-hidden，否则浮在模型上方的 #waifu-tips 气泡会被裁掉。
+                  pointer-events-none：这一层是正方形，人物只占中间一块，留白必须把事件
+                  还给页面（旧实现在这里吃点击 + touch-action:none 挡滚动）。拖动/点击的
+                  处理仍然生效——事件由画布（pointer-events:auto）冒泡上来。 */}
               <div
                 ref={modelAreaRef}
-                className="absolute inset-0 cursor-grab touch-none select-none"
+                className="pointer-events-none absolute inset-0 select-none"
                 onPointerDown={onPointerDown}
               />
-              {/* 加载进度覆盖层：渲染完成前显示（作为兄弟节点，不干扰 #waifu） */}
+              {/* 加载进度覆盖层：渲染完成前显示（作为兄弟节点，不干扰 #waifu）。
+                  pointer-events-none：下载大模型时这块方形占位可能持续几十秒，
+                  纯展示的进度条不该在此期间吃掉下面的点击与滚动。 */}
               {!rendered ? (
-                <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 rounded-xl bg-w/95 text-xs shadow-inner dark:bg-neutral-900/95">
+                <div className="pointer-events-none absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 rounded-xl bg-w/95 text-xs shadow-inner dark:bg-neutral-900/95">
                   <div className="h-1.5 w-28 overflow-hidden rounded-full bg-neutral-200 dark:bg-neutral-700">
                     <div
                       className="h-full rounded-full bg-theme transition-[width] duration-300"
@@ -1490,9 +1616,10 @@ export function Live2DWidget() {
                   ) : null}
                 </div>
               ) : null}
-              {/* 聊天面板：浮在模型上方，标题/提示跟随当前模型 */}
+              {/* 聊天面板：浮在模型上方，标题/提示跟随当前模型。
+                  外层方形已 pointer-events-none，面板自身要重新接管事件。 */}
               {chatOpen ? (
-                <div className="absolute bottom-full right-0 mb-2 flex w-72 flex-col overflow-hidden rounded-2xl border border-black/10 bg-w shadow-xl dark:border-white/10">
+                <div className="pointer-events-auto absolute bottom-full right-0 mb-2 flex w-72 flex-col overflow-hidden rounded-2xl border border-black/10 bg-w shadow-xl dark:border-white/10">
                   <div className="flex items-center justify-between border-b border-black/10 px-3 py-2 dark:border-white/10">
                     <span className="text-sm font-semibold">
                       {t("theme.live2d.chat.title", { name: activeDisplayName })}

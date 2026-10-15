@@ -3,7 +3,7 @@ import { CacheImpl } from "../utils/cache";
 import { isQueueTask, FEED_AI_SUMMARY_TASK, FEED_AI_GENERATE_TASK } from "../queue";
 import { processFeedAISummaryTask } from "../services/feed-ai-summary";
 import { clearFeedCache } from "../services/feed";
-import { generateBlogPost } from "../utils/ai";
+import { processFeedAIGenerateTask } from "../services/feed-ai-generate";
 
 export async function handleQueue(
   batch: MessageBatch<unknown>,
@@ -37,13 +37,28 @@ export async function handleQueue(
         break;
       
       case FEED_AI_GENERATE_TASK:
-        // AI 博文生成任务 - 这里只是示例，实际需要将结果保存到数据库或发送到其他地方
-        const blogResult = await generateBlogPost(env, serverConfig, body.payload);
-        if (blogResult.error) {
-          console.error("[Queue] Blog generation failed:", blogResult.error);
-        } else {
-          console.log(`[Queue] Blog generated: ${blogResult.title}`);
-          // TODO: 将生成的博客保存到数据库（需要额外的逻辑）
+        // 生成的结果落成草稿（此前只 console.log 标题，文章根本不入库）
+        try {
+          const blogResult = await processFeedAIGenerateTask(
+            env,
+            db,
+            cache,
+            serverConfig,
+            body.payload,
+          );
+          if (blogResult.status === "created") {
+            console.log(
+              `[Queue] AI draft created: #${blogResult.feedId} ${blogResult.title}`,
+            );
+          } else {
+            console.error("[Queue] Blog generation failed:", blogResult.error);
+          }
+        } catch (error) {
+          // 单条消息失败不能让整批重试到 max_retries：失败原因已经落日志，直接 ack。
+          console.error(
+            "[Queue] Blog generation crashed:",
+            error instanceof Error ? error.message : String(error),
+          );
         }
         message.ack();
         break;
