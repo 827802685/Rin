@@ -4,6 +4,50 @@
 > 2026-10-07 起改为在 `auto` 分支上迭代，每 5 次成功迭代合并回 `main`（10-11 已完成第 1 轮合并，新一轮 M=1/5）。
 > 2026-10-15 15:55 `auto` 已被外部合并进 `main`（`40ba3ac`），第 2 轮计数随之重置。
 
+## 2026-10-17 02:01 第 13 次执行（auto 分支，第 2 轮第 2 次迭代 M=2/5）
+
+- 进场：`main` = `origin/main` = `40ba3ac`，`auto` 领先 2 个（迭代 12 的两个）。
+  本轮 `git fetch`/`git push` **都通**（10-16 那轮 21 秒连不上属偶发），push 后
+  `origin/auto` = `c4a67fa`。工作区干净。
+- 目标：`runtime/queue-handler.ts` 与 `services/feed-ai-summary.ts`（均为零覆盖，
+  且是 AI 队列必经路径）。1 个提交 `c4a67fa`（4 files，+418/-38）。**未触发合并**。
+- **挖到的 2 个真 bug**：
+  ① 队列 `for` 循环里摘要分支**直接 await 无兜异常**（生成分支迭代 11 才加的
+     try/catch，摘要分支漏了）→ 一条消息抛出即 `handleQueue` reject ⇒ 它后面的
+     消息本次投递根本不会被尝试，且 CF 整批重投到 max_retries 耗尽后丢弃
+     ——「一条坏消息饿死它后面所有消息」。
+  ② 摘要任务在调 AI **之前**就把行写成 `processing`，之后抛出直接外冒 ⇒ 该行
+     永久停在 processing。后台一直显示「生成中」，而 `syncFeedAISummaryQueueState`
+     只在文章真更新时重新入队 ⇒ 这篇文章再也拿不到摘要。
+     （`generateAISummaryResult` 自己吞异常返 error，所以常见 AI 失败走不到这，
+     只有配置读取 / 缓存清理抛出才触发 —— 所以长期没人发现。）
+- 修复：① 每条消息包进 `runQueueTask`，失败只记日志 + 照常 ack；② `processing`
+  之后的阶段整体 try/catch，抛出时落成 `failed` + `ai_summary_error`（与正常失败
+  路径一致，后台「重试」按钮能捞回来）。
+- 新增 2 个测试文件共 13 条：`queue-handler.test.ts`(9) / `feed-ai-summary-processing.test.ts`(4)。
+- 门禁：server tsc 0 条／server test **692 pass / 0 fail / 52 files**（679 → 692）／
+  packages/api 19 pass／client tsc 0 错／client vitest **271 pass / 36 files**。
+- 构建：server exit 0；client `✓ built in 4m 2s`，index.html + 219 assets 齐全。
+- 变异 **4/4 killed**（去异常兜底 3 红／失败不 ack 2 红／catch 写 processing 2 红／
+  catch 不落错误信息 2 红），总用例数 9 / 4 不变 ⇒ 无语法型假红。
+- 经验（供后续复用）：
+  ① **「处理器注入」直接抄 `scheduled-handler.ts` 的 `ScheduledTaskModules` +
+     动态 import 写法**，`queue-handler` 照搬成 `QueueTaskModules`，不用新发明，
+     也绕开 bun `mock.module` 跨文件残留。
+  ② **要验证「某段抛出后 DB 行是什么状态」，给被测函数加一个带默认值的
+     可选尾参**（`generateSummary: typeof generateAISummaryResult = generateAISummaryResult`）
+     比任何 mock 都干净：生产零变化，测试传个 throw 即可。别用「让
+     serverConfig.get 第二次才抛」那种计数式假环境。
+  ③ **变异「去掉 try/catch」要把 `try {..} catch(e) {..}` 整块换成 `{ .. }`**
+     （块语句，语法合法），别删行留悬空 `}` → 整文件语法错误 = 假红。
+  ④ 判「既有失败 vs 回归」前 **先 `git fetch`**：本轮一次就通，别默认网络不通。
+- 下一目标：① `services/storage.ts`（StorageService + BlobService HTTP 层仍零覆盖）
+  ② `utils/db-config.ts`（零覆盖；注意 `setAIConfig` 会把前端掩码 `••••••••`
+     当成真密钥写库，目前只靠客户端 `normalizeSettingsState` 兜，服务端无闸门）
+  ③ 客户端页面级组件测试。
+
+---
+
 ## 2026-10-16 02:01 第 12 次执行（auto 分支，新一轮第 1 次迭代）
 
 - 进场：`main` 已有外部合并提交 `40ba3ac`，`auto` 落后 1 个 → ff 更新；工作区干净。

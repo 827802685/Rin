@@ -46,8 +46,8 @@ cd packages/api && "$BUN" test
 
 - `packages/api`：19 pass / 0 fail。
 - `server`：`bun run tsc --noEmit` **0 条**（2026-10-09 由 18 条归零，见下）；
-  `bun test` **679 pass / 0 fail / 50 files**（10-11 565 → 571，10-12 → 577，
-  10-13 → 608，10-14 → 624，10-15 → 639，10-16 → 679）。
+  `bun test` **692 pass / 0 fail / 52 files**（10-11 565 → 571，10-12 → 577，
+  10-13 → 608，10-14 → 624，10-15 → 639，10-16 → 679，10-17 → 692）。
   ~~旧基线：tsc 恒定 18 条 TS2345/TS2741/TS2352~~ —— 2026-10-09 已查明：
   主因不是 pnpm 残留 hono，而是 `server/src/errors/index.ts` 把
   `ErrorResponse` / `ErrorDetail` 声明成 **interface**，Hono 的 `c.json()`
@@ -100,6 +100,14 @@ cd packages/api && "$BUN" test
 - Python 处理 CRLF 源码必须 `io.open(p, encoding='utf-8', newline='')`，
   默认 universal newlines 会把 `\r\n` 吃掉，导致 `str.replace` 静默匹配不到。
 - 断言「少 1」这类 off-by-one 时，容差 `±1` 会正好放过 bug，小基数区间要断言精确值。
+- **要测「某段代码抛出后落库成什么状态」：给被测函数加一个带默认值的可选尾参**
+  （如 `generateSummary: typeof generateAISummaryResult = generateAISummaryResult`），
+  生产零变化、测试传个 throw 即可 —— 比 mock 模块干净，也不会像「让第二次调用才抛」
+  那种计数式假环境一样脆。runtime 层的任务注入统一抄 `scheduled-handler.ts` 的
+  `ScheduledTaskModules` + 动态 import 写法（`queue-handler.ts` 已照搬成
+  `QueueTaskModules`）。
+- **变异「去掉 try/catch」要把 `try {..} catch(e) {..}` 整块换成 `{ .. }`**（块语句，
+  语法合法），别删行留悬空 `}` —— 后者是整文件语法错误，用例数骤降的假红。
 
 ## 环境陷阱
 
