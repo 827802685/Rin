@@ -143,6 +143,7 @@ export async function processFeedAISummaryTask(
     expectedUpdatedAtUnix?: number;
   },
   clearFeedCache: (cache: CacheImpl, id: number, alias: string | null, newAlias: string | null) => Promise<void>,
+  generateSummary: typeof generateAISummaryResult = generateAISummaryResult,
 ) {
   const feed = await db.query.feeds.findFirst({
     where: eq(feeds.id, payload.feedId),
@@ -171,27 +172,43 @@ export async function processFeedAISummaryTask(
     .set(buildStatusUpdate("processing"))
     .where(eq(feeds.id, feed.id));
 
-  const result = await generateAISummaryResult(env, serverConfig, feed.content);
-  if (result.summary) {
-    await db
-      .update(feeds)
-      .set(
-        buildStatusUpdate("completed", {
-          ai_summary: result.summary,
-        }),
-      )
-      .where(eq(feeds.id, feed.id));
-  } else if (result.skipped) {
-    await db
-      .update(feeds)
-      .set(buildStatusUpdate("idle"))
-      .where(eq(feeds.id, feed.id));
-  } else {
+  // The row is already committed to "processing" here. Anything that throws past
+  // this point used to leave it there forever — the admin UI shows "generating"
+  // and `syncFeedAISummaryQueueState` only re-queues on a real update, so the
+  // article never gets a summary again. Fall back to the same "failed" state the
+  // non-throwing paths use, so the retry action in the queue panel can pick it up.
+  try {
+    const result = await generateSummary(env, serverConfig, feed.content);
+    if (result.summary) {
+      await db
+        .update(feeds)
+        .set(
+          buildStatusUpdate("completed", {
+            ai_summary: result.summary,
+          }),
+        )
+        .where(eq(feeds.id, feed.id));
+    } else if (result.skipped) {
+      await db
+        .update(feeds)
+        .set(buildStatusUpdate("idle"))
+        .where(eq(feeds.id, feed.id));
+    } else {
+      await db
+        .update(feeds)
+        .set(
+          buildStatusUpdate("failed", {
+            ai_summary_error: result.error ?? "Unknown AI summary generation error",
+          }),
+        )
+        .where(eq(feeds.id, feed.id));
+    }
+  } catch (error) {
     await db
       .update(feeds)
       .set(
         buildStatusUpdate("failed", {
-          ai_summary_error: result.error ?? "Unknown AI summary generation error",
+          ai_summary_error: error instanceof Error ? error.message : String(error),
         }),
       )
       .where(eq(feeds.id, feed.id));
