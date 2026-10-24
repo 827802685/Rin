@@ -105,6 +105,48 @@ export interface CompatTasksResponse {
   blurhash: {
     eligible: number;
   };
+  githubImage: {
+    configured: boolean;
+    total: number;
+    mirrored: number;
+    pending: number;
+  };
+}
+
+export interface GithubFileCounts {
+  total: number;
+  success: number;
+  failed: number;
+  /** 内容指纹与仓库一致，本轮没有发任何请求 */
+  unchanged: number;
+  /** 时间预算用尽、这轮没轮到的条数（不是失败） */
+  deferredByTime: number;
+}
+
+export interface GithubSyncStats {
+  feeds: GithubFileCounts;
+  moments: GithubFileCounts;
+  media: {
+    total: number;
+    success: number;
+    skipped: number;
+    alreadyPresent: number;
+    deferredToActions: number;
+  };
+  images: {
+    total: number;
+    success: number;
+    alreadyPresent: number;
+    deferredToActions: number;
+    deferredByTime: number;
+  };
+  partial: boolean;
+}
+
+export interface GithubSyncResponse {
+  success: boolean;
+  stats?: GithubSyncStats;
+  error?: string;
 }
 
 export interface CompatAISummaryActionResponse {
@@ -512,6 +554,11 @@ class ConfigAPI {
 
   async applyCompatBlurhash(feedId: number, content: string): Promise<ApiResponse<CompatBlurhashApplyResponse>> {
     return this.http.post<CompatBlurhashApplyResponse>(`/api/config/compat-tasks/blurhash/${feedId}`, { content });
+  }
+
+  // POST /api/github/sync —— 全量同步（文章/动态/站内媒体/外链图片镜像）
+  async runGithubSync(): Promise<ApiResponse<GithubSyncResponse>> {
+    return this.http.post<GithubSyncResponse>("/api/github/sync");
   }
 
   async retryQueueTask(feedId: number): Promise<ApiResponse<QueueTaskActionResponse>> {
