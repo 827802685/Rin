@@ -62,7 +62,7 @@
       "unconfigured": "GitHub 連携が設定されていないため、外部画像を集計できません。まず設定ページでリポジトリと PAT を入力してください。",
       "note": "1 MiB 以下の画像はこのサイトがその場でコミットし、それ以上はリポジトリの Actions が取得します。画像が実際にリポジトリへ入った次のラウンドで CDN に切り替わるため、「未ミラー」がすぐ 0 になるわけではありません。",
       "run": "今すぐ GitHub に同期",
-      "result": "今回の結果：記事 新規 {{postsDone}}/{{postsTotal}}（変更なし {{postsUnchanged}}、失敗 {{postsFailed}}）；モーメント 新規 {{momentsDone}}/{{momentsTotal}}（変更なし {{momentsUnchanged}}、失敗 {{momentsFailed}}）；サイト内メディア 新規 {{media}} / 既存 {{mediaPresent}} / 1 MiB 超過で Actions 待ち {{mediaLarge}} / 未登録 {{mediaSkipped}}；外部画像 {{images}} 枚：新規ミラー {{mirrored}} / 既存 {{present}} / 1 MiB 超過 {{deferred}}。",
+      "result": "今回の結果：記事 新規 {{postsDone}}/{{postsTotal}}（変更なし {{postsUnchanged}}、失敗 {{postsFailed}}）；モーメント 新規 {{momentsDone}}/{{momentsTotal}}（変更なし {{momentsUnchanged}}、失敗 {{momentsFailed}}）；サイト内メディア 新規 {{media}} / 既存 {{mediaPresent}} / 12 MiB 超過で Actions 待ち {{mediaLarge}} / 未登録 {{mediaSkipped}}；外部画像 {{images}} 枚：新規ミラー {{mirrored}} / 既存 {{present}} / 12 MiB 超過 {{deferred}}。",
       "partial": "今回は一部しか完了していません。手動同期はドメイン側の約 30 秒という応答上限を超えるとその場で打ち切られます。完了分はすでに保存済みなので、もう一度「今すぐ同期」を押すと続きから進みます。全量は毎日の定期実行に任せてください。"
     }
   },

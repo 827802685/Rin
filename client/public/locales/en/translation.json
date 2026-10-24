@@ -62,7 +62,7 @@
       "unconfigured": "GitHub integration is not configured, so external images cannot be counted here. Set the repository and PAT on the settings page first.",
       "note": "Files up to 1 MiB are committed by the site itself; larger ones are fetched by the repo's Actions. A URL only switches to the CDN after the image really exists in the repo, so the pending count does not drop to zero immediately.",
       "run": "Sync to GitHub now",
-      "result": "This run: posts {{postsDone}}/{{postsTotal}} pushed ({{postsUnchanged}} unchanged, {{postsFailed}} failed); moments {{momentsDone}}/{{momentsTotal}} pushed ({{momentsUnchanged}} unchanged, {{momentsFailed}} failed); site media {{media}} pushed / {{mediaPresent}} already in repo / {{mediaLarge}} over 1 MiB left for Actions / {{mediaSkipped}} not in repo; external images {{images}} total: {{mirrored}} mirrored / {{present}} already present / {{deferred}} over 1 MiB left for Actions.",
+      "result": "This run: posts {{postsDone}}/{{postsTotal}} pushed ({{postsUnchanged}} unchanged, {{postsFailed}} failed); moments {{momentsDone}}/{{momentsTotal}} pushed ({{momentsUnchanged}} unchanged, {{momentsFailed}} failed); site media {{media}} pushed / {{mediaPresent}} already in repo / {{mediaLarge}} over 12 MiB left for Actions / {{mediaSkipped}} not in repo; external images {{images}} total: {{mirrored}} mirrored / {{present}} already present / {{deferred}} over 12 MiB left for Actions.",
       "partial": "Only part of this pass finished: a manual sync is bounded by roughly a 30-second response limit on the domain, and the run is cut off past that. Finished work is already saved, so press Sync again to continue with the rest; the daily job covers the full run."
     }
   },

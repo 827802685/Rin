@@ -8,6 +8,7 @@ import {
     buildPostMarkdown,
     redactSecrets,
     GitHubService,
+    GITHUB_GIT_BLOB_MAX_BYTES,
     GITHUB_MAX_FILE_BYTES,
     GITHUB_MIRRORED_IMAGES_KEY,
     GITHUB_SYNCED_MEDIA_KEY,
@@ -734,5 +735,148 @@ describe('GitHubClient.fetchRemoteImage 大小闸门', () => {
         );
 
         expect(result).toBeInstanceOf(ArrayBuffer);
+    });
+
+    it('传入更大的上限时，1 MiB 以上的图也能取回字节（交给 Git Data API 推）', async () => {
+        const size = GITHUB_MAX_FILE_BYTES + 1;
+        stubRemote(size, size);
+
+        const result = await new GitHubClient(settings).fetchRemoteImage(big, GITHUB_GIT_BLOB_MAX_BYTES);
+
+        expect(result).toBeInstanceOf(ArrayBuffer);
+    });
+
+    it('按传入上限判定：超过 12 MiB 仍然不下载', async () => {
+        const size = GITHUB_GIT_BLOB_MAX_BYTES + 1;
+        const seen = stubRemote(size, size);
+
+        const result = await new GitHubClient(settings).fetchRemoteImage(big, GITHUB_GIT_BLOB_MAX_BYTES);
+
+        expect(result).toBe(REMOTE_IMAGE_TOO_LARGE);
+        expect(seen.arrayBufferCalled).toBe(false);
+    });
+});
+
+describe('GitHubClient.uploadFileViaGitData', () => {
+    const originalFetch = globalThis.fetch;
+    afterEach(() => {
+        globalThis.fetch = originalFetch;
+    });
+
+    type Call = { url: string; method: string; body?: any };
+
+    /** 按 URL 片段回放 Git Data API 的正常应答，并记下每次请求 */
+    function stubGitApi(opts: { refStatus?: number; patchStatus?: number } = {}) {
+        const calls: Call[] = [];
+        globalThis.fetch = (async (url: string | URL | Request, init?: RequestInit) => {
+            const href = String(url);
+            const method = (init?.method ?? 'GET').toUpperCase();
+            calls.push({
+                url: href,
+                method,
+                body: typeof init?.body === 'string' ? JSON.parse(init.body) : undefined,
+            });
+            const json = (data: unknown, status = 200) =>
+                new Response(JSON.stringify(data), { status });
+
+            if (href.includes('/git/ref/heads/')) {
+                if (method === 'PATCH') return json({}, opts.patchStatus ?? 200);
+                return opts.refStatus === 404
+                    ? json({ message: 'Not Found' }, 404)
+                    : json({ object: { sha: 'HEADSHA' } });
+            }
+            if (href.includes('/git/blobs')) return json({ sha: 'BLOBSHA' });
+            if (href.includes('/git/commits/')) return json({ tree: { sha: 'TREESHA' } });
+            if (href.includes('/git/trees')) return json({ sha: 'NEWTREESHA' });
+            if (href.includes('/git/commits')) return json({ sha: 'NEWCOMMITS' });
+            return json({ message: 'unexpected' }, 500);
+        }) as typeof fetch;
+        return calls;
+    }
+
+    const bytes = (n: number) => new Uint8Array(Array.from({ length: n }, (_, i) => i % 256)).buffer;
+
+    it('按 blob→base_tree→commit→ref 的顺序走，且 ref 只快进不覆盖', async () => {
+        const calls = stubGitApi();
+
+        const ok = await new GitHubClient(settings).uploadFileViaGitData({
+            path: 'media/big.png',
+            content: bytes(1000),
+            message: 'sync: image big',
+        });
+
+        expect(ok).toBe(true);
+        expect(calls.map((c) => c.url.replace('https://api.github.com', ''))).toEqual([
+            '/repos/some-user/blog-content/git/ref/heads/main',
+            '/repos/some-user/blog-content/git/blobs',
+            '/repos/some-user/blog-content/git/commits/HEADSHA',
+            '/repos/some-user/blog-content/git/trees',
+            '/repos/some-user/blog-content/git/commits',
+            '/repos/some-user/blog-content/git/ref/heads/main',
+        ]);
+        // base_tree 让 GitHub 合并未改动部分：整仓文件不可能塞进一次请求
+        expect(calls[3].body.base_tree).toBe('TREESHA');
+        expect(calls[3].body.tree).toEqual([
+            { path: 'media/big.png', mode: '100644', type: 'blob', sha: 'BLOBSHA' },
+        ]);
+        expect(calls[4].body.parents).toEqual(['HEADSHA']);
+        // force:false：并发时要么干净快进、要么失败重试，绝不冲掉别人的提交
+        expect(calls[5].method).toBe('PATCH');
+        expect(calls[5].body).toEqual({ sha: 'NEWCOMMITS', force: false });
+    });
+
+    it('base64 分段拼接后与整体编码逐字节一致', async () => {
+        const calls = stubGitApi();
+        // 32766 的 2 倍 + 5：末段不是 3 的倍数，正是分段编码最容易出错的地方
+        const content = bytes(32766 * 2 + 5);
+
+        await new GitHubClient(settings).uploadFileViaGitData({
+            path: 'media/x.png',
+            content,
+            message: 'sync: x',
+        });
+
+        const sent = calls[1].body;
+        expect(sent.encoding).toBe('base64');
+        expect(sent.content).toBe(Buffer.from(new Uint8Array(content)).toString('base64'));
+    });
+
+    it('超过 12 MiB 直接拒，一个请求都不发', async () => {
+        const calls = stubGitApi();
+
+        const ok = await new GitHubClient(settings).uploadFileViaGitData({
+            path: 'media/huge.mp4',
+            content: new ArrayBuffer(GITHUB_GIT_BLOB_MAX_BYTES + 1),
+            message: 'sync: huge',
+        });
+
+        expect(ok).toBe(false);
+        expect(calls).toEqual([]);
+    });
+
+    it('分支读不到（404）就不往下走', async () => {
+        const calls = stubGitApi({ refStatus: 404 });
+
+        const ok = await new GitHubClient(settings).uploadFileViaGitData({
+            path: 'media/x.png',
+            content: bytes(10),
+            message: 'sync: x',
+        });
+
+        expect(ok).toBe(false);
+        expect(calls.length).toBe(1);
+    });
+
+    it('ref 快进被拒（他人并发推进了分支）时算失败，不谎报已进仓', async () => {
+        const calls = stubGitApi({ patchStatus: 422 });
+
+        const ok = await new GitHubClient(settings).uploadFileViaGitData({
+            path: 'media/x.png',
+            content: bytes(10),
+            message: 'sync: x',
+        });
+
+        expect(ok).toBe(false);
+        expect(calls.length).toBe(6);
     });
 });

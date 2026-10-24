@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from 'bun:test';
 
 import {
+    GITHUB_GIT_BLOB_MAX_BYTES,
     GITHUB_MAX_FILE_BYTES,
     GITHUB_MIRRORED_IMAGES_KEY,
     GITHUB_SYNCED_MEDIA_KEY,
@@ -88,14 +89,19 @@ function makeDb(feedContent: string, feedCount = 1) {
 }
 
 /** 记录所有被上传的仓库路径 */
-function recordingClient(): { client: GitHubClient; uploaded: string[] } {
+function recordingClient(): { client: GitHubClient; uploaded: string[]; gitUploaded: string[] } {
     const uploaded: string[] = [];
+    const gitUploaded: string[] = [];
     const client = new GitHubClient(settings);
     (client as any).uploadFile = async (meta: { path: string }) => {
         uploaded.push(meta.path);
         return true;
     };
-    return { client, uploaded };
+    (client as any).uploadFileViaGitData = async (meta: { path: string }) => {
+        gitUploaded.push(meta.path);
+        return true;
+    };
+    return { client, uploaded, gitUploaded };
 }
 
 /** 上传一律失败，用来区分「进仓了」和「被拒绝了」 */
@@ -103,6 +109,25 @@ function failingClient(): { client: GitHubClient } {
     const client = new GitHubClient(settings);
     (client as any).uploadFile = async () => false;
     return { client };
+}
+
+/** 声明体积为 size 的站内媒体（big.png），body 只有 64 字节：判定只看声明体积时就够用了 */
+function bigMediaEnv(size: number): Env {
+    return {
+        R2_BUCKET: {
+            async get() {
+                return {
+                    body: new Uint8Array(64),
+                    size,
+                    httpEtag: '"etag"',
+                    uploaded: new Date('2026-10-01T00:00:00Z'),
+                    writeHttpMetadata(headers: Headers) {
+                        headers.set('Content-Type', 'image/png');
+                    },
+                };
+            },
+        },
+    } as unknown as Env;
 }
 
 describe('GitHubClient.uploadFile size limit', () => {
@@ -221,29 +246,50 @@ describe('runGitHubSync media key safety', () => {
             .toEqual(new Set(['images/a.png', 'images/b.png']));
     });
 
-    it('超过 1 MiB 的站内媒体不下载，直接留给 Actions', async () => {
-        const { client, uploaded } = recordingClient();
-        // body 故意给很小的：只按声明体积判定就不该碰它
+    it('超过 1 MiB 的站内媒体改走 Git Data API 推进仓库', async () => {
+        const { client, uploaded, gitUploaded } = recordingClient();
+        const env = bigMediaEnv(GITHUB_MAX_FILE_BYTES + 1);
+
+        const stats = await runGitHubSync(client, makeDb('![big](/blob/big.png)'), env);
+
+        expect(stats.media.success).toBe(1);
+        expect(stats.media.deferredToActions).toBe(0);
+        expect(gitUploaded).toContain('media/big.png');
+        expect(uploaded).not.toContain('media/big.png'); // contents API 一定会被 422 拒掉
+    });
+
+    it('连 Git Data API 上限也超了的媒体不下载，留给仓库侧 Actions', async () => {
+        const { client, gitUploaded } = recordingClient();
+        // 流只在被真正消费时才 pull：用它来证明几十 MB 的对象没被读进 Worker 内存
+        const pulled: number[] = [];
         const env = {
             R2_BUCKET: {
                 async get() {
                     return {
-                        body: new Uint8Array(64),
-                        size: GITHUB_MAX_FILE_BYTES + 1,
+                        body: new ReadableStream({
+                            pull(controller) {
+                                pulled.push(controller.desiredSize ?? 1);
+                                controller.enqueue(new Uint8Array(64));
+                                controller.close();
+                            },
+                        }, { highWaterMark: 0 }),
+                        size: GITHUB_GIT_BLOB_MAX_BYTES + 1,
                         httpEtag: '"etag"',
                         uploaded: new Date('2026-10-01T00:00:00Z'),
                         writeHttpMetadata(headers: Headers) {
-                            headers.set('Content-Type', 'image/png');
+                            headers.set('Content-Type', 'video/mp4');
                         },
                     };
                 },
             },
         } as unknown as Env;
 
-        const stats = await runGitHubSync(client, makeDb('![big](/blob/big.png)'), env);
+        const stats = await runGitHubSync(client, makeDb('![huge](/blob/huge.mp4)'), env);
 
         expect(stats.media.deferredToActions).toBe(1);
-        expect(uploaded).not.toContain('media/big.png');
+        expect(stats.media.success).toBe(0);
+        expect(gitUploaded).toEqual([]);
+        expect(pulled).toEqual([]);
     });
 });
 
@@ -381,15 +427,20 @@ describe('runGitHubSync 外链图片镜像', () => {
     /** 可控外链镜像：remoteFileExists 决定是否已在仓，fetchRemoteImage 决定字节大小 */
     function mirrorClient(opts: { existsInRepo?: boolean; bytes?: number | null }) {
         const uploaded: string[] = [];
+        const gitUploaded: string[] = [];
         const client = new GitHubClient(settings);
         (client as any).uploadFile = async (meta: { path: string }) => {
             uploaded.push(meta.path);
             return true;
         };
+        (client as any).uploadFileViaGitData = async (meta: { path: string }) => {
+            gitUploaded.push(meta.path);
+            return true;
+        };
         (client as any).remoteFileExists = async () => opts.existsInRepo ?? false;
         (client as any).fetchRemoteImage = async () =>
             opts.bytes === null ? null : new Uint8Array(opts.bytes ?? 100).buffer;
-        return { client, uploaded };
+        return { client, uploaded, gitUploaded };
     }
 
     it('小图（≤1MiB）由 Worker 下载并推进仓库，记入镜像清单', async () => {
@@ -405,27 +456,50 @@ describe('runGitHubSync 外链图片镜像', () => {
             .toEqual(new Set([`${'some-user'}/image/refs/heads/main/a.png`]));
     });
 
-    it('大图（>1MiB）不硬推，标记为交给 Actions，且不进镜像清单', async () => {
-        const { client, uploaded } = mirrorClient({ bytes: GITHUB_MAX_FILE_BYTES + 1 });
+    it('大图（>1MiB、≤12MiB）走 Git Data API 推成，并照常记入镜像清单', async () => {
+        const { client, uploaded, gitUploaded } = mirrorClient({ bytes: GITHUB_MAX_FILE_BYTES + 1 });
         const config = fakeConfig();
 
         const stats = await runGitHubSync(client, makeDb(`![a](${IMG})`), makeEnv([]), config);
 
-        expect(stats.images.deferredToActions).toBe(1);
-        expect(stats.images.success).toBe(0);
-        expect(uploaded).not.toContain(mediaPath);
-        expect(JSON.parse(String(config.store.get(GITHUB_MIRRORED_IMAGES_KEY)))).toEqual([]);
+        expect(stats.images.success).toBe(1);
+        expect(stats.images.deferredToActions).toBe(0);
+        expect(gitUploaded).toContain(mediaPath);
+        expect(uploaded).not.toContain(mediaPath); // 没走 contents API
+        expect(new Set(JSON.parse(String(config.store.get(GITHUB_MIRRORED_IMAGES_KEY)))))
+            .toEqual(new Set([`${'some-user'}/image/refs/heads/main/a.png`]));
     });
 
-    it('大图只按响应头判定就交给 Actions，不占时间预算', async () => {
-        const { client, uploaded } = mirrorClient({ bytes: null });
+    it('Git Data API 也推不动的大图只按响应头判定就交给 Actions，不占时间预算', async () => {
+        const { client, uploaded, gitUploaded } = mirrorClient({ bytes: null });
         (client as any).fetchRemoteImage = async () => REMOTE_IMAGE_TOO_LARGE;
 
-        const stats = await runGitHubSync(client, makeDb(`![a](${IMG})`), makeEnv([]), fakeConfig());
+        const stats = await runGitHubSync(
+            client,
+            makeDb(`![a](${IMG})`),
+            makeEnv([]),
+            fakeConfig(),
+        );
 
         expect(stats.images.deferredToActions).toBe(1);
         expect(stats.images.success).toBe(0);
         expect(uploaded).not.toContain(mediaPath); // 只推了 markdown，没推这张大图
+        expect(gitUploaded).toEqual([]);
+    });
+
+    it('Git Data API 回绝（超账号上限等）时按失败处理，不把正文指向不存在的文件', async () => {
+        const { client, gitUploaded } = mirrorClient({ bytes: 2 * 1024 * 1024 });
+        (client as any).uploadFileViaGitData = async (meta: { path: string }) => {
+            gitUploaded.push(meta.path);
+            return false;
+        };
+        const config = fakeConfig();
+
+        const stats = await runGitHubSync(client, makeDb(`![a](${IMG})`), makeEnv([]), config);
+
+        expect(stats.images.success).toBe(0);
+        expect(gitUploaded).toEqual([mediaPath]);
+        expect(JSON.parse(String(config.store.get(GITHUB_MIRRORED_IMAGES_KEY)))).toEqual([]);
     });
 
     it('仓库里已存在（Actions 提交过）则认领、不重复下载', async () => {

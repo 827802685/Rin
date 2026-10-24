@@ -17,6 +17,13 @@ export interface GitHubSettings {
 // GitHub contents API 单文件上限（1 MiB，官方限制）
 export const GITHUB_MAX_FILE_BYTES = 1024 * 1024;
 
+/**
+ * Git Data API（blobs + trees + commits + refs）的可用上限。官方是 100 MiB，
+ * 这里取 12 MiB： Workers 单请求出站体上限 25MB（Free），而 base64 后是 1.33 倍，
+ * 加上下载到的原始字节同时驻留，实测 10.5MB 的截图已接近内存余量，再大就该留给别的路径。
+ */
+export const GITHUB_GIT_BLOB_MAX_BYTES = 12 * 1024 * 1024;
+
 /** 外链图超过 1 MiB：Worker 推不动，也不该把整张下载进内存 */
 export const REMOTE_IMAGE_TOO_LARGE = "too-large" as const;
 export type RemoteImage = ArrayBuffer | typeof REMOTE_IMAGE_TOO_LARGE | null;
@@ -79,14 +86,17 @@ interface GitHubCommitResponse {
   };
 }
 
-// Workers runtime 没有 Buffer，用 TextEncoder + btoa 做 base64
+// Workers runtime 没有 Buffer，用 TextEncoder + btoa 做 base64。
+// 分段各自 base64 再拼接（段长取 3 的倍数，拼接结果与整体编码逐字节相同）：
+// 早先的 `binary += String.fromCharCode(...)` 每次都要重造整条字符串，10MB 的图
+// 会退化成 O(n²) 的拷贝并在 Workers 128MB 内存上限里放不下。
 function bytesToBase64(bytes: Uint8Array): string {
-  let binary = "";
-  const chunkSize = 0x8000;
+  const chunkSize = 0x8000 - (0x8000 % 3);
+  const parts: string[] = [];
   for (let i = 0; i < bytes.length; i += chunkSize) {
-    binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
+    parts.push(btoa(String.fromCharCode(...bytes.subarray(i, i + chunkSize))));
   }
-  return btoa(binary);
+  return parts.join("");
 }
 
 function textToBase64(text: string): string {
@@ -300,6 +310,106 @@ export class GitHubClient {
     }
   }
 
+  /**
+   * 用 Git Data API 提交单个文件，绕开 contents API 的 1 MiB 上限。
+   *
+   * 四步各一次请求：建游离 blob → 以当前 tree 为 base 造新 tree → 造 commit → 把分支
+   * 快进到新 commit。`force: false` 保证并发时要么干净快进、要么 422 失败（下一轮重试），
+   * 绝不会把别人的提交冲掉。
+   */
+  async uploadFileViaGitData(meta: {
+    path: string;
+    content: ArrayBuffer;
+    message: string;
+  }): Promise<boolean> {
+    const { path, content, message } = meta;
+    if (content.byteLength > GITHUB_GIT_BLOB_MAX_BYTES) {
+      console.warn(
+        `[GitHub] skip git-data upload ${path}: ${content.byteLength} bytes exceeds ${GITHUB_GIT_BLOB_MAX_BYTES}`,
+      );
+      return false;
+    }
+
+    const repo = `${this.apiBase}/repos/${this.settings.owner}/${this.settings.repo}`;
+    const refUrl = `${repo}/git/ref/heads/${encodeURIComponent(this.settings.branch)}`;
+
+    try {
+      const head = await this.json<{ object?: { sha?: string } }>(refUrl);
+      const parentSha = head?.object?.sha;
+      if (!parentSha) {
+        console.error(`[GitHub] git-data: no head commit for ${this.settings.branch}`);
+        return false;
+      }
+
+      const blobSha = (
+        await this.json<{ sha?: string }>(`${repo}/git/blobs`, {
+          content: bytesToBase64(new Uint8Array(content)),
+          encoding: "base64",
+        })
+      )?.sha;
+      if (!blobSha) {
+        console.error(`[GitHub] git-data: blob create failed for ${path}`);
+        return false;
+      }
+
+      // base_tree 让 GitHub 自己合并未改动的部分：整仓文件不可能塞进一次请求
+      const headTree = (
+        await this.json<{ tree?: { sha?: string } }>(`${repo}/git/commits/${parentSha}`)
+      )?.tree?.sha;
+      const treeSha = (
+        await this.json<{ sha?: string }>(`${repo}/git/trees`, {
+          base_tree: headTree,
+          tree: [{ path, mode: "100644", type: "blob", sha: blobSha }],
+        })
+      )?.sha;
+      if (!treeSha) {
+        console.error(`[GitHub] git-data: tree create failed for ${path}`);
+        return false;
+      }
+
+      const commitSha = (
+        await this.json<{ sha?: string }>(`${repo}/git/commits`, {
+          message,
+          parents: [parentSha],
+          tree: treeSha,
+        })
+      )?.sha;
+      if (!commitSha) {
+        console.error(`[GitHub] git-data: commit create failed for ${path}`);
+        return false;
+      }
+
+      const res = await fetch(refUrl, {
+        method: "PATCH",
+        headers: this.headers({ "Content-Type": "application/json" }),
+        body: JSON.stringify({ sha: commitSha, force: false }),
+      });
+      if (!res.ok) {
+        console.error(`[GitHub] git-data ref update failed (${res.status}) for ${path}:`, await res.text());
+        return false;
+      }
+      console.log(`[GitHub] uploaded ${path} via git-data (commit ${commitSha.slice(0, 7)})`);
+      return true;
+    } catch (error) {
+      console.error(`[GitHub] git-data upload error for ${path}:`, error);
+      return false;
+    }
+  }
+
+  /** 一次 GET/POST 并解 JSON；非 2xx 返回 null（调用方按失败处理，不抛） */
+  private async json<T>(url: string, body?: unknown): Promise<T | null> {
+    const res = await fetch(url, {
+      method: body ? "POST" : "GET",
+      headers: this.headers(body ? { "Content-Type": "application/json" } : {}),
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    if (!res.ok) {
+      console.error(`[GitHub] ${res.status} ${url.replace(this.apiBase, "")}`);
+      return null;
+    }
+    return (await res.json()) as T;
+  }
+
   /** 文件在 CDN 上的完整访问地址 */
   getCdnUrl(path: string): string {
     return `${cdnBaseFor(this.settings)}/${path}`;
@@ -309,10 +419,10 @@ export class GitHubClient {
    * 从图片源 URL 拉取二进制。Worker 在 Cloudflare 边缘出网，取 GitHub raw 不受
    * 本机被封影响；取不到或非 2xx 返回 null（该图留原外链，不镜像）。
    *
-   * 超过 contents API 单文件上限的直接按响应头 Content-Length 拒绝：整张下载一张
-   * 10MB 的图会吃掉几十秒墙钟，把同步拖到 Cloudflare 524，而结果一定是推不进去。
+   * 超过 maxBytes 的直接按响应头 Content-Length 拒绝：整张下载一张几十 MB 的图会吃掉
+   * 几十秒墙钟和大量内存，而结果一定是推不进去。
    */
-  async fetchRemoteImage(url: string): Promise<RemoteImage> {
+  async fetchRemoteImage(url: string, maxBytes = GITHUB_MAX_FILE_BYTES): Promise<RemoteImage> {
     try {
       const res = await fetch(url, { headers: { "User-Agent": "rin-blog-github-sync" } });
       if (!res.ok) {
@@ -320,13 +430,13 @@ export class GitHubClient {
         return null;
       }
       const declared = Number(res.headers.get("content-length") ?? "");
-      if (declared > GITHUB_MAX_FILE_BYTES) {
+      if (declared > maxBytes) {
         await res.body?.cancel().catch(() => undefined);
         return REMOTE_IMAGE_TOO_LARGE;
       }
       const bytes = await res.arrayBuffer();
       // 少数源不给 Content-Length，下载完才发现超限
-      return bytes.byteLength > GITHUB_MAX_FILE_BYTES ? REMOTE_IMAGE_TOO_LARGE : bytes;
+      return bytes.byteLength > maxBytes ? REMOTE_IMAGE_TOO_LARGE : bytes;
     } catch (error) {
       console.warn(`[GitHub] remote image fetch failed: ${redactUrlForLog(url)}`, error);
       return null;

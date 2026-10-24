@@ -14,6 +14,7 @@ import {
   getSyncedHashes,
   getSyncedMediaKeys,
   GitHubClient,
+  GITHUB_GIT_BLOB_MAX_BYTES,
   GITHUB_MAX_FILE_BYTES,
   GITHUB_SYNC_TIMING_KEY,
   REMOTE_IMAGE_TOO_LARGE,
@@ -83,6 +84,10 @@ export interface GitHubSyncOptions {
  */
 /** 单条记录的时间预算（毫秒）；一次挂起的外部调用不能吃掉整轮，否则必然撞上约 30 秒的切断 */
 const PER_ITEM_BUDGET_MS = 8_000;
+/** 下载一张图的时间预算：图可能有好几 MB，8 秒不够，但也不能无限等 */
+const IMAGE_FETCH_MS = 60_000;
+/** Git Data API 推送的时间预算：blob→tree→commit→ref 四次往返，且请求体是 1.33 倍 base64 */
+const GIT_DATA_PUSH_MS = 150_000;
 
 async function withTimeout<T>(work: Promise<T>, label: string, ms = PER_ITEM_BUDGET_MS): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -217,22 +222,36 @@ export async function runGitHubSync(
         await persistMirrored();
         continue;
       }
-      const image = await guard(client.fetchRemoteImage(src.fetchUrl), `下载外链图 ${key}`);
+      const image = await withTimeout(
+        client.fetchRemoteImage(src.fetchUrl, GITHUB_GIT_BLOB_MAX_BYTES),
+        `下载外链图 ${key}`,
+        IMAGE_FETCH_MS,
+      );
       if (image === null) {
         continue; // 取不到，留原外链
       }
-      if (image === REMOTE_IMAGE_TOO_LARGE || image.byteLength > GITHUB_MAX_FILE_BYTES) {
-        // contents API 硬上限，Worker 推不动；等 Actions 拉取路径提交
+      if (image === REMOTE_IMAGE_TOO_LARGE) {
+        // contents API 与 Git Data API 的上限都超了：Worker 搬不动，只能留给仓库侧 Actions
         stats.images.deferredToActions++;
         continue;
       }
-      const ok = await guard(
-        client.uploadFile({
-          path: src.mediaPath,
-          content: image,
-          message: `sync: image ${key}`,
-        }),
-        `推送外链图 ${key}`,
+      // 1 MiB 以内走 contents API（一次 PUT）；更大的走 Git Data API（blob→tree→commit→ref）。
+      // 后者一次要传 1.33 倍的 base64，8 秒的单条上限套不住，单独计时。
+      const viaGitData = image.byteLength > GITHUB_MAX_FILE_BYTES;
+      const ok = await withTimeout(
+        viaGitData
+          ? client.uploadFileViaGitData({
+              path: src.mediaPath,
+              content: image,
+              message: `sync: image ${key}`,
+            })
+          : client.uploadFile({
+              path: src.mediaPath,
+              content: image,
+              message: `sync: image ${key}`,
+            }),
+        `推送外链图 ${key}（${viaGitData ? "git-data" : "contents"}）`,
+        viaGitData ? GIT_DATA_PUSH_MS : itemMs,
       );
       if (ok) {
         mirrored.add(key);
@@ -372,16 +391,24 @@ export async function runGitHubSync(
         continue;
       }
       const declaredSize = Number(object.headers.get("Content-Length") ?? 0);
-      if (declaredSize > GITHUB_MAX_FILE_BYTES) {
-        // contents API 单文件 1 MiB 硬上限，大媒体不下载直接留给 Actions
+      if (declaredSize > GITHUB_GIT_BLOB_MAX_BYTES) {
+        // 连 Git Data API 的上限都超了（大视频等）：Worker 不下载，留给仓库侧 Actions
         stats.media.deferredToActions++;
         continue;
       }
-      const buffer = await guard(object.arrayBuffer(), `读取媒体内容 ${key}`);
+      const viaGitData = declaredSize > GITHUB_MAX_FILE_BYTES;
+      const buffer = await withTimeout(
+        object.arrayBuffer(),
+        `读取媒体内容 ${key}`,
+        viaGitData ? GIT_DATA_PUSH_MS : itemMs,
+      );
       const path = getGitHubPath("media", { filename: key });
-      const ok = await guard(
-        client.uploadFile({ path, content: buffer, message: `sync: media ${key}` }),
-        `推送站内媒体 ${key}`,
+      const ok = await withTimeout(
+        viaGitData
+          ? client.uploadFileViaGitData({ path, content: buffer, message: `sync: media ${key}` })
+          : client.uploadFile({ path, content: buffer, message: `sync: media ${key}` }),
+        `推送站内媒体 ${key}（${viaGitData ? "git-data" : "contents"}）`,
+        viaGitData ? GIT_DATA_PUSH_MS : itemMs,
       );
       if (ok) {
         stats.media.success++;

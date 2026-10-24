@@ -58,6 +58,45 @@ which automatically generates release notes from commit messages.
 - **Unvalidated request bodies**: Feed create/update, `POST /feed/top/:id`, comment create, friend create/update, `PUT /user/profile` and `POST /auth/login` accepted any JSON shape. They now share the `@rin/api` schemas, so a wrong type (a string `tags`, a non-boolean `listed`, a non-numeric `top`) returns 400 instead of reaching the database.
 - **Hard-coded callback label**: The OAuth callback page rendered a hard-coded English `Waiting...`; it now uses the `callback.waiting` translation key present in all four locales.
 
+### GitHub repository sync and external-image mirroring (2026-10-18 → 2026-10-24)
+
+The content-repo pipeline (`GitHubClient` → `runGitHubSync` → cron `*/20`, once per day) now
+works in production; it had never completed a single run between the 10-13 landing and 10-18.
+
+- **External images are copied into the content repo.** `![x](https://raw.githubusercontent.com/<owner>/...)`
+  references pointing at the configured owner's own repos are mirrored to
+  `media/<url-safe-base64(owner/repo/ref/path)>.<ext>` and the post body is rewritten to the CDN
+  URL **only after the path is confirmed to exist in the repo**, so a rewrite can never point at a
+  missing file. Fragment options (`#blurhash=…&width=…`) are preserved. Applies to old posts (daily
+  cron + the compatibility-tasks card) and to articles written on the site.
+- **Files above the Contents API limit go through the Git Data API.** `uploadFileViaGitData()`
+  creates a blob, builds a tree from `base_tree`, commits and fast-forwards the branch with
+  `force: false` (so a concurrent push fails cleanly instead of overwriting it). This lifts the
+  single-file ceiling from 1 MiB to 12 MiB — the cap is set by the 25 MB Worker request body and
+  the 1.33× base64 inflation, not by GitHub (100 MiB). Larger files are still reported as
+  "left for repo-side Actions".
+- **Root cause of the timing-out syncs: every `CacheImpl.set()` rewrote the whole config table.**
+  `save()` issues one serial D1 write per key of that type (14 keys ≈ 1.5 s per call), and the sync
+  loop wrote diagnostics per item, which consumed the entire HTTP budget. Added `setQuick()`, a
+  single-row `onConflictDoUpdate` upsert (unique index `cache_key_type_unique`), and switched the
+  sync hot paths and `saveMirroredImageKeys` / `saveSyncedHashes` / `saveSyncedMediaKeys` to it.
+- **Content fingerprints.** `github.synced_hashes` (path → sha256 of the rendered markdown) means an
+  unchanged round issues zero GitHub requests; measured warm run: 4.3 s, no API calls.
+- **Per-item timeouts instead of one shared guard.** A hung GitHub request now fails only that item
+  (8 s default, 60 s for image downloads, 150 s for Git Data pushes) rather than the batch.
+- **`bytesToBase64()` no longer concatenates into one growing string.** The previous
+  `binary += String.fromCharCode(…)` was O(n²) in reallocation and could not hold a 10 MB file under
+  the Worker's 128 MB cap; chunks are now 3-byte aligned and concatenated once (byte-identical output).
+- **Cron frequency is once per day** (owner's decision on 2026-10-18: no sub-15-minute gate), and
+  "unchanged" counts as success in the daily gate tally — otherwise a quiet round could never mark
+  the day as synced and the gate would rescan every 20 minutes forever.
+
+Verified against production on 2026-10-18: manual `POST /api/github/sync` returned 200 with stats
+(cold 23.1 s HTTP / 7.2 s Worker, after the daily-gate revert 7.7 s), `5 feeds unchanged`,
+`images 6 / alreadyPresent 4 / deferredToActions 2`, and the mirrored CDN URLs return
+`200 image/png`. Gates for this batch: server 768 pass / 0 fail (53 files), client 271 / 271
+(36 files), `turbo check` 3/3.
+
 ## [v0.3.0] - 2026-03-12
 
 ### Overview
