@@ -1,5 +1,5 @@
 import type { AIConfig } from "@rin/api";
-import { AI_CONFIG_PREFIX, DEFAULT_AI_CONFIG } from "@rin/config";
+import { AI_CONFIG_PREFIX, DEFAULT_AI_CONFIG, MASKED_SECRET } from "@rin/config";
 
 type ConfigReader = {
     get(key: string): Promise<unknown>;
@@ -69,8 +69,15 @@ export async function setAIConfig(config: ConfigWriter, updates: Partial<AIConfi
             continue;
         }
 
-        if (field === "api_key" && typeof value === "string" && value.trim() === "") {
-            continue;
+        // 空串与前端掩码都表示「这一项没改」。掩码是服务端自己下发的值，客户端
+        // （或任何照着 GET 结果回写的脚本）原样 POST 回来是必然会发生的事，
+        // 写进库就等于把真密钥换成 8 个圆点：AI 调用全部 401，而界面因为
+        // api_key_set 仍为 true 还显示「已配置」。
+        if (field === "api_key" && typeof value === "string") {
+            const trimmed = value.trim();
+            if (trimmed === "" || trimmed === MASKED_SECRET) {
+                continue;
+            }
         }
 
         await config.set(AI_CONFIG_PREFIX + field, value, false);

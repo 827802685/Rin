@@ -1,7 +1,7 @@
 import { describe, expect, it, beforeEach, afterEach, mock } from "bun:test";
 import { Hono } from "hono";
 import { ConfigService } from "../config";
-import { setupTestApp, cleanupTestDB } from "../../../tests/fixtures";
+import { setupTestApp, cleanupTestDB, type TestCacheImpl } from "../../../tests/fixtures";
 import type { Database } from "bun:sqlite";
 import type { Variables } from "../../core/hono-types";
 
@@ -10,6 +10,7 @@ describe("ConfigService", () => {
     let sqlite: Database;
     let env: Env;
     let app: Hono<{ Bindings: Env; Variables: Variables }>;
+    let serverConfig: TestCacheImpl;
     const originalFetch = globalThis.fetch;
 
     beforeEach(async () => {
@@ -18,6 +19,7 @@ describe("ConfigService", () => {
         sqlite = ctx.sqlite;
         env = ctx.env;
         app = ctx.app;
+        serverConfig = ctx.serverConfig;
 
         // Create test user
         await createTestUser();
@@ -117,6 +119,35 @@ describe("ConfigService", () => {
             const data = await res.json() as Record<string, any>;
             // API key should be masked
             expect(data["ai_summary.api_key"]).toBe("••••••••");
+        });
+
+        it("把 GET 回来的掩码原样 POST 回去不会把真密钥冲掉", async () => {
+            await app.request("/server", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    Authorization: "Bearer mock_token_1",
+                },
+                body: JSON.stringify({ "ai_summary.api_key": "secret_key_123" }),
+            });
+
+            const before = await app.request("/server", {
+                method: "GET",
+                headers: { Authorization: "Bearer mock_token_1" },
+            });
+            const masked = (await before.json() as Record<string, any>)["ai_summary.api_key"];
+
+            // 照着 GET 的结果整份回写，是导入/导出与脚本最常见的写法
+            await app.request("/", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    Authorization: "Bearer mock_token_1",
+                },
+                body: JSON.stringify({ serverConfig: { "ai_summary.api_key": masked } }),
+            });
+
+            expect(await serverConfig.get("ai_summary.api_key")).toBe("secret_key_123");
         });
     });
 
