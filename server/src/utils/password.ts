@@ -10,7 +10,9 @@
  * successful legacy login transparently re-hashes the password.
  */
 
-export const PBKDF2_ITERATIONS = 120_000;
+// workerd 的 WebCrypto 拒绝 iterations > 100000（Bun/Node 不会），超过就让所有
+// 需要重新哈希的登录变成 500，所以这里必须贴住上限。
+export const PBKDF2_ITERATIONS = 100_000;
 const SALT_BYTES = 16;
 const KEY_BYTES = 32;
 

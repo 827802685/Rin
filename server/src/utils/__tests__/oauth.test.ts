@@ -100,6 +100,34 @@ describe("createOAuthPlugin.createRedirectUrl", () => {
         expect(url.searchParams.has("redirect_uri")).toBe(false);
     });
 
+    it("prefers an explicit redirectUri over the provider's configured one", () => {
+        const { createRedirectUrl } = buildPlugin(
+            makeProvider({ redirectUri: "https://configured.example/callback" }),
+        );
+        const url = new URL(
+            createRedirectUrl(
+                "state-1",
+                "Example",
+                "https://asked.example/api/user/github/callback",
+            ),
+        );
+
+        expect(url.searchParams.get("redirect_uri")).toBe(
+            "https://asked.example/api/user/github/callback",
+        );
+    });
+
+    it("sends a request-time redirect_uri when the provider declares none", () => {
+        const { createRedirectUrl } = buildPlugin(makeProvider());
+        const url = new URL(
+            createRedirectUrl("state-1", "Example", "https://asked.example/api/user/github/callback"),
+        );
+
+        expect(url.searchParams.get("redirect_uri")).toBe(
+            "https://asked.example/api/user/github/callback",
+        );
+    });
+
     it("percent-encodes hostile state values", () => {
         const { createRedirectUrl } = buildPlugin(makeProvider());
         const hostile = 'a"&client_id=evil';
@@ -199,6 +227,25 @@ describe("createOAuthPlugin.authorize", () => {
         expect(body.get("client_secret")).toBe("secret-xyz");
         expect(body.get("code")).toBe("code-1");
         expect(body.has("redirect_uri")).toBe(false);
+    });
+
+    it("sends an explicit redirectUri on the token leg, overriding the provider value", async () => {
+        const calls = stub(
+            new Response(JSON.stringify({ access_token: "tok" }), {
+                status: 200,
+                headers: { "Content-Type": "application/json" },
+            }),
+        );
+        const { authorize } = buildPlugin(
+            makeProvider({ redirectUri: "https://configured.example/callback" }),
+        );
+
+        await authorize("Example", "code-1", "https://asked.example/api/user/github/callback");
+
+        const body = new URLSearchParams(String(calls[0].init.body));
+        expect(body.get("redirect_uri")).toBe(
+            "https://asked.example/api/user/github/callback",
+        );
     });
 
     it("maps the token response onto camelCase fields", async () => {

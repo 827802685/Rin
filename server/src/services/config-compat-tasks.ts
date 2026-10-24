@@ -5,9 +5,23 @@ import { syncFeedAISummaryQueueState } from "./feed-ai-summary";
 import { clearFeedCache } from "./feed";
 import { contentHasImagesMissingMetadata } from "../utils/image";
 import { getAIConfig } from "../utils/db-config";
+import {
+  extractMirrorableImageSources,
+  getGitHubSettings,
+  getMirroredImageKeys,
+} from "./github";
 
 type ConfigReader = {
   get(key: string): Promise<unknown>;
+};
+
+type CompatFeedRow = {
+  id: number;
+  content: string;
+  ai_summary: string;
+  ai_summary_status: string;
+  draft: number;
+  listed: number;
 };
 
 function isAISummaryBackfillEligible(feed: {
@@ -46,6 +60,7 @@ export async function buildCompatTasksResponse(db: DB, serverConfig: ConfigReade
       ai_summary: true,
       ai_summary_status: true,
       draft: true,
+      listed: true,
     },
   });
 
@@ -60,7 +75,47 @@ export async function buildCompatTasksResponse(db: DB, serverConfig: ConfigReade
     blurhash: {
       eligible: items.filter((item) => contentHasImagesMissingMetadata(item.content)).length,
     },
+    githubImage: await buildGithubImageTask(db, serverConfig, env, items),
   };
+}
+
+/**
+ * 外链图片镜像的就绪度。口径与 github 同步任务保持一致：
+ * 只统计「已发布且列出」的文章 + 全部动态里引用的自有仓库外链图，
+ * 已镜像 = 仓库里确实有这个文件（Worker 推送或 Actions 提交都算）。
+ * 未配置集成时 configured=false，界面据此说明「取不到」而不是报 0。
+ */
+async function buildGithubImageTask(
+  db: DB,
+  serverConfig: ConfigReader,
+  env: Env,
+  feedRows: CompatFeedRow[],
+) {
+  const settings = await getGitHubSettings(serverConfig, env).catch(() => null);
+  if (!settings) {
+    return { configured: false, total: 0, mirrored: 0, pending: 0 };
+  }
+
+  const moments = await db.query.moments.findMany({ columns: { content: true } });
+  const sources = new Set<string>();
+  for (const feed of feedRows) {
+    if (feed.draft === 1 || feed.listed !== 1) {
+      continue;
+    }
+    for (const key of extractMirrorableImageSources(feed.content, settings.owner).keys()) {
+      sources.add(key);
+    }
+  }
+  for (const moment of moments) {
+    for (const key of extractMirrorableImageSources(moment.content, settings.owner).keys()) {
+      sources.add(key);
+    }
+  }
+
+  const mirroredKeys = await getMirroredImageKeys(serverConfig);
+  const mirrored = [...sources].filter((key) => mirroredKeys.has(key)).length;
+
+  return { configured: true, total: sources.size, mirrored, pending: sources.size - mirrored };
 }
 
 export async function runCompatAISummaryBackfill(

@@ -11,13 +11,15 @@ export interface JWTUtils {
 
 export interface OAuth2Utils {
     generateState(): string;
-    createRedirectUrl(state: string, provider: string): string;
-    authorize(provider: string, code: string): Promise<{ accessToken: string } | null>;
+    createRedirectUrl(state: string, provider: string, redirectUri?: string): string;
+    authorize(provider: string, code: string, redirectUri?: string): Promise<{ accessToken: string } | null>;
 }
 
 export interface CacheImpl {
     get(key: string): Promise<any | null>;
     set(key: string, value: any, save?: boolean): Promise<void>;
+    /** 只落这一个键。`set` 会把本 type 的每个键各写一次，循环内的高频写入必须用它 */
+    setQuick(key: string, value: any): Promise<void>;
     delete(key: string, save?: boolean): Promise<void>;
     deletePrefix(prefix: string): Promise<void>;
     getOrSet<T>(key: string, factory: () => Promise<T>): Promise<T>;

@@ -257,10 +257,52 @@ describe("ConfigService", () => {
             const data = await res.json() as {
                 aiSummary: { eligible: number; forceEligible: number };
                 blurhash: { eligible: number };
+                githubImage: { configured: boolean; total: number; mirrored: number; pending: number };
             };
             expect(data.aiSummary.eligible).toBe(1);
             expect(data.aiSummary.forceEligible).toBe(2);
             expect(data.blurhash.eligible).toBe(1);
+            // 没配 GitHub 集成时要说「没取到」，不能报成 0 张待处理
+            expect(data.githubImage).toEqual({ configured: false, total: 0, mirrored: 0, pending: 0 });
+        });
+
+        it("should count self-hosted external images still waiting to be mirrored", async () => {
+            await app.request("/server", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    Authorization: "Bearer mock_token_1",
+                },
+                body: JSON.stringify({
+                    "github.enabled": "true",
+                    "github.repo_owner": "some-user",
+                    "github.repo_name": "blog-content",
+                    "github.pat": "tok",
+                    "github.mirrored_images": JSON.stringify([
+                        "some-user/image/refs/heads/main/a.png",
+                    ]),
+                }),
+            });
+
+            const ext = (name: string) =>
+                `![${name}](https://raw.githubusercontent.com/some-user/image/refs/heads/main/${name}.png#blurhash=x)`;
+
+            sqlite.exec(`
+                INSERT INTO feeds (id, title, summary, ai_summary, ai_summary_status, ai_summary_error, content, listed, draft, top, uid)
+                VALUES
+                  (1, 'Two images', '', '', 'completed', '', '${ext("a")} ${ext("b")}', 1, 0, 0, 1),
+                  (2, 'Draft only', '', '', 'completed', '', '${ext("draft")}', 1, 1, 0, 1),
+                  (3, 'Unlisted', '', '', 'completed', '', '${ext("unlisted")}', 0, 0, 0, 1)
+            `);
+
+            const res = await app.request("/compat-tasks", {
+                method: "GET",
+                headers: { Authorization: "Bearer mock_token_1" },
+            });
+
+            const data = await res.json() as { githubImage: Record<string, unknown> };
+            // 草稿与未列出的不进同步口径，所以总共只有 a/b 两张，其中 a 已入库
+            expect(data.githubImage).toEqual({ configured: true, total: 2, mirrored: 1, pending: 1 });
         });
 
         it("should queue AI summary backfill for eligible feeds", async () => {

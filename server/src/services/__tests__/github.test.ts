@@ -4,16 +4,24 @@ import { Hono } from 'hono';
 import type { Variables } from '../../core/hono-types';
 import {
     buildGitHubExport,
+    buildMomentMarkdown,
     buildPostMarkdown,
+    redactSecrets,
     GitHubService,
     GITHUB_MAX_FILE_BYTES,
+    GITHUB_MIRRORED_IMAGES_KEY,
     GITHUB_SYNCED_MEDIA_KEY,
     GitHubClient,
+    extractMirrorableImageSources,
     getGitHubPath,
     getGitHubSettings,
+    getMirroredImageKeys,
     getSyncedMediaKeys,
     isSafeMediaKey,
     markMediaSynced,
+    parseMirrorableImageSource,
+    REMOTE_IMAGE_TOO_LARGE,
+    saveMirroredImageKeys,
     saveSyncedMediaKeys,
     type GitHubSettings,
 } from '../github';
@@ -111,7 +119,7 @@ describe('GitHubClient.rewriteMediaToCdn', () => {
 
     it('rewrites internal /blob/ references to the CDN media folder', () => {
         const out = client.rewriteMediaToCdn('![p](/blob/images/a.png)', hosts, synced);
-        expect(out).toBe('![p](https://cdn.jsdelivr.net/gh/some-user/blog-content@main/media/images/a.png)');
+        expect(out).toBe('![p](https://cdn.statically.io/gh/some-user/blog-content/main/media/images/a.png)');
     });
 
     it('rewrites same-site storage URLs', () => {
@@ -155,6 +163,150 @@ describe('GitHubClient.rewriteMediaToCdn', () => {
     });
 });
 
+describe('外链图片镜像：源解析', () => {
+    it('识别 raw.githubusercontent 的自有仓库图片（含 refs/heads 形式）', () => {
+        const url = 'https://raw.githubusercontent.com/some-user/image/refs/heads/main/pictures/a.png';
+        const parsed = parseMirrorableImageSource(url, 'some-user');
+        expect(parsed).not.toBeNull();
+        expect(parsed!.key).toBe('some-user/image/refs/heads/main/pictures/a.png');
+        expect(parsed!.fetchUrl).toBe('https://raw.githubusercontent.com/some-user/image/refs/heads/main/pictures/a.png');
+        expect(parsed!.mediaPath).toMatch(/^media\/[A-Za-z0-9_-]+\.png$/);
+    });
+
+    it('识别 github.com/blob + ?raw=true 写法，并规范化为 raw 下载地址', () => {
+        const url = 'https://github.com/some-user/image/blob/main/pictures/a.jpg?raw=true';
+        const parsed = parseMirrorableImageSource(url, 'some-user');
+        expect(parsed!.fetchUrl).toBe('https://raw.githubusercontent.com/some-user/image/main/pictures/a.jpg');
+        expect(parsed!.mediaPath).toMatch(/\.jpg$/);
+    });
+
+    it('自建反代域名的两种形态与 raw 写法解析成同一个 key', () => {
+        // 线上实测：正文里的图全走自建反代域名（github.com 在本机被 SNI 拦）。
+        // 不认这两种形态，Actions 把大图提交进仓后也认领不到、永远切不到 CDN。
+        const raw = parseMirrorableImageSource(
+            'https://raw.githubusercontent.com/some-user/image/refs/heads/main/a.jpg',
+            'some-user',
+        )!;
+        const encodedHost = parseMirrorableImageSource(
+            'https://raw-githubusercontent-com-gh.example.dpdns.org/some-user/image/refs/heads/main/a.jpg',
+            'some-user',
+        )!;
+        const blobProxy = parseMirrorableImageSource(
+            'https://gh.example.dpdns.org/some-user/image/blob/main/refs/heads/main/a.jpg?raw=true',
+            'some-user',
+        )!;
+
+        expect(encodedHost.key).toBe(raw.key);
+        expect(encodedHost.mediaPath).toBe(raw.mediaPath);
+        expect(encodedHost.fetchUrl).toBe(raw.fetchUrl);
+        // blob 形态的 ref/path 与 github.com 一致，落仓文件名也必须是同一个
+        expect(blobProxy.mediaPath).toBe(
+            parseMirrorableImageSource('https://github.com/some-user/image/blob/main/refs/heads/main/a.jpg', 'some-user')!.mediaPath,
+        );
+    });
+
+    it('保留 #blurhash 片段，且片段不影响源标识与哈希', () => {
+        const withFrag = 'https://raw.githubusercontent.com/some-user/image/refs/heads/main/a.png#blurhash=LGFhPR&width=3000';
+        const noFrag = 'https://raw.githubusercontent.com/some-user/image/refs/heads/main/a.png';
+        const a = parseMirrorableImageSource(withFrag, 'some-user')!;
+        const b = parseMirrorableImageSource(noFrag, 'some-user')!;
+        expect(a.fragment).toBe('#blurhash=LGFhPR&width=3000');
+        expect(a.key).toBe(b.key);
+        expect(a.mediaPath).toBe(b.mediaPath);
+    });
+
+    it('非自有仓库（第三方图、GitHub 徽章）一律不镜像', () => {
+        expect(parseMirrorableImageSource('https://raw.githubusercontent.com/other/repo/refs/heads/main/a.png', 'some-user')).toBeNull();
+        expect(parseMirrorableImageSource('https://camo.githubusercontent.com/abc/def', 'some-user')).toBeNull();
+        expect(parseMirrorableImageSource('https://other.site/a.png', 'some-user')).toBeNull();
+    });
+
+    it('中文/空格路径也能安全哈希成稳定文件名，且两次解析一致', () => {
+        const url = 'https://raw.githubusercontent.com/some-user/image/refs/heads/main/屏幕截图 2025-09-16.png';
+        const p1 = parseMirrorableImageSource(url, 'some-user')!;
+        const p2 = parseMirrorableImageSource(url, 'some-user')!;
+        expect(p1.mediaPath).toBe(p2.mediaPath);
+        expect(p1.mediaPath).toMatch(/^media\/[A-Za-z0-9_-]+\.png$/);
+    });
+});
+
+describe('外链图片镜像：提取与改写', () => {
+    const client = new GitHubClient(settings);
+    const hosts: string[] = [];
+
+    it('extractMirrorableImageSources 按 key 去重', () => {
+        const content =
+            '![a](https://raw.githubusercontent.com/some-user/image/refs/heads/main/a.png) ' +
+            '![a2](https://raw.githubusercontent.com/some-user/image/refs/heads/main/a.png#blurhash=x) ' +
+            '![b](https://raw.githubusercontent.com/some-user/image/refs/heads/main/b.png)';
+        const map = extractMirrorableImageSources(content, 'some-user');
+        expect(map.size).toBe(2);
+    });
+
+    it('只有已镜像进仓库的外链才改写成 CDN，并保留片段', () => {
+        const src = 'https://raw.githubusercontent.com/some-user/image/refs/heads/main/a.png#blurhash=LGF';
+        const parsed = parseMirrorableImageSource(src, 'some-user')!;
+        const mirrored = new Set([parsed.key]);
+        const out = client.rewriteMediaToCdn(`![p](${src})`, hosts, new Set(), mirrored);
+        expect(out).toBe(`![p](https://cdn.statically.io/gh/some-user/blog-content/main/${parsed.mediaPath}#blurhash=LGF)`);
+    });
+
+    it('未镜像的外链原样保留（不指向不存在的 CDN 文件）', () => {
+        const src = '![p](https://raw.githubusercontent.com/some-user/image/refs/heads/main/missing.png)';
+        expect(client.rewriteMediaToCdn(src, hosts, new Set(), new Set())).toBe(src);
+        expect(client.rewriteMediaToCdn(src, hosts, new Set(), new Set(['other/key']))).toBe(src);
+    });
+
+    it('镜像清单读写：损坏 JSON 视为空集，覆盖写入去重截断', async () => {
+        const store = new Map<string, unknown>();
+        const config = {
+            async get(key: string) { return store.get(key) ?? null; },
+            async set(key: string, value: unknown) { store.set(key, value); },
+            async setQuick(key: string, value: unknown) { store.set(key, value); },
+        } as any;
+
+        store.set(GITHUB_MIRRORED_IMAGES_KEY, '{not json');
+        expect(await getMirroredImageKeys(config)).toEqual(new Set());
+
+        await saveMirroredImageKeys(config, ['a', 'a', 'b']);
+        expect(await getMirroredImageKeys(config)).toEqual(new Set(['a', 'b']));
+
+        // 冷启动后 CacheImpl 逐行 JSON.parse，get 返回的是数组而不是字符串
+        store.set(GITHUB_MIRRORED_IMAGES_KEY, ['c']);
+        expect(await getMirroredImageKeys(config)).toEqual(new Set(['c']));
+    });
+});
+
+describe('GitHubClient.remoteFileExists / fetchRemoteImage', () => {
+    const originalFetch = globalThis.fetch;
+    afterEach(() => { globalThis.fetch = originalFetch; });
+
+    it('contents 查询 200 → 存在，404 → 不存在', async () => {
+        let status = 200;
+        globalThis.fetch = (async () => new Response(
+            status === 200 ? JSON.stringify({ sha: 'x' }) : JSON.stringify({ message: 'Not Found' }),
+            { status },
+        )) as typeof fetch;
+        const client = new GitHubClient(settings);
+        expect(await client.remoteFileExists('media/a.png')).toBe(true);
+        status = 404;
+        expect(await client.remoteFileExists('media/a.png')).toBe(false);
+    });
+
+    it('fetchRemoteImage 非 2xx 返回 null，不发认证头到第三方', async () => {
+        const seen: Array<{ url: string; ua?: string; auth?: string }> = [];
+        globalThis.fetch = (async (url: string | URL | Request, init?: RequestInit) => {
+            const h = new Headers((init?.headers as Record<string, string>) ?? {});
+            seen.push({ url: String(url), ua: h.get('User-Agent') ?? undefined, auth: h.get('Authorization') ?? undefined });
+            return new Response('nope', { status: 404 });
+        }) as typeof fetch;
+        const client = new GitHubClient(settings);
+        expect(await client.fetchRemoteImage('https://raw.githubusercontent.com/some-user/image/refs/heads/main/a.png')).toBeNull();
+        expect(seen[0].auth).toBeUndefined();
+        expect(seen[0].ua).toBe('rin-blog-github-sync');
+    });
+});
+
 describe('synced media key bookkeeping', () => {
     function makeConfig(initial: unknown = undefined) {
         const store = new Map<string, unknown>();
@@ -167,6 +319,9 @@ describe('synced media key bookkeeping', () => {
                 return store.get(key) ?? null;
             },
             async set(key: string, value: unknown) {
+                store.set(key, value);
+            },
+            async setQuick(key: string, value: unknown) {
                 store.set(key, value);
             },
         } as any;
@@ -182,6 +337,13 @@ describe('synced media key bookkeeping', () => {
 
     it('treats a corrupted list as empty instead of rewriting everything', async () => {
         expect(await getSyncedMediaKeys(makeConfig('{not json'))).toEqual(new Set());
+    });
+
+    it('accepts a list that CacheImpl already parsed back into an array', async () => {
+        // 同步写入的是 JSON 字符串，但冷启动逐行 JSON.parse 后 get 返回的是数组；
+        // 只认字符串会让 CDN 改写在每次冷启动后静默失效。
+        expect(await getSyncedMediaKeys(makeConfig(['a.png', 'b.png'])))
+            .toEqual(new Set(['a.png', 'b.png']));
     });
 
     it('round-trips the keys it saved', async () => {
@@ -267,6 +429,117 @@ describe('GitHubClient.uploadFile', () => {
         const put = calls.find((c) => c.init.method === 'PUT');
         const body = JSON.parse(String(put!.init.body));
         expect(atob(body.content)).toBe(String.fromCharCode(0x89, 0x50, 0x4e, 0x47));
+    });
+
+    it('sends a User-Agent on every GitHub request', async () => {
+        const calls = capturePut();
+        const client = new GitHubClient(settings);
+
+        await client.uploadFile({ path: 'posts/a.md', content: 'x', message: 'sync: a' });
+
+        // Workers runtime 的出站 fetch 不带 UA，GitHub 会直接回 403
+        expect(calls.length).toBeGreaterThan(0);
+        for (const call of calls) {
+            expect((call.init.headers as Record<string, string>)['User-Agent']).toBe('rin-blog-github-sync');
+        }
+    });
+});
+
+describe('GitHubClient.checkAccess', () => {
+    const originalFetch = globalThis.fetch;
+    afterEach(() => {
+        globalThis.fetch = originalFetch;
+    });
+
+    function stub(statuses: [number, number]) {
+        const urls: Array<{ url: string; method?: string }> = [];
+        globalThis.fetch = (async (url: string | URL | Request, init?: RequestInit) => {
+            urls.push({ url: String(url), method: init?.method });
+            const status = statuses[urls.length - 1];
+            return new Response(status === 204 ? '' : '{}', { status });
+        }) as typeof fetch;
+        return urls;
+    }
+
+    it('reports ok only when the repo is reachable and contents are writable', async () => {
+        const urls = stub([200, 204]);
+        const result = await new GitHubClient(settings).checkAccess();
+
+        expect(result).toEqual({ ok: true, repoStatus: 200, writeStatus: 204 });
+        expect(urls[1]!.method).toBe('OPTIONS');
+    });
+
+    it('surfaces the status codes instead of throwing when GitHub rejects the request', async () => {
+        stub([403, 403]);
+        const result = await new GitHubClient(settings).checkAccess();
+
+        expect(result.ok).toBe(false);
+        expect(result.repoStatus).toBe(403);
+    });
+});
+
+describe('redactSecrets', () => {
+    const secrets = {
+        classic: `ghp_${'A'.repeat(36)}`,
+        fine: `github_pat_${'1AbC_'.repeat(8)}`,
+        cfApi: `cfat_${'x'.repeat(40)}`,
+        aws: `AKIA${'ABCDEFGH12345678'}`,
+        jwt: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4if0.dQgQvJZ7YH0rXxJ1k2L3m4n5o6p7q8r9s0t1u2v3w4x',
+        pem: '-----BEGIN PRIVATE KEY-----\nMIIBVgIBADANBgkqhkiG9w0BAQEFAASCA\n-----END PRIVATE KEY-----',
+        assigned: 'JWT_SECRET = "aVeryLongSigningSecretValue123"',
+        header: 'Authorization: Bearer sk_live_abcdefghijklmnop1234',
+    };
+
+    it('replaces every credential shape and reports only the category names', () => {
+        const input = Object.values(secrets).join('\n');
+        const { text, hits } = redactSecrets(input);
+
+        for (const value of Object.values(secrets)) {
+            expect(text).not.toContain(value.slice(0, 24));
+        }
+        expect(text).toContain('[已脱敏]');
+        expect(hits.sort()).toEqual(
+            ['assigned_secret', 'auth_header', 'aws_key', 'cf_token', 'github_token', 'jwt', 'private_key'].sort(),
+        );
+        // 键名要留着，读者才看得出是哪一项被挡住
+        expect(text).toContain('JWT_SECRET = ');
+    });
+
+    it('leaves normal blog content untouched', () => {
+        const benign = [
+            '联系邮箱 someone@example.com',
+            '![图](https://raw.githubusercontent.com/827802685/image/refs/heads/main/a.jpg#blurhash=LGFhPR)',
+            '弱密码示例：password: "123456"',
+            'tokenizer = "gpt2"',
+            '配置里写 JWT_SECRET = ""',
+            '部署用 bun cli/bin/rin.ts deploy --server',
+        ].join('\n');
+
+        const { text, hits } = redactSecrets(benign);
+        expect(text).toBe(benign);
+        expect(hits).toEqual([]);
+    });
+
+    it('applies to the markdown that actually goes into the repo', () => {
+        const leak = `正文里的令牌 ${secrets.classic}`;
+        const post = buildPostMarkdown({
+            id: 11,
+            title: '部署笔记',
+            content: leak,
+            summary: `摘要也抄了一份 ${secrets.fine}`,
+            alias: null,
+            createdAt: new Date('2026-10-01T00:00:00Z'),
+        });
+        expect(post.markdown).not.toContain(secrets.classic);
+        expect(post.markdown).not.toContain(secrets.fine);
+        expect(post.markdown).toContain('summary: "摘要也抄了一份 [已脱敏]"');
+
+        const moment = buildMomentMarkdown({
+            id: 5,
+            content: `动态 ${secrets.aws}`,
+            createdAt: new Date('2026-10-02T00:00:00Z'),
+        });
+        expect(moment.markdown).not.toContain(secrets.aws);
     });
 });
 
@@ -402,5 +675,64 @@ describe('GET /github/export routes (PAT auth)', () => {
             headers: { Authorization: 'token tok' },
         });
         expect(res.status).toBe(400);
+    });
+});
+
+describe('GitHubClient.fetchRemoteImage 大小闸门', () => {
+    const originalFetch = globalThis.fetch;
+    afterEach(() => {
+        globalThis.fetch = originalFetch;
+    });
+
+    /** 假响应：只给响应头，body 是否被读走由 seen 记录 */
+    function stubRemote(contentLength: number | null, bodyBytes: number) {
+        const seen = { arrayBufferCalled: false, cancelled: false };
+        const fake = {
+            ok: true,
+            status: 200,
+            headers: new Headers(contentLength === null ? {} : { 'content-length': String(contentLength) }),
+            body: {
+                async cancel() {
+                    seen.cancelled = true;
+                },
+            },
+            async arrayBuffer() {
+                seen.arrayBufferCalled = true;
+                return new Uint8Array(bodyBytes).buffer;
+            },
+        } as unknown as Response;
+        globalThis.fetch = (async () => fake) as typeof fetch;
+        return seen;
+    }
+
+    const big = 'https://raw.githubusercontent.com/some-user/image/refs/heads/main/big.png';
+
+    it('响应头显示超过 1 MiB 时不下载 body', async () => {
+        const seen = stubRemote(GITHUB_MAX_FILE_BYTES + 1, GITHUB_MAX_FILE_BYTES + 1);
+
+        const result = await new GitHubClient(settings).fetchRemoteImage(big);
+
+        expect(result).toBe(REMOTE_IMAGE_TOO_LARGE);
+        expect(seen.arrayBufferCalled).toBe(false);
+        expect(seen.cancelled).toBe(true);
+    });
+
+    it('响应头没有长度时下载完再判大小', async () => {
+        const seen = stubRemote(null, GITHUB_MAX_FILE_BYTES + 1);
+
+        const result = await new GitHubClient(settings).fetchRemoteImage(big);
+
+        expect(result).toBe(REMOTE_IMAGE_TOO_LARGE);
+        expect(seen.arrayBufferCalled).toBe(true);
+    });
+
+    it('小图正常返回字节', async () => {
+        stubRemote(100, 100);
+
+        const result = await new GitHubClient(settings).fetchRemoteImage(
+            'https://raw.githubusercontent.com/some-user/image/refs/heads/main/a.png',
+        );
+
+        expect(result).toBeInstanceOf(ArrayBuffer);
     });
 });

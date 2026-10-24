@@ -142,6 +142,38 @@ describe('UserService', () => {
             const setCookie = res.headers.get('Set-Cookie');
             expect(setCookie).toContain('redirect_to');
         });
+
+        it('should send the callback uri of the host that received the state cookie', async () => {
+            const res = await app.request('/github', {
+                method: 'GET',
+                headers: { 'Referer': 'https://some-other-host.example/login' }
+            }, env);
+
+            expect(res.status).toBe(302);
+            const location = new URL(res.headers.get('Location')!);
+            expect(location.searchParams.get('redirect_uri')).toBe(
+                'http://localhost/api/user/github/callback'
+            );
+        });
+
+        it('should mark the oauth cookies as unreadable, lax and short-lived', async () => {
+            const res = await app.request('/github', {
+                method: 'GET',
+                headers: { 'Referer': 'http://localhost:5173/' }
+            }, env);
+
+            expect(res.status).toBe(302);
+            const all = ((res.headers as any).getSetCookie?.() as string[] | undefined)
+                ?? [res.headers.get('Set-Cookie') ?? ''];
+            const state = all.find((cookie) => cookie.startsWith('state='));
+            expect(state).toBeTruthy();
+            expect(state).toContain('HttpOnly');
+            expect(state).toContain('SameSite=Lax');
+            expect(state).toContain('Max-Age=900');
+            // app.request() answers on http, so a Secure flag would drop the cookie
+            // in local development.
+            expect(state).not.toContain('Secure');
+        });
     });
 
     describe('GET /github/callback - GitHub OAuth callback', () => {
@@ -181,8 +213,20 @@ describe('UserService', () => {
             }, env);
             
             expect(res.status).toBe(400);
-            const data = await res.json() as { error: { message: string } };
+            const data = await res.json() as { error: { message: string; details?: { code: string }[] } };
             expect(data.error.message).toBe('Invalid state parameter');
+            expect(data.error.details?.[0].code).toBe('state_mismatch');
+        });
+
+        it('should name the missing state cookie separately from a mismatch', async () => {
+            const res = await app.request('/github/callback?code=valid_code&state=mock_state', {
+                method: 'GET'
+            }, env);
+
+            expect(res.status).toBe(400);
+            const data = await res.json() as { error: { message: string; details?: { code: string }[] } };
+            expect(data.error.message).toBe('Invalid state parameter');
+            expect(data.error.details?.[0].code).toBe('state_cookie_missing');
         });
 
         it('should not register a user when GitHub rejects the access token', async () => {

@@ -263,6 +263,10 @@ export class TestCacheImpl implements CacheImpl {
         this.data.set(key, value);
     }
 
+    async setQuick(key: string, value: any): Promise<void> {
+        await this.set(key, value);
+    }
+
     async delete(key: string, _save?: boolean): Promise<void> {
         this.data.delete(key);
     }
@@ -363,7 +367,8 @@ export async function setupTestApp(
 
             const oauth2: OAuth2Utils = {
                 generateState: () => 'mock_state',
-                createRedirectUrl: (state: string, provider: string) => `https://github.com/login?state=${state}`,
+                createRedirectUrl: (state: string, provider: string, redirectUri?: string) =>
+                    `https://github.com/login?state=${state}${redirectUri ? `&redirect_uri=${encodeURIComponent(redirectUri)}` : ''}`,
                 authorize: async (provider: string, code: string) => code === 'valid_code' ? { accessToken: 'gh_token' } : null,
             };
 
