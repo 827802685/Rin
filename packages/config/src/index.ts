@@ -87,6 +87,12 @@ export const AI_CONFIG_KEYS = [
 
 export const SENSITIVE_SERVER_CONFIG_FIELDS = [`${AI_CONFIG_PREFIX}api_key`] as const;
 
+/**
+ * 敏感配置下发前端时的占位符。服务端 GET 会用它替换真实值，所以写回时必须反着认一次：
+ * 谁把这个串原样 POST 回来，意思都是「我没改」，绝不能当成真值写库。
+ */
+export const MASKED_SECRET = "••••••••";
+
 export const DEFAULT_AI_CONFIG: AIConfig = {
   enabled: false,
   provider: "openai",

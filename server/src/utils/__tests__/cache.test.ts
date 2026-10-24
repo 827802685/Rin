@@ -314,6 +314,26 @@ describe('CacheImpl - 数据库持久化测试', () => {
         expect(rows[0].value).toBe('value2');
     });
 
+    it('setQuick 只写这一个键，其余键不受影响', async () => {
+        // set 会对本 type 的每个键各发一次 D1 写；循环内的高频写入必须走单行 upsert
+        await cacheImpl.set('other', 'keep-me');
+
+        await cacheImpl.setQuick('loop', 'v1');
+        await cacheImpl.setQuick('loop', 'v2');
+
+        const rows = await db.select().from(cache);
+        expect(rows.map((row: any) => [row.key, row.value])).toEqual([
+            ['other', 'keep-me'],
+            ['loop', 'v2'],
+        ]);
+        expect(await cacheImpl.get('loop')).toBe('v2');
+
+        // 后续全表 save 不能把 setQuick 写进去的键当成「内存里没有的键」删掉
+        await cacheImpl.set('another', 'x');
+        const reloaded = new CacheImpl(db as any, mockEnv, 'cache', 'database');
+        expect(await reloaded.get('loop')).toBe('v2');
+    });
+
     it('删除时应该从数据库中移除', async () => {
         await cacheImpl.set('key1', 'value1');
         await cacheImpl.delete('key1');
@@ -653,7 +673,7 @@ describe('CacheImpl - 边界条件和错误处理', () => {
         expect(await cacheImpl.get('key0')).toBe('value0');
         expect(await cacheImpl.get('key50')).toBe('value50');
         expect(await cacheImpl.get('key99')).toBe('value99');
-    });
+    }, 30_000); // 100 次串行写库，整套并发跑时会被默认 5s 超时掐掉
 });
 
 describe('CacheImpl - getOrSet 和 getOrDefault', () => {
@@ -728,6 +748,90 @@ describe('CacheImpl - getOrSet 和 getOrDefault', () => {
             expect(await cacheImpl.getOrDefault('array', [1, 2, 3])).toEqual([1, 2, 3]);
             expect(await cacheImpl.getOrDefault('object', { key: 'value' })).toEqual({ key: 'value' });
         });
+    });
+});
+
+describe('CacheImpl - KV 陈旧 null 不遮蔽持久层', () => {
+    let { db, sqlite } = createTestDB();
+    let mockEnv: Env;
+    let kvStore: Map<string, string>;
+    let kvOps: { get: number; put: number; delete: number };
+
+    // 真实 KV 语义：get('json') 对「键不存在」和「存了字面 null」都返回 null
+    function createKVBinding() {
+        return {
+            get: async (key: string) => {
+                kvOps.get++;
+                if (!kvStore.has(key)) return null;
+                return JSON.parse(kvStore.get(key)!);
+            },
+            put: async (key: string, value: string) => {
+                kvOps.put++;
+                kvStore.set(key, value);
+            },
+            delete: async (key: string) => {
+                kvOps.delete++;
+                kvStore.delete(key);
+            },
+        };
+    }
+
+    beforeEach(() => {
+        const testDB = createTestDB();
+        db = testDB.db;
+        sqlite = testDB.sqlite;
+        kvStore = new Map();
+        kvOps = { get: 0, put: 0, delete: 0 };
+        mockEnv = createMockEnv('database');
+        (mockEnv as any).KV_CACHE = createKVBinding();
+    });
+
+    afterEach(() => {
+        sqlite.close();
+    });
+
+    it('KV 存着 null 时必须回落到数据库真值', async () => {
+        const serverConfig = new CacheImpl(db as any, mockEnv, 'server.config', 'database');
+        await serverConfig.set('github.pat', 'real-token');
+
+        // 模拟持久层被绕过：KV 里留着旧的 null
+        kvStore.clear();
+        kvStore.set('cache:server.config:github.pat', 'null');
+
+        const fresh = new CacheImpl(db as any, mockEnv, 'server.config', 'database');
+        expect(await fresh.get('github.pat')).toBe('real-token');
+    });
+
+    it('回落后把真值自愈进 KV，之后走 KV 快路径', async () => {
+        const serverConfig = new CacheImpl(db as any, mockEnv, 'server.config', 'database');
+        await serverConfig.set('github.owner', 'someone');
+        kvStore.clear();
+        kvStore.set('cache:server.config:github.owner', 'null');
+
+        const fresh = new CacheImpl(db as any, mockEnv, 'server.config', 'database');
+        expect(await fresh.get('github.owner')).toBe('someone');
+        expect(kvStore.get('cache:server.config:github.owner')).toBe('"someone"');
+
+        const putBefore = kvOps.put;
+        expect(await fresh.get('github.owner')).toBe('someone');
+        expect(kvOps.put).toBe(putBefore);
+    });
+
+    it('同一实例内一个 miss 最多修一次 KV，不会每次读都写', async () => {
+        const fresh = new CacheImpl(db as any, mockEnv, 'cache', 'database');
+        await fresh.get('missing');
+        await fresh.get('missing');
+        await fresh.get('missing');
+        expect(kvOps.delete).toBe(1);
+        expect(kvOps.put).toBe(0);
+    });
+
+    it('set 应同时写入 KV 与数据库', async () => {
+        const fresh = new CacheImpl(db as any, mockEnv, 'cache', 'database');
+        await fresh.set('k', 'v');
+        expect(kvStore.get('cache:cache:k')).toBe('"v"');
+        const rows = await db.select().from(cache).where(eq(cache.key, 'k'));
+        expect(rows).toHaveLength(1);
     });
 });
 

@@ -42,7 +42,6 @@ export function AppRoutes() {
   const { t } = useTranslation();
 
   return (
-    <Suspense fallback={<RouteFallback />}>
     <Switch>
       <AppRoute path="/">
         <FeedsPage />
@@ -162,18 +161,15 @@ export function AppRoutes() {
         <ErrorPage error={t("error.not_found")} />
       </AppRoute>
     </Switch>
-    </Suspense>
   );
 }
 
-/** Shown while a lazily loaded route chunk is being fetched. */
-function RouteFallback() {
+/** Shown inside one route's content slot while its lazy chunk is being fetched. */
+function ContentFallback() {
   return (
-    <Padding>
-      <div className="flex min-h-[40vh] w-full items-center justify-center">
-        <ReactLoading width="2em" height="2em" type="spin" color="rgb(var(--theme-rgb))" />
-      </div>
-    </Padding>
+    <div className="flex min-h-[40vh] w-full items-center justify-center">
+      <ReactLoading width="2em" height="2em" type="spin" color="rgb(var(--theme-rgb))" />
+    </div>
   );
 }
 
@@ -217,7 +213,10 @@ function AppRoute({
   return (
     <Route path={path}>
       {(params) => {
-        const resolvedContent = gate(typeof children === "function" ? children(params) : children);
+        const page = typeof children === "function" ? children(params) : children;
+        // Suspense 只包住内容槽：路由本身是懒加载的，若把 Suspense 提到 Switch 外层，
+        // 切换任一页都会连侧栏/页脚一起卸载重挂，看起来就是"整页刷新了一下"。
+        const resolvedContent = <Suspense fallback={<ContentFallback />}>{gate(page)}</Suspense>;
         const layoutDefinition = getHeaderLayoutDefinition(siteConfig.headerLayout);
 
         return layoutDefinition.renderRouteShell({
@@ -251,7 +250,9 @@ function AdminRoute({
     <Route path={path}>
       {(params) => (
         <AdminLayout title={title} description={description}>
-          {gate(typeof children === "function" ? children(params) : children)}
+          <Suspense fallback={<ContentFallback />}>
+            {gate(typeof children === "function" ? children(params) : children)}
+          </Suspense>
         </AdminLayout>
       )}
     </Route>

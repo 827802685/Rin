@@ -17,11 +17,13 @@ export function CompatTasksPage() {
   const [status, setStatus] = useState<{
     aiSummary: { enabled: boolean; queueConfigured: boolean; eligible: number; forceEligible: number };
     blurhash: { eligible: number };
+    githubImage: { configured: boolean; total: number; mirrored: number; pending: number };
   }>({
     aiSummary: { enabled: false, queueConfigured: false, eligible: 0, forceEligible: 0 },
     blurhash: { eligible: 0 },
+    githubImage: { configured: false, total: 0, mirrored: 0, pending: 0 },
   });
-  const [runningTask, setRunningTask] = useState<"ai-summary" | "blurhash" | null>(null);
+  const [runningTask, setRunningTask] = useState<"ai-summary" | "blurhash" | "github" | null>(null);
   const [blurhashProgress, setBlurhashProgress] = useState({ total: 0, processed: 0, updated: 0, failed: 0 });
   const { showAlert, AlertUI } = useAlert();
 
@@ -102,6 +104,45 @@ export function CompatTasksPage() {
       }
 
       showAlert(t("compat_tasks.blurhash.result", { updated, failed, total: items.length }));
+      loadStatus();
+    } finally {
+      setRunningTask(null);
+    }
+  };
+
+  const runGithubSyncTask = async () => {
+    setRunningTask("github");
+    try {
+      const { data, error } = await client.config.runGithubSync();
+      if (error) {
+        showAlert(error.value);
+        return;
+      }
+      const stats = data?.stats;
+      if (!stats) {
+        showAlert(data?.error ?? t("compat_tasks.github_image.unconfigured"));
+        return;
+      }
+      showAlert(
+        t("compat_tasks.github_image.result", {
+          postsDone: stats.feeds.success,
+          postsTotal: stats.feeds.total,
+          postsUnchanged: stats.feeds.unchanged,
+          postsFailed: stats.feeds.failed,
+          momentsDone: stats.moments.success,
+          momentsTotal: stats.moments.total,
+          momentsUnchanged: stats.moments.unchanged,
+          momentsFailed: stats.moments.failed,
+          media: stats.media.success,
+          mediaPresent: stats.media.alreadyPresent,
+          mediaLarge: stats.media.deferredToActions,
+          mediaSkipped: stats.media.skipped,
+          images: stats.images.total,
+          mirrored: stats.images.success,
+          present: stats.images.alreadyPresent,
+          deferred: stats.images.deferredToActions,
+        }) + (stats.partial ? `\n${t("compat_tasks.github_image.partial")}` : ""),
+      );
       loadStatus();
     } finally {
       setRunningTask(null);
@@ -189,6 +230,44 @@ export function CompatTasksPage() {
                   title={runningTask === "blurhash" ? t("compat_tasks.running") : t("compat_tasks.blurhash.run")}
                   disabled={runningTask !== null || status.blurhash.eligible === 0}
                   onClick={runBlurhashBackfill}
+                />
+              </div>
+            </SettingsCardBody>
+          </SettingsCard>
+
+          <SettingsCard
+            tone={!status.githubImage.configured ? "default" : status.githubImage.pending > 0 ? "warning" : "success"}
+          >
+            <SettingsCardHeader
+              title={t("compat_tasks.github_image.title")}
+              description={t("compat_tasks.github_image.description")}
+              badge={
+                <SettingsBadge
+                  tone={!status.githubImage.configured ? "neutral" : status.githubImage.pending > 0 ? "warning" : "success"}
+                >
+                  {status.githubImage.configured
+                    ? t("compat_tasks.github_image.pending", { count: status.githubImage.pending })
+                    : t("compat_tasks.github_image.unconfigured_badge")}
+                </SettingsBadge>
+              }
+            />
+            <SettingsCardBody>
+              <div className="space-y-3 text-sm text-neutral-600 dark:text-neutral-300">
+                {status.githubImage.configured ? (
+                  <p>
+                    {t("compat_tasks.github_image.counts", {
+                      mirrored: status.githubImage.mirrored,
+                      total: status.githubImage.total,
+                    })}
+                  </p>
+                ) : (
+                  <p>{t("compat_tasks.github_image.unconfigured")}</p>
+                )}
+                <p>{t("compat_tasks.github_image.note")}</p>
+                <Button
+                  title={runningTask === "github" ? t("compat_tasks.running") : t("compat_tasks.github_image.run")}
+                  disabled={runningTask !== null || !status.githubImage.configured}
+                  onClick={runGithubSyncTask}
                 />
               </div>
             </SettingsCardBody>

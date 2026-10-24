@@ -35,16 +35,26 @@ export function UserService(): Hono {
         const refererUrl = new URL(referer);
         const callbackUrl = new URL('/callback', refererUrl.origin);
 
-        setCookie(c, 'redirect_to', callbackUrl.toString(), {
+        // rewriteApiRequest() strips the leading /api before this handler runs, so the
+        // public path has to be spelled out here.
+        const callbackUri = new URL('/api/user/github/callback', c.req.url).toString();
+        // The callback host must be the host that received the state cookie. Sending the
+        // request's own origin instead of the OAuth App's single registered value keeps
+        // login working when one worker answers on more than one hostname.
+        const oauthCookie = {
             path: '/',
-        });
+            httpOnly: true,
+            secure: new URL(c.req.url).protocol === 'https:',
+            sameSite: 'Lax',
+            maxAge: 900,
+        } as const;
+
+        setCookie(c, 'redirect_to', callbackUrl.toString(), oauthCookie);
 
         const genState = await profileAsync(c, 'user_oauth_state', () => Promise.resolve(oauth2.generateState()));
-        setCookie(c, 'state', genState, {
-            path: '/',
-        });
+        setCookie(c, 'state', genState, oauthCookie);
 
-        return c.redirect(oauth2.createRedirectUrl(genState, "GitHub"), 302);
+        return c.redirect(oauth2.createRedirectUrl(genState, "GitHub", callbackUri), 302);
     });
 
     // GET /user/github/callback - GitHub OAuth callback
@@ -68,14 +78,28 @@ export function UserService(): Hono {
             && timingSafeEqual(new TextEncoder().encode(query.state || ""), new TextEncoder().encode(stateCookie || ""));
 
         if (!stateMatches) {
-            throw new BadRequestError('Invalid state parameter');
+            // The two halves of a failure need different fixes: no cookie at all means
+            // GitHub answered on a host that never received it, a mismatch means a newer
+            // login overwrote it or this callback URL was replayed.
+            throw new BadRequestError('Invalid state parameter', [{
+                field: 'state',
+                code: stateCookie ? 'state_mismatch' : 'state_cookie_missing',
+                message: stateCookie
+                    ? 'The state query parameter does not match the state cookie'
+                    : 'No state cookie was sent to this host',
+            }]);
         }
 
         // Clear state cookie
-        deleteCookie(c, 'state');
+        deleteCookie(c, 'state', { path: '/' });
 
-        // Exchange code for access token
-        const gh_token = await profileAsync(c, 'user_oauth_authorize', () => oauth2.authorize("GitHub", query.code));
+        // Exchange code for access token. The token leg has to repeat the redirect_uri
+        // sent by /github or the provider rejects the exchange as a mismatch.
+        const gh_token = await profileAsync(c, 'user_oauth_authorize', () => oauth2.authorize(
+            "GitHub",
+            query.code,
+            new URL('/api/user/github/callback', c.req.url).toString()
+        ));
         if (!gh_token) {
             throw new BadRequestError('Failed to authorize with GitHub');
         }

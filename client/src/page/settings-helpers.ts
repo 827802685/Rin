@@ -1,10 +1,8 @@
-import { ConfigWrapper } from "@rin/config";
+import { ConfigWrapper, MASKED_SECRET } from "@rin/config";
 import type { TFunction } from "i18next";
 import { client, endpoint } from "../app/runtime";
 import { defaultClientConfig, defaultServerConfig } from "../state/config";
 import { headersWithAuth } from "../utils/auth";
-
-const MASKED_SECRET = "••••••••";
 
 export type ImportMessage = { title: string; reason: string };
 export type SettingsDraft = {
@@ -140,7 +138,7 @@ export async function loadAIConfigState() {
     enabled: data?.["ai_summary.enabled"] === "true",
     provider: data?.["ai_summary.provider"] ?? "openai",
     model: data?.["ai_summary.model"] ?? "gpt-4o-mini",
-    apiKeySet: data?.["ai_summary.api_key"] === "••••••••",
+    apiKeySet: data?.["ai_summary.api_key"] === MASKED_SECRET,
     apiUrl: data?.["ai_summary.api_url"] ?? "",
   };
 }

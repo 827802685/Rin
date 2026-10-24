@@ -52,6 +52,18 @@
       "run": "开始补齐",
       "progress": "已处理 {{processed}} / {{total}}，更新 {{updated}} 篇，失败 {{failed}} 篇。",
       "result": "Blurhash 补齐完成：共扫描 {{total}} 篇，成功更新 {{updated}} 篇，失败 {{failed}} 篇。"
+    },
+    "github_image": {
+      "title": "外链图片镜像到 CDN",
+      "description": "把正文里指向你自己 GitHub 仓库的图片复制进内容仓库，统一改用 CDN 地址；在网站上新写的文章下一轮同步会自动带上。",
+      "pending": "待镜像 {{count}} 张",
+      "unconfigured_badge": "未配置集成",
+      "counts": "正文共引用 {{total}} 张自有仓库外链图，已入库 {{mirrored}} 张。",
+      "unconfigured": "尚未配置 GitHub 集成，这里统计不到外链图片；请先到设置页填好仓库与 PAT。",
+      "note": "单张不超过 1 MiB 的由本站当场提交，更大的交给内容仓库的 Actions 拉取；图片真正进仓后的下一轮才会改写为 CDN，所以「待镜像」不会立刻归零。",
+      "run": "立即同步到 GitHub",
+      "result": "本轮结果：文章 新推 {{postsDone}}/{{postsTotal}}（未变动 {{postsUnchanged}}、失败 {{postsFailed}}）；动态 新推 {{momentsDone}}/{{momentsTotal}}（未变动 {{momentsUnchanged}}、失败 {{momentsFailed}}）；站内媒体 新推 {{media}} / 已在仓 {{mediaPresent}} / 超 12 MiB 待 Actions {{mediaLarge}} / 未进仓 {{mediaSkipped}}；外链图片 {{images}} 张：新镜像 {{mirrored}} / 已在仓 {{present}} / 超 12 MiB 待 Actions {{deferred}}。",
+      "partial": "本轮只跑完一部分：手动同步受域名约 30 秒的响应上限约束，超过就会被切断，这一轮不会跑完。已完成的部分都已落盘，再点一次「立即同步」接着做剩下的；全量交给每日定时任务。"
     }
   },
   "ai_summary": {

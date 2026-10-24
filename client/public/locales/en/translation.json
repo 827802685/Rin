@@ -52,6 +52,18 @@
       "run": "Start backfill",
       "progress": "Processed {{processed}} / {{total}}, updated {{updated}} posts, failed {{failed}} posts.",
       "result": "Blurhash backfill finished: scanned {{total}} posts, updated {{updated}}, failed {{failed}}."
+    },
+    "github_image": {
+      "title": "Mirror external images to the CDN",
+      "description": "Copy images that point at your own GitHub repositories into the content repo and rewrite them to the CDN URL. Posts you write on the site are picked up by the next sync.",
+      "pending": "{{count}} images pending",
+      "unconfigured_badge": "Integration off",
+      "counts": "Posts reference {{total}} self-hosted external images, {{mirrored}} are already in the repo.",
+      "unconfigured": "GitHub integration is not configured, so external images cannot be counted here. Set the repository and PAT on the settings page first.",
+      "note": "Files up to 1 MiB are committed by the site itself; larger ones are fetched by the repo's Actions. A URL only switches to the CDN after the image really exists in the repo, so the pending count does not drop to zero immediately.",
+      "run": "Sync to GitHub now",
+      "result": "This run: posts {{postsDone}}/{{postsTotal}} pushed ({{postsUnchanged}} unchanged, {{postsFailed}} failed); moments {{momentsDone}}/{{momentsTotal}} pushed ({{momentsUnchanged}} unchanged, {{momentsFailed}} failed); site media {{media}} pushed / {{mediaPresent}} already in repo / {{mediaLarge}} over 12 MiB left for Actions / {{mediaSkipped}} not in repo; external images {{images}} total: {{mirrored}} mirrored / {{present}} already present / {{deferred}} over 12 MiB left for Actions.",
+      "partial": "Only part of this pass finished: a manual sync is bounded by roughly a 30-second response limit on the domain, and the run is cut off past that. Finished work is already saved, so press Sync again to continue with the rest; the daily job covers the full run."
     }
   },
   "ai_summary": {

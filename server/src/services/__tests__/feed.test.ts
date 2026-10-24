@@ -245,7 +245,7 @@ describe('FeedService', () => {
             const data = await getRes.json() as any;
 
             expect(data.content).toContain(
-                'https://cdn.jsdelivr.net/gh/some-user/blog-content@main/media/images/synced.png',
+                'https://cdn.statically.io/gh/some-user/blog-content/main/media/images/synced.png',
             );
             // 没进仓的必须留在原址，走本站存储仍然打得开
             expect(data.content).toContain('/blob/images/never-synced.png');

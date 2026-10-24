@@ -19,6 +19,10 @@ class TestCacheImpl implements CacheImpl {
     async set(key: string, value: any, _save?: boolean): Promise<void> {
         this.data.set(key, value);
     }
+
+    async setQuick(key: string, value: any): Promise<void> {
+        this.data.set(key, value);
+    }
     
     async delete(key: string, _save?: boolean): Promise<void> {
         this.data.delete(key);

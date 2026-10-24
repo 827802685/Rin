@@ -21,10 +21,10 @@ import { syncFeedAISummaryQueueState } from "./feed-ai-summary";
 import { bindTagToPost } from "./tag";
 import { clearFeedCache } from "./clear-feed-cache";
 export { clearFeedCache } from "./clear-feed-cache";
-import { GitHubClient, getGitHubSettings, getStorageHosts, getSyncedMediaKeys } from "./github";
+import { GitHubClient, getGitHubSettings, getStorageHosts, getSyncedMediaKeys, getMirroredImageKeys } from "./github";
 
 /**
- * 加载文章时，把站内媒体链接重写为 GitHub CDN 地址。
+ * 加载文章时，把已入库的媒体（站内存储 + 已镜像外链图片）链接重写为 CDN 地址。
  * 配置来源：设置页 serverConfig 优先，环境变量兜底；未配置则原样返回。
  */
 async function applyGithubCdn(content: string, serverConfig: CacheImpl | undefined, env: Env): Promise<string> {
@@ -38,8 +38,11 @@ async function applyGithubCdn(content: string, serverConfig: CacheImpl | undefin
   }
 
   const client = new GitHubClient(settings);
-  const syncedKeys = await getSyncedMediaKeys(serverConfig);
-  return client.rewriteMediaToCdn(content, getStorageHosts(env), syncedKeys);
+  const [syncedKeys, mirroredKeys] = await Promise.all([
+    getSyncedMediaKeys(serverConfig),
+    getMirroredImageKeys(serverConfig),
+  ]);
+  return client.rewriteMediaToCdn(content, getStorageHosts(env), syncedKeys, mirroredKeys);
 }
 
 // Lazy-loaded modules for WordPress import

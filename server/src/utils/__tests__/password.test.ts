@@ -100,3 +100,11 @@ describe("timingSafeEqual", () => {
         expect(timingSafeEqual(new Uint8Array(), new Uint8Array())).toBe(true);
     });
 });
+
+describe("PBKDF2_ITERATIONS", () => {
+    // workerd's WebCrypto throws "iteration counts above 100000 are not supported",
+    // while Bun/Node accept any count — so only the runtime would catch a bump.
+    it("stays within the workerd WebCrypto ceiling", () => {
+        expect(PBKDF2_ITERATIONS).toBeLessThanOrEqual(100_000);
+    });
+});

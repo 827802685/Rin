@@ -42,3 +42,8 @@ dist-ssr
 
 # Bun
 .bun/*
+
+# AI 代理的本机记忆/计划目录：内容是对话笔记，含内部路径与排障细节，不进仓库
+.qoder/
+.workbuddy/
+.zcode/

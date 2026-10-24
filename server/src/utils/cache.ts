@@ -43,6 +43,8 @@ export async function isPublicCacheEnabled(clientConfig: CacheConfigReader) {
 interface StorageProvider {
     load(): Promise<void>;
     save(): Promise<void>;
+    /** 只落这一个键，其余键不碰 */
+    upsert(key: string, value: any): Promise<void>;
     delete(key: string): Promise<void>;
     clear(): Promise<void>;
 }
@@ -118,6 +120,20 @@ class DatabaseStorageProvider implements StorageProvider {
         }
     }
 
+    /**
+     * 单行 upsert。`save()` 会为本 type 的**每个**键各发一次 D1 写（线上 14 个键实测一次
+     * 全表重刷约 1.5 秒），循环里的高频写入用它会直接把墙钟预算吃光。
+     */
+    async upsert(key: string, value: any): Promise<void> {
+        const valueStr = typeof value === 'string' ? value : JSON.stringify(value);
+        await this.db.insert(cache)
+            .values({ key, value: valueStr, type: this.type })
+            .onConflictDoUpdate({
+                target: [cache.key, cache.type],
+                set: { value: valueStr, updatedAt: new Date() },
+            });
+    }
+
     async clear(): Promise<void> {
         try {
             await this.db.delete(cache).where(eq(cache.type, this.type));
@@ -181,6 +197,11 @@ class S3StorageProvider implements StorageProvider {
     async clear(): Promise<void> {
         await this.save();
     }
+
+    /** 单个对象存储没有「只改一个键」的写法，只能覆盖整份 JSON */
+    async upsert(): Promise<void> {
+        await this.save();
+    }
 }
 
 // KV 存储提供者（高速缓存层）
@@ -211,6 +232,10 @@ class KVStorageProvider implements StorageProvider {
     async save(): Promise<void> {
         // KV saves individual keys, not bulk
         // This is called for compatibility but actual saves happen in set/delete
+    }
+
+    async upsert(key: string, value: any): Promise<void> {
+        await this.set(key, value);
     }
 
     async delete(key: string): Promise<void> {
@@ -263,6 +288,8 @@ export class CacheImpl {
     loaded: boolean = false;
     private storageProvider: StorageProvider;
     private kvProvider?: KVStorageProvider;
+    // 只用于避免「每次读都回写一次 KV」：同一实例内一个键最多修一次
+    private kvReconciled: Set<string> = new Set<string>();
     private cacheEnabled: Promise<boolean> | null = null;
     private configReader?: CacheConfigReader;
 
@@ -342,11 +369,28 @@ export class CacheImpl {
         // Try KV cache first (fast path)
         if (this.kvProvider) {
             const kvValue = await this.kvProvider.get(key);
-            if (kvValue !== undefined) {
+            // null 不算命中：KV 里躺着 null，多半是持久层被直接改过（手工 SQL、
+            // 迁移、回滚）留下的陈旧值。把它当命中会让真实配置永久读不到，
+            // 而调用方看到 null 只会以为「没配置」。
+            if (kvValue !== undefined && kvValue !== null) {
                 console.log('Cache hit (KV)', key);
-                // Update in-memory cache
                 this.cache.set(key, kvValue);
                 return kvValue;
+            }
+
+            // 回落前不修 KV：真实 KV 里「键不存在」和「存了 null」都返回 null，
+            // 无法区分，所以每个键只自愈一次，否则每次 miss 都变成一次 KV 写。
+            if (!this.kvReconciled.has(key)) {
+                this.kvReconciled.add(key);
+                if (!this.loaded) {
+                    await this.load();
+                }
+                const persisted = this.cache.get(key);
+                if (persisted !== undefined) {
+                    await this.kvProvider.set(key, persisted);
+                    return persisted;
+                }
+                await this.kvProvider.delete(key);
             }
         }
 
@@ -430,6 +474,27 @@ export class CacheImpl {
         if (save) {
             await this.save();
         }
+    }
+
+    /**
+     * 与 `set` 同义，但只落这一个键。`set` 走的是 `save()` 全表重刷 —— 对本 type 每个键
+     * 各发一次 D1 写，线上 server.config 有 14 个键，实测一次 set 约 1.5 秒。
+     * 任何「循环里写配置」的代码都应该用这个，否则光写入就能把整轮请求拖过切断线。
+     */
+    async setQuick(key: string, value: any): Promise<void> {
+        if (!(await this.isEnabled())) {
+            return;
+        }
+        if (!this.loaded)
+            await this.load();
+
+        this.cache.set(key, value);
+
+        if (this.kvProvider) {
+            await this.kvProvider.upsert(key, value);
+        }
+
+        await this.storageProvider.upsert(key, value);
     }
 
     async delete(key: string, save: boolean = true) {

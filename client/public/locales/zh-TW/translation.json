@@ -52,6 +52,18 @@
       "run": "開始補齊",
       "progress": "已處理 {{processed}} / {{total}}，更新 {{updated}} 篇，失敗 {{failed}} 篇。",
       "result": "Blurhash 補齊完成：共掃描 {{total}} 篇，成功更新 {{updated}} 篇，失敗 {{failed}} 篇。"
+    },
+    "github_image": {
+      "title": "外鏈圖片鏡像到 CDN",
+      "description": "把內文裡指向你自己 GitHub 倉庫的圖片複製進內容倉庫，統一改用 CDN 網址；在網站上新寫的文章下一輪同步會自動帶上。",
+      "pending": "待鏡像 {{count}} 張",
+      "unconfigured_badge": "未設定整合",
+      "counts": "內文共引用 {{total}} 張自有倉庫外鏈圖，已入庫 {{mirrored}} 張。",
+      "unconfigured": "尚未設定 GitHub 整合，這裡統計不到外鏈圖片；請先到設定頁填好倉庫與 PAT。",
+      "note": "單張不超過 1 MiB 的由本站當場提交，更大的交給內容倉庫的 Actions 拉取；圖片真正入庫後的下一輪才會改寫為 CDN，所以「待鏡像」不會立刻歸零。",
+      "run": "立即同步到 GitHub",
+      "result": "本輪結果：文章 新推 {{postsDone}}/{{postsTotal}}（未變動 {{postsUnchanged}}、失敗 {{postsFailed}}）；動態 新推 {{momentsDone}}/{{momentsTotal}}（未變動 {{momentsUnchanged}}、失敗 {{momentsFailed}}）；站內媒體 新推 {{media}} / 已在倉 {{mediaPresent}} / 超 12 MiB 待 Actions {{mediaLarge}} / 未進倉 {{mediaSkipped}}；外鏈圖片 {{images}} 張：新鏡像 {{mirrored}} / 已在倉 {{present}} / 超 12 MiB 待 Actions {{deferred}}。",
+      "partial": "本輪只跑完一部分：手動同步受網域約 30 秒的回應上限約束，超過就會被切斷，本輪不會跑完。已完成的部分都已寫入，再點一次「立即同步」接著做剩下的；全量交給每日排程任務。"
     }
   },
   "ai_summary": {
