@@ -64,12 +64,46 @@ async function downloadMedia(media) {
   return { ok, skipped };
 }
 
+// 正文引用的自有仓库外链图片：git 提交不受 contents API 1MiB 限制，10MB 截图也能搬进仓
+async function downloadImages(images) {
+  let ok = 0;
+  let skipped = 0;
+  for (const item of images) {
+    let url;
+    try {
+      url = new URL(item.fetchUrl);
+    } catch {
+      skipped++;
+      console.warn(`跳过非法图片源：${item.source}`);
+      continue;
+    }
+    if (url.protocol !== "https:" && url.protocol !== "http:") {
+      skipped++;
+      continue;
+    }
+    const abs = resolveInside(item.path);
+    const res = await fetch(url, { headers: { "User-Agent": "rin-blog-github-sync" } });
+    if (!res.ok) {
+      skipped++;
+      console.warn(`跳过图片 ${item.source}：HTTP ${res.status}`);
+      continue;
+    }
+    const buffer = Buffer.from(await res.arrayBuffer());
+    await mkdir(path.dirname(abs), { recursive: true });
+    await writeFile(abs, buffer);
+    ok++;
+  }
+  return { ok, skipped };
+}
+
 const payload = await fetchExport();
 await mkdir(rootAbs, { recursive: true });
 await writeTextFiles(payload.files ?? []);
 const media = await downloadMedia(payload.media ?? []);
+const images = await downloadImages(payload.images ?? []);
 
 console.log(
   `同步完成：文本 ${payload.files?.length ?? 0} 篇，` +
-  `媒体成功 ${media.ok} / 跳过 ${media.skipped}（清单生成于 ${payload.exportedAt}）`,
+  `媒体成功 ${media.ok} / 跳过 ${media.skipped}，` +
+  `图片成功 ${images.ok} / 跳过 ${images.skipped}（清单生成于 ${payload.exportedAt}）`,
 );
