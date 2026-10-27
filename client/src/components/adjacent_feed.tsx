@@ -51,11 +51,11 @@ export function AdjacentCard({data, type}: { data: AdjacentFeed | null | undefin
                 {data.title}
             </h1>
             <p className={`space-x-2 ${direction}`}>
-                <span className="text-gray-400 text-sm" title={new Date(data.createdAt).toLocaleString()}>
+                <span className="t-muted text-sm" title={new Date(data.createdAt).toLocaleString()}>
                     {data.createdAt === data.updatedAt ? timeago(data.createdAt) : t('feed_card.published$time', {time: timeago(data.createdAt)})}
                 </span>
                 {data.createdAt !== data.updatedAt &&
-                    <span className="text-gray-400 text-sm" title={new Date(data.updatedAt).toLocaleString()}>
+                    <span className="t-muted text-sm" title={new Date(data.updatedAt).toLocaleString()}>
                         {t('feed_card.updated$time', {time: timeago(data.updatedAt)})}
                     </span>
                 }

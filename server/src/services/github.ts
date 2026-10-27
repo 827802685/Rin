@@ -480,6 +480,29 @@ export class GitHubClient {
       },
     );
   }
+
+  /**
+   * 单个图片 URL 的 CDN 重写，供列表卡的 avatar 这类「不在正文里」的图片复用。
+   * 规则与 rewriteMediaToCdn 完全一致：只改已入库的站内媒体与已镜像的自有仓库外链，
+   * 其余原样返回（否则会把未同步的图改成 404）。
+   */
+  rewriteMediaUrl(
+    url: string,
+    storageHosts: string[],
+    syncedKeys: ReadonlySet<string>,
+    mirroredKeys: ReadonlySet<string> = new Set(),
+  ): string {
+    if (!url) {
+      return url;
+    }
+    const cdnBase = cdnBaseFor(this.settings);
+    const internal = rewriteSingleMediaUrl(url, cdnBase, storageHosts, syncedKeys);
+    if (internal !== null) {
+      return internal;
+    }
+    const mirrored = rewriteMirrorableImageUrl(url, cdnBase, this.settings.owner, mirroredKeys);
+    return mirrored === null ? url : mirrored;
+  }
 }
 
 /** 外链图片源 URL -> 规范化标识 + CDN 落地路径；非用户自有 GitHub 图返回 null */

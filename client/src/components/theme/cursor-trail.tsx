@@ -1,5 +1,6 @@
 import { useContext, useEffect, useRef } from "react";
 import { ClientConfigContext } from "../../state/config";
+import { useColorMode } from "../../utils/darkModeUtils";
 
 type TrailPoint = {
   x: number;
@@ -13,6 +14,7 @@ const FADE_TICKS = 16;
 export function CursorTrail() {
   const config = useContext(ClientConfigContext);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const colorMode = useColorMode();
   const trailEnabled = config.getBoolean("widget.cursor.trail_enabled");
   // 触屏设备没有悬停指针，不挂拖尾
   const coarsePointer =
@@ -39,15 +41,23 @@ export function CursorTrail() {
     let running = true;
 
     const resize = () => {
-      canvas.width = window.innerWidth;
-      canvas.height = window.innerHeight;
+      canvas.width = document.documentElement.clientWidth;
+      canvas.height = document.documentElement.clientHeight;
     };
 
+    // 光点取主题强调色，但浅色页面要压暗、深色页面要提亮，
+    // 否则浅色主题（如樱粉、暖砂）的光点会和页面背景糊成一片。
     const themeRgb = () => {
       const raw = getComputedStyle(document.documentElement)
         .getPropertyValue("--theme-rgb")
         .trim();
-      return raw || "120 120 120";
+      const parts = raw.split(/\s+/).map(Number);
+      if (parts.length !== 3 || parts.some((n) => !Number.isFinite(n))) {
+        return "90 176 216";
+      }
+      const factor = colorMode === "light" ? 0.62 : 1.2;
+      const clamp = (v: number) => Math.min(255, Math.max(0, Math.round(v * factor)));
+      return `${clamp(parts[0])} ${clamp(parts[1])} ${clamp(parts[2])}`;
     };
 
     const loop = () => {
@@ -57,15 +67,18 @@ export function CursorTrail() {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       points = points.filter((p) => p.life < FADE_TICKS);
       const rgb = themeRgb();
+      ctx.shadowColor = `rgb(${rgb})`;
+      ctx.shadowBlur = 10;
       points.forEach((p, index) => {
         p.life += 1;
         const alpha = Math.max(0, 1 - p.life / FADE_TICKS) * (index / MAX_POINTS) * 2;
-        ctx.globalAlpha = Math.min(alpha, 0.55);
+        ctx.globalAlpha = Math.min(alpha, 0.72);
         ctx.fillStyle = `rgb(${rgb})`;
         ctx.beginPath();
-        ctx.arc(p.x, p.y, 3 * Math.max(alpha, 0.1) + 0.5, 0, Math.PI * 2);
+        ctx.arc(p.x, p.y, 3.4 * Math.max(alpha, 0.12) + 0.6, 0, Math.PI * 2);
         ctx.fill();
       });
+      ctx.shadowBlur = 0;
       ctx.globalAlpha = 1;
       raf = requestAnimationFrame(loop);
     };
@@ -91,7 +104,7 @@ export function CursorTrail() {
       window.removeEventListener("resize", resize);
       window.removeEventListener("pointermove", onPointerMove);
     };
-  }, [active]);
+  }, [active, colorMode]);
 
   if (!active) {
     return null;

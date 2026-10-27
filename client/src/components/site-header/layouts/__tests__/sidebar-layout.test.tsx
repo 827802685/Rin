@@ -34,7 +34,8 @@ describe("sidebarLayoutDefinition.renderRouteShell", () => {
             </div>,
         );
 
-        const main = container.querySelector("main");
+        // 壳层不再用 <main>：页面自己已经渲染了一个 <main>，嵌套会违反 HTML 规范
+        const main = container.querySelector(".min-w-0.flex-1");
         expect(main).not.toBeNull();
         // rawContent 优先于已包壳的 content
         expect(screen.getByTestId("raw")).toBeTruthy();
@@ -57,6 +58,6 @@ describe("sidebarLayoutDefinition.renderRouteShell", () => {
             </div>,
         );
 
-        expect(container.querySelector("main")?.textContent).toBe("rendered-content");
+        expect(container.querySelector(".min-w-0.flex-1")?.textContent).toBe("rendered-content");
     });
 });

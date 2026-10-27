@@ -369,7 +369,7 @@ export function MusicPlayer() {
               {track.artist || t("theme.player.unknown_artist")}
             </p>
             <div className="mt-0.5 flex items-center gap-1.5">
-              <span className="shrink-0 text-[10px] tabular-nums text-neutral-400 dark:text-neutral-500">
+              <span className="shrink-0 text-[10px] tabular-nums t-muted">
                 {formatTime(currentTime)}
               </span>
               <input
@@ -387,12 +387,13 @@ export function MusicPlayer() {
                   setProgress((target / (audio.duration || 1)) * 100);
                 }}
                 aria-label={t("theme.player.seek")}
-                className="h-1 min-w-0 flex-1 cursor-pointer appearance-none rounded-full"
+                className="seek-bar h-1 min-w-0 flex-1 cursor-pointer appearance-none rounded-full"
                 style={{
-                  background: `linear-gradient(to right, var(--theme, #5ab0d8) ${progress}%, rgb(229 229 229) ${progress}%)`,
+                  // 未播放部分用主题 token，原来写死的 rgb(229 229 229) 在深色卡片上是一条浅灰杠
+                  background: `linear-gradient(to right, var(--theme, #5ab0d8) ${progress}%, var(--surface-active, #d4d4d4) ${progress}%)`,
                 }}
               />
-              <span className="shrink-0 text-[10px] tabular-nums text-neutral-400 dark:text-neutral-500">
+              <span className="shrink-0 text-[10px] tabular-nums t-muted">
                 {formatTime(duration)}
               </span>
             </div>

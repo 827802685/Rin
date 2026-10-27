@@ -66,7 +66,6 @@ const useTableOfContents = (selector: string) => {
         )
         intersectingList.length = 0 // reset array
         headers.forEach((header, i) => {
-            if (header.getAttribute('data-id') !== null) return
             header.setAttribute('data-id', i.toString()) // set data-id
             intersectingList.push(false) // increase array length
             io.current!.observe(header) // register to observe
@@ -77,6 +76,35 @@ const useTableOfContents = (selector: string) => {
         }
     }, [ref])
 
+    // 直接访问文章 URL 时，路由先挂载、正文后到：首轮 effect 查不到 .toc-content，
+    // 而 [ref] 之后不再变化，目录就永远停在 “Index is empty”（标题 DOM 其实是有的）。
+    // 目录为空时监听一次 DOM，等正文标题出现后换一个 ref 触发上面的 effect 重扫。
+    useEffect(() => {
+        if (tableOfContents.length > 0 || typeof MutationObserver === 'undefined') {
+            return
+        }
+        let raf = 0
+        const observer = new MutationObserver(() => {
+            if (raf) return
+            raf = requestAnimationFrame(() => {
+                raf = 0
+                const content = document.querySelector(selector)
+                if (content?.querySelector('h1, h2, h3, h4, h5, h6')) {
+                    observer.disconnect()
+                    setRef(`mount-${Date.now()}`)
+                }
+            })
+        })
+        observer.observe(document.body, { childList: true, subtree: true })
+        // 正文确实没有标题的文章：最多观察 10 秒就收手，避免常驻监听
+        const timer = window.setTimeout(() => observer.disconnect(), 10000)
+        return () => {
+            observer.disconnect()
+            window.clearTimeout(timer)
+            if (raf) cancelAnimationFrame(raf)
+        }
+    }, [tableOfContents.length, selector])
+
     const cleanup = (newId: string) => {
         if (lastRef.current === newId) return
         setRef(newId)
@@ -86,8 +114,8 @@ const useTableOfContents = (selector: string) => {
     return {
         TOC: () => (<div className='rounded-2xl bg-w py-4 px-4 t-primary'>
             <h2 className="text-lg font-bold">{t("index.title")}</h2>
-            <ul className="max-h-[calc(100vh-10.25rem)] overflow-auto" style={{ scrollbarWidth: "none" }}>
-                {tableOfContents.length === 0 && <li>{t("index.empty.title")}</li>}
+            <ul className="toc-scroll max-h-[calc(100vh-10.25rem)] overflow-auto pr-1">
+                {tableOfContents.length === 0 && <li className="t-muted">{t("index.empty.title")}</li>}
                 {tableOfContents.map((item) => (
                     <li
                         key={`toc$${item.index}`}

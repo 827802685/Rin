@@ -164,6 +164,28 @@ describe('GitHubClient.rewriteMediaToCdn', () => {
     });
 });
 
+describe('GitHubClient.rewriteMediaUrl（列表卡封面）', () => {
+    const client = new GitHubClient(settings);
+    const hosts = ['https://img.example.com'];
+
+    it('单图也走 CDN 改写，并保留 blurhash 片段', () => {
+        const src = 'https://raw.githubusercontent.com/some-user/image/refs/heads/main/a.jpg#blurhash=LGF&width=100';
+        const parsed = parseMirrorableImageSource(src, 'some-user')!;
+        const out = client.rewriteMediaUrl(src, hosts, new Set(), new Set([parsed.key]));
+        expect(out).toBe(`https://cdn.statically.io/gh/some-user/blog-content/main/${parsed.mediaPath}#blurhash=LGF&width=100`);
+    });
+
+    it('未入库的外链原样返回，不指向不存在的 CDN 文件', () => {
+        const src = 'https://raw.githubusercontent.com/some-user/image/refs/heads/main/missing.jpg';
+        expect(client.rewriteMediaUrl(src, hosts, new Set(), new Set())).toBe(src);
+    });
+
+    it('站内媒体按 syncedKeys 改写', () => {
+        expect(client.rewriteMediaUrl('https://img.example.com/images/a.png', hosts, new Set(['images/a.png'])))
+            .toBe('https://cdn.statically.io/gh/some-user/blog-content/main/media/images/a.png');
+    });
+});
+
 describe('外链图片镜像：源解析', () => {
     it('识别 raw.githubusercontent 的自有仓库图片（含 refs/heads 形式）', () => {
         const url = 'https://raw.githubusercontent.com/some-user/image/refs/heads/main/pictures/a.png';

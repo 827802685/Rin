@@ -71,3 +71,37 @@ export function useColorMode() {
 
   return colorMode;
 }
+
+export type ThemeMode = "light" | "dark" | "system";
+
+const THEME_MODE_EVENT = "themeModeChange";
+
+export function getThemeMode(): ThemeMode {
+  const stored = localStorage.getItem("theme");
+  return stored === "light" || stored === "dark" || stored === "system" ? stored : "system";
+}
+
+/**
+ * 写入偏好并立即生效。页头和页脚各有一处切换入口，分发事件让两边的图标保持一致。
+ */
+export function applyThemeMode(mode: ThemeMode) {
+  localStorage.setItem("theme", mode);
+
+  const resolved: "light" | "dark" = mode === "system"
+    ? (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light")
+    : mode;
+  setDataColorModeWithFade(resolved);
+  window.dispatchEvent(new Event(THEME_MODE_EVENT));
+}
+
+export function useThemeMode(): [ThemeMode, (mode: ThemeMode) => void] {
+  const [mode, setMode] = useState<ThemeMode>(getThemeMode);
+
+  useEffect(() => {
+    const sync = () => setMode(getThemeMode());
+    window.addEventListener(THEME_MODE_EVENT, sync);
+    return () => window.removeEventListener(THEME_MODE_EVENT, sync);
+  }, []);
+
+  return [mode, applyThemeMode];
+}

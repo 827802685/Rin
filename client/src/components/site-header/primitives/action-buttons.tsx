@@ -7,6 +7,7 @@ import { client } from "../../../app/runtime";
 import { ClientConfigContext } from "../../../state/config";
 import { type Profile } from "../../../state/profile";
 import { removeAuthToken } from "../../../utils/auth";
+import { useThemeMode, type ThemeMode } from "../../../utils/darkModeUtils";
 import { Button } from "../../button";
 import { Input } from "../../input";
 import { HEADER_POPUP_PANEL_CLASS } from "../shared";
@@ -25,8 +26,51 @@ export function HeaderActions({
   return (
     <div className={className}>
       <SearchButton plain={plain} />
+      <ThemeToggle plain={plain} />
       <LanguageSwitch plain={plain} popoverUp={popoverUp} />
       <UserAvatar profile={profile} plain={plain} popoverUp={popoverUp} />
+    </div>
+  );
+}
+
+const THEME_MODE_ORDER: ThemeMode[] = ["system", "light", "dark"];
+const THEME_MODE_ICON: Record<ThemeMode, string> = {
+  system: "ri-computer-line",
+  light: "ri-sun-line",
+  dark: "ri-moon-line",
+};
+const THEME_MODE_LABEL: Record<ThemeMode, string> = {
+  system: "Toggle system mode",
+  light: "Toggle light mode",
+  dark: "Toggle dark mode",
+};
+
+/**
+ * 页头的深浅色切换。原来只有页脚底部有一个三连按钮，读文章时得先滚到底才能切。
+ * 这里用一个按钮循环 system → light → dark，省横向空间。
+ */
+export function ThemeToggle({ className, plain = false }: { className?: string; plain?: boolean }) {
+  const [mode, setMode] = useThemeMode();
+
+  const cycle = () => {
+    const next = THEME_MODE_ORDER[(THEME_MODE_ORDER.indexOf(mode) + 1) % THEME_MODE_ORDER.length];
+    setMode(next);
+  };
+
+  return (
+    <div className={className + " flex flex-row items-center"}>
+      <button
+        onClick={cycle}
+        title={THEME_MODE_LABEL[mode]}
+        aria-label={THEME_MODE_LABEL[mode]}
+        className={
+          plain
+            ? "flex aspect-[1] items-center justify-center px-1.5 text-neutral-500 transition-colors hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-neutral-100"
+            : "flex rounded-full border dark:border-neutral-600 px-2 bg-w aspect-[1] items-center justify-center t-primary bg-button"
+        }
+      >
+        <i className={THEME_MODE_ICON[mode]} />
+      </button>
     </div>
   );
 }

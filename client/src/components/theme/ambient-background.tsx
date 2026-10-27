@@ -1,5 +1,6 @@
 import { useContext, useEffect, useRef } from "react";
 import { ClientConfigContext } from "../../state/config";
+import { useColorMode } from "../../utils/darkModeUtils";
 
 /**
  * 氛围背景：单一 canvas 引擎 + 程序化粒子预设，不加载任何图片素材。
@@ -13,6 +14,31 @@ export type AmbientType = (typeof AMBIENT_TYPES)[number];
 export function normalizeAmbientType(value: string): AmbientType {
   return AMBIENT_TYPES.includes(value as AmbientType) ? (value as AmbientType) : "snow";
 }
+
+/**
+ * 粒子外观按深浅档各一套：浅色页面上白粒子对比度只有 1.02:1，等于不可见，
+ * 所以浅色档统一换成中低明度的同色系；深色档保留原来的高明度版本。
+ */
+type AmbientAppearance = { color: string; alpha: number };
+
+export const AMBIENT_APPEARANCE: Record<AmbientType, Record<"light" | "dark", AmbientAppearance>> = {
+  snow: {
+    light: { color: "#7fa3bf", alpha: 0.9 },
+    dark: { color: "#ffffff", alpha: 0.85 },
+  },
+  sakura: {
+    light: { color: "#dd7694", alpha: 0.85 },
+    dark: { color: "#f6b9c8", alpha: 0.8 },
+  },
+  starry: {
+    light: { color: "#3d4b66", alpha: 0.8 },
+    dark: { color: "#e8ecff", alpha: 1 },
+  },
+  bubbles: {
+    light: { color: "#4f93bf", alpha: 0.75 },
+    dark: { color: "#cfe8ff", alpha: 0.55 },
+  },
+};
 
 type Sprite = {
   x: number;
@@ -51,6 +77,7 @@ function makeSprite(width: number, height: number, type: AmbientType, fromTop: b
 export function AmbientBackground() {
   const config = useContext(ClientConfigContext);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const colorMode = useColorMode();
   const enabled = config.getBoolean("widget.ambient.enabled");
   const type = normalizeAmbientType(String(config.get("widget.ambient.type") ?? "snow"));
   const opacity = Math.min(Math.max(Number(config.get("widget.ambient.opacity") ?? 0.6), 0.1), 1);
@@ -81,8 +108,10 @@ export function AmbientBackground() {
     let tick = 0;
 
     const resize = () => {
-      canvas.width = window.innerWidth;
-      canvas.height = window.innerHeight;
+      // canvas 是 fixed inset-0，用 clientWidth 才是真实绘制区域；
+      // innerWidth 含滚动条，右下角会多出 15px 被压在滚动条下面。
+      canvas.width = document.documentElement.clientWidth;
+      canvas.height = document.documentElement.clientHeight;
     };
 
     const seed = () => {
@@ -94,20 +123,21 @@ export function AmbientBackground() {
     };
 
     const drawSprite = (s: Sprite) => {
+      const appearance = AMBIENT_APPEARANCE[type][colorMode];
       ctx.save();
       ctx.translate(s.x, s.y);
       switch (type) {
         case "snow":
-          ctx.globalAlpha = 0.85;
-          ctx.fillStyle = "#ffffff";
+          ctx.globalAlpha = appearance.alpha;
+          ctx.fillStyle = appearance.color;
           ctx.beginPath();
           ctx.arc(0, 0, s.size, 0, Math.PI * 2);
           ctx.fill();
           break;
         case "sakura": {
           ctx.rotate(s.angle);
-          ctx.globalAlpha = 0.8;
-          ctx.fillStyle = "#f6b9c8";
+          ctx.globalAlpha = appearance.alpha;
+          ctx.fillStyle = appearance.color;
           ctx.beginPath();
           ctx.ellipse(0, 0, s.size, s.size * 0.6, 0, 0, Math.PI * 2);
           ctx.fill();
@@ -116,17 +146,17 @@ export function AmbientBackground() {
         case "starry": {
           // 亮度随相位闪烁
           const twinkle = 0.35 + 0.65 * Math.abs(Math.sin(tick * 0.02 + s.phase));
-          ctx.globalAlpha = twinkle;
-          ctx.fillStyle = "#e8ecff";
+          ctx.globalAlpha = twinkle * appearance.alpha;
+          ctx.fillStyle = appearance.color;
           ctx.beginPath();
           ctx.arc(0, 0, s.size, 0, Math.PI * 2);
           ctx.fill();
           break;
         }
         case "bubbles":
-          ctx.globalAlpha = 0.5;
-          ctx.strokeStyle = "#cfe8ff";
-          ctx.lineWidth = 1;
+          ctx.globalAlpha = appearance.alpha;
+          ctx.strokeStyle = appearance.color;
+          ctx.lineWidth = 1.2;
           ctx.beginPath();
           ctx.arc(0, 0, s.size, 0, Math.PI * 2);
           ctx.stroke();
@@ -172,7 +202,7 @@ export function AmbientBackground() {
       cancelAnimationFrame(raf);
       window.removeEventListener("resize", onResize);
     };
-  }, [active, type, count]);
+  }, [active, type, count, colorMode]);
 
   if (!active) {
     return null;

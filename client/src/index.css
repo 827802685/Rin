@@ -42,6 +42,8 @@
 }
 
 [data-color-mode="dark"] {
+  /* 让右侧原生滚动条、表单控件跟着深色走，否则深色页面配一条亮灰滚动条 */
+  color-scheme: dark;
   --surface-page: var(--surface-page-dark);
   --surface-raised: var(--surface-raised-dark);
   --surface-sunken: var(--surface-sunken-dark);
@@ -68,7 +70,10 @@
 }
 
 html {
+  /* 老浏览器兜底；支持 clip 时用 clip：hidden 会把 body 变成滚动容器，
+     侧栏的 position: sticky 就会跟着 body 一起滚走（右侧 288px 变成空白）。 */
   overflow-x: hidden;
+  overflow-x: clip;
 }
 
 body {
@@ -76,6 +81,7 @@ body {
   color: var(--text-primary, #111);
   font-family: Cantarell, "Source Han Serif CN VF" !important;
   overflow-x: hidden;
+  overflow-x: clip;
 }
 
 /* 深浅档切换的交叉淡化：类只挂 320ms（见 darkModeUtils.setDataColorModeWithFade） */

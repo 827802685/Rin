@@ -1,5 +1,6 @@
 import { useContext, useEffect, useRef } from "react";
 import { ClientConfigContext } from "../../state/config";
+import { useColorMode } from "../../utils/darkModeUtils";
 
 type Particle = {
   x: number;
@@ -15,8 +16,15 @@ type Particle = {
 const PARTICLE_COUNT = 18;
 const GRAVITY = 0.06;
 
-function buildParticles(x: number, y: number, themeColor: string): Particle[] {
-  const palette = ["#ffffff", themeColor, "#a8e0f5", "#6fc4e8"];
+// 原来的调色板是白/浅蓝，浅色页面上炸开几乎看不见；深色保留原高明度配色，
+// 浅色换成同色相的深一档，保证在 #f2f6f9 这类底色上仍有对比。
+const FIREWORK_PALETTE: Record<"light" | "dark", string[]> = {
+  light: ["#2f6f92", "#4f93bf", "#7fb9d6", "#3d7fa8"],
+  dark: ["#ffffff", "#a8e0f5", "#6fc4e8", "#e8f6ff"],
+};
+
+function buildParticles(x: number, y: number, themeColor: string, colorMode: "light" | "dark"): Particle[] {
+  const palette = [themeColor, ...FIREWORK_PALETTE[colorMode]];
   const particles: Particle[] = [];
   for (let i = 0; i < PARTICLE_COUNT; i++) {
     const angle = Math.random() * Math.PI * 2;
@@ -41,6 +49,7 @@ export function Firework() {
   const enabled = config.getBoolean("widget.firework.enabled");
   const disableOnMobile = config.getBoolean("widget.firework.disable_on_mobile");
   const themeColor = String(config.get("theme.color") ?? "#5ab0d8");
+  const colorMode = useColorMode();
 
   useEffect(() => {
     if (!enabled) {
@@ -64,12 +73,12 @@ export function Firework() {
     let running = true;
 
     const resize = () => {
-      canvas.width = window.innerWidth;
-      canvas.height = window.innerHeight;
+      canvas.width = document.documentElement.clientWidth;
+      canvas.height = document.documentElement.clientHeight;
     };
 
     const spawn = (x: number, y: number) => {
-      particles.push(...buildParticles(x, y, themeColor));
+      particles.push(...buildParticles(x, y, themeColor, colorMode));
       if (particles.length > 400) {
         particles = particles.slice(particles.length - 400);
       }
@@ -112,7 +121,7 @@ export function Firework() {
       window.removeEventListener("resize", resize);
       window.removeEventListener("pointerdown", onPointerDown);
     };
-  }, [enabled, disableOnMobile, themeColor]);
+  }, [enabled, disableOnMobile, themeColor, colorMode]);
 
   if (!enabled) {
     return null;

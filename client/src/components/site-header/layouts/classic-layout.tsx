@@ -13,7 +13,9 @@ export const classicLayoutDefinition: HeaderLayoutDefinition = {
         <div className="flex min-w-0 flex-1 items-center justify-center">
           <div className="scrollbar-none min-w-0 max-w-full overflow-x-auto rounded-full bg-w px-2 shadow-xl shadow-light t-primary">
             <div className="flex min-w-max flex-row items-center whitespace-nowrap">
-              <NavBar menu={false} itemClassName="whitespace-nowrap px-3 py-3 md:p-3 text-[15px]" />
+              {/* 8 个菜单 + 4 个操作按钮时导航会顶到边缘被裁掉半行字：1280 下用 8px 内边距
+                  与 14px 字号刚好放得下，2xl 再恢复原来的宽松样式。 */}
+              <NavBar menu={false} itemClassName="whitespace-nowrap px-2 py-3 text-[14px] 2xl:px-3 2xl:text-[15px]" />
             </div>
           </div>
         </div>

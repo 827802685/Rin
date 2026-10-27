@@ -41,8 +41,8 @@ export const sidebarLayoutDefinition: HeaderLayoutDefinition = {
       <div className="flex min-h-screen flex-col">
         {header}
         <div className="mx-auto flex w-full max-w-6xl flex-1 items-start gap-6 px-4 py-4 sm:px-6 lg:px-10">
-          {/* 侧栏模式下页面自带的 wauto 收窄类由这条覆盖为满宽 */}
-          <main className="min-w-0 flex-1 [&_.wauto]:w-full">{rawContent ?? content}</main>
+          {/* 页面自己已经有一层 <main>，这里再用 main 会嵌套出两个主地标 */}
+          <div className="min-w-0 flex-1 [&_.wauto]:w-full">{rawContent ?? content}</div>
           <aside className="sticky top-24 hidden w-72 shrink-0 lg:block">
             <div className="scrollbar-none flex max-h-[calc(100vh-7.5rem)] flex-col overflow-y-auto">
               <SiteSidebar />

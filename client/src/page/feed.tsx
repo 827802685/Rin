@@ -124,7 +124,11 @@ export function FeedPage({ id, TOC, clean }: { id: string, TOC: () => JSX.Elemen
   }, [feed]);
 
   return (
-    <Waiting for={feed || error}>
+    <>
+      {/* 阅读进度条用 position: fixed 贴视口顶部。放进下面的 .ani-show 后，
+          动画 forwards 留下的 transform 会让它变成局部定位，滚动后跟着正文一起滚走。 */}
+      {feed && !error && <ReadingProgress />}
+      <Waiting for={feed || error}>
       {feed && (
         <SiteMeta
           title={feed.title ?? "Unnamed"}
@@ -155,7 +159,6 @@ export function FeedPage({ id, TOC, clean }: { id: string, TOC: () => JSX.Elemen
         )}
         {feed && !error && (
           <>
-            <ReadingProgress />
             {!sidebarShell && <div className="xl:w-64" />}
             <main className="wauto">
               <article
@@ -166,7 +169,7 @@ export function FeedPage({ id, TOC, clean }: { id: string, TOC: () => JSX.Elemen
                   <div>
                     <div className="mt-1 mb-1 flex gap-1">
                       <p
-                        className="text-gray-400 text-[12px]"
+                        className="t-muted text-[12px]"
                         title={new Date(feed.createdAt).toLocaleString()}
                       >
                         {t("feed_card.published$time", {
@@ -176,7 +179,7 @@ export function FeedPage({ id, TOC, clean }: { id: string, TOC: () => JSX.Elemen
 
                       {feed.createdAt !== feed.updatedAt && (
                         <p
-                          className="text-gray-400 text-[12px]"
+                          className="t-muted text-[12px]"
                           title={new Date(feed.updatedAt).toLocaleString()}
                         >
                           {t("feed_card.updated$time", {
@@ -185,7 +188,7 @@ export function FeedPage({ id, TOC, clean }: { id: string, TOC: () => JSX.Elemen
                         </p>
                       )}
                     </div>
-                    {counterEnabled && <p className='text-[12px] text-gray-400 font-normal link-line'>
+                    {counterEnabled && <p className='text-[12px] t-muted font-normal link-line'>
                       <span> {t("count.pv")} </span>
                       <span>
                         {feed.pv}
@@ -197,7 +200,7 @@ export function FeedPage({ id, TOC, clean }: { id: string, TOC: () => JSX.Elemen
                       </span>
                     </p>}
                     {reading && reading.words > 0 && (
-                      <p className="text-[12px] text-gray-400 font-normal">
+                      <p className="text-[12px] t-muted font-normal">
                         <span>{t("article.word_count", { count: reading.words })}</span>
                         <span> · </span>
                         <span>{t("article.reading_time", { minute: reading.minutes })}</span>
@@ -278,7 +281,7 @@ export function FeedPage({ id, TOC, clean }: { id: string, TOC: () => JSX.Elemen
                       className="w-8 h-8 rounded-full"
                     />
                     <div className="ml-2">
-                      <span className="text-gray-400 text-sm cursor-default">
+                      <span className="t-muted text-sm cursor-default">
                         {feed.user.username}
                       </span>
                     </div>
@@ -309,6 +312,7 @@ export function FeedPage({ id, TOC, clean }: { id: string, TOC: () => JSX.Elemen
       <AlertUI />
       <ConfirmUI />
     </Waiting>
+    </>
   );
 }
 
@@ -619,7 +623,7 @@ function CommentItem({
               href={comment.guestWebsite}
               target="_blank"
               rel="noopener noreferrer"
-              className="ml-2 text-gray-400 hover:text-theme transition-colors"
+              className="ml-2 t-muted hover:text-theme transition-colors"
             >
               <i className="ri-external-link-line"></i>
             </a>
@@ -627,7 +631,7 @@ function CommentItem({
           <div className="flex-1 w-0" />
           <span
             title={new Date(comment.createdAt).toLocaleString()}
-            className="text-gray-400 text-sm"
+            className="t-muted text-sm"
           >
             {timeago(comment.createdAt)}
           </span>

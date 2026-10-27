@@ -1490,7 +1490,10 @@ export function Live2DWidget() {
             : {}),
         }}
       >
-        <div className={`flex items-end gap-1 ${dragging ? "pointer-events-none" : ""}`}>
+        {/* 工具栏放在模型右侧：侧栏模式下侧栏右缘大约在视口右侧 100px 内，
+            工具栏留在左侧会正好压住标签云药丸；换到右侧后落在侧栏外的留白里。
+            用 flex-row-reverse 而不重排 JSX，气泡/画布的插件定位不受影响。 */}
+        <div className={`flex flex-row-reverse items-end gap-1 ${dragging ? "pointer-events-none" : ""}`}>
           {/* 竖排工具栏：首页 / 聊天 / 换模型 / 摸一摸 / 动作 / 隐藏（从上到下） */}
           <div className="pointer-events-auto relative flex flex-col items-center gap-1">
             {showActions && !error ? (
@@ -1520,7 +1523,7 @@ export function Live2DWidget() {
             <button
               type="button"
               onClick={goHome}
-              className="rounded-full bg-w p-2 text-sm shadow t-muted transition hover:text-theme"
+              className="flex h-8 w-8 items-center justify-center rounded-full bg-w text-sm shadow t-muted transition hover:text-theme"
               aria-label={t("theme.live2d.home")}
               title={t("theme.live2d.home")}
             >
@@ -1529,7 +1532,7 @@ export function Live2DWidget() {
             <button
               type="button"
               onClick={() => setChatOpen((value) => !value)}
-              className={`rounded-full bg-w p-2 text-sm shadow transition ${chatOpen ? "text-theme" : "t-muted hover:text-theme"}`}
+              className={`flex h-8 w-8 items-center justify-center rounded-full bg-w text-sm shadow transition ${chatOpen ? "text-theme" : "t-muted hover:text-theme"}`}
               aria-label={t("theme.live2d.chat.button")}
               title={t("theme.live2d.chat.button")}
             >
@@ -1538,7 +1541,7 @@ export function Live2DWidget() {
             <button
               type="button"
               onClick={switchToNextModel}
-              className="rounded-full bg-w p-2 text-sm shadow t-muted transition hover:text-theme"
+              className="flex h-8 w-8 items-center justify-center rounded-full bg-w text-sm shadow t-muted transition hover:text-theme"
               aria-label={t("theme.live2d.switch.button")}
               title={t("theme.live2d.switch.button")}
             >
@@ -1547,7 +1550,7 @@ export function Live2DWidget() {
             <button
               type="button"
               onClick={petModel}
-              className="rounded-full bg-w p-2 text-sm shadow t-muted transition hover:text-theme"
+              className="flex h-8 w-8 items-center justify-center rounded-full bg-w text-sm shadow t-muted transition hover:text-theme"
               aria-label={t("theme.live2d.poke")}
               title={t("theme.live2d.poke")}
             >
@@ -1556,7 +1559,7 @@ export function Live2DWidget() {
             <button
               type="button"
               onClick={() => setShowActions((value) => !value)}
-              className={`rounded-full bg-w p-2 text-sm shadow transition ${showActions ? "text-theme" : "t-muted hover:text-theme"}`}
+              className={`flex h-8 w-8 items-center justify-center rounded-full bg-w text-sm shadow transition ${showActions ? "text-theme" : "t-muted hover:text-theme"}`}
               aria-label={t("theme.live2d.actions.button")}
               title={t("theme.live2d.actions.button")}
             >
@@ -1565,7 +1568,7 @@ export function Live2DWidget() {
             <button
               type="button"
               onClick={() => setHidden(true)}
-              className="rounded-full bg-w p-2 text-sm shadow t-muted transition hover:text-theme"
+              className="flex h-8 w-8 items-center justify-center rounded-full bg-w text-sm shadow t-muted transition hover:text-theme"
               aria-label={t("theme.live2d.hide")}
               title={t("theme.live2d.hide")}
             >

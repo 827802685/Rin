@@ -6,24 +6,18 @@ import { Helmet } from "react-helmet";
 import { siteName } from '../utils/constants';
 import { useTranslation } from "react-i18next";
 import { buildLoginPath, HIDDEN_LOGIN_REDIRECT } from "../utils/auth-redirect";
-import { setDataColorModeWithFade } from "../utils/darkModeUtils";
+import { applyThemeMode, useThemeMode, type ThemeMode } from "../utils/darkModeUtils";
 
-type ThemeMode = 'light' | 'dark' | 'system';
 function Footer() {
     const { t } = useTranslation()
     const [, setLocation] = useLocation()
-    const [modeState, setModeState] = useState<ThemeMode>('system');
+    const [modeState] = useThemeMode();
     const config = useContext(ClientConfigContext);
     const footerHtml = config.get<string>('footer');
     const footerHtmlRef = useRef<HTMLDivElement | null>(null);
     const mountedScriptNodesRef = useRef<HTMLScriptElement[]>([]);
     const loginEnabled = config.getBoolean('login.enabled');
     const [doubleClickTimes, setDoubleClickTimes] = useState(0);
-    useEffect(() => {
-        const mode = localStorage.getItem('theme') as ThemeMode || 'system';
-        setModeState(mode);
-        setMode(mode);
-    }, [])
 
     useEffect(() => {
         const container = footerHtmlRef.current;
@@ -69,16 +63,6 @@ function Footer() {
             mountedScriptNodesRef.current = [];
         };
     }, [footerHtml])
-
-    const setMode = (mode: ThemeMode) => {
-        setModeState(mode);
-        localStorage.setItem('theme', mode);
-
-        const resolved: 'light' | 'dark' = mode === 'system'
-            ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
-            : mode;
-        setDataColorModeWithFade(resolved);
-    };
 
     return (
         <footer>
@@ -133,9 +117,9 @@ function Footer() {
                     </>}
                 </p>
                 <div className="w-fit-content inline-flex rounded-full border border-zinc-200 p-[3px] dark:border-zinc-700">
-                    <ThemeButton mode='light' current={modeState} label="Toggle light mode" icon="ri-sun-line" onClick={setMode} />
-                    <ThemeButton mode='system' current={modeState} label="Toggle system mode" icon="ri-computer-line" onClick={setMode} />
-                    <ThemeButton mode='dark' current={modeState} label="Toggle dark mode" icon="ri-moon-line" onClick={setMode} />
+                    <ThemeButton mode='light' current={modeState} label="Toggle light mode" icon="ri-sun-line" onClick={applyThemeMode} />
+                    <ThemeButton mode='system' current={modeState} label="Toggle system mode" icon="ri-computer-line" onClick={applyThemeMode} />
+                    <ThemeButton mode='dark' current={modeState} label="Toggle dark mode" icon="ri-moon-line" onClick={applyThemeMode} />
                 </div>
             </div>
         </footer>

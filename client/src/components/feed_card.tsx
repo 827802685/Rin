@@ -18,7 +18,9 @@ function FeedCardImage({ src, variant }: { src: string; variant: FeedCardVariant
         variant === "editorial"
             ? "relative flex max-h-80 w-full flex-row items-center overflow-hidden rounded-[20px]"
             : variant === "cover"
-                ? "relative flex w-full items-center overflow-hidden"
+                // 侧栏/单列版式下卡片宽度接近 760px，按原图比例撑开会变成近整屏海报
+                // （实测最高 569px），限制高度后封面卡才能和多列版式共存。
+                ? "relative flex max-h-[380px] w-full items-center overflow-hidden"
                 : "relative mb-2 flex max-h-80 w-full flex-row items-center overflow-hidden rounded-xl";
 
     useEffect(() => {
@@ -52,7 +54,7 @@ function FeedCardImage({ src, variant }: { src: string; variant: FeedCardVariant
                 height={height}
                 onLoad={onLoad}
                 onError={onError}
-                className={`absolute inset-0 h-full w-full object-cover object-center hover:scale-105 translation duration-300 ${blurhash && (!loaded || failed) ? "opacity-0" : "opacity-100"
+                className={`absolute inset-0 h-full w-full object-cover object-center hover:scale-105 transition-transform duration-300 ${blurhash && (!loaded || failed) ? "opacity-0" : "opacity-100"
                     }`}
             />
         </div>

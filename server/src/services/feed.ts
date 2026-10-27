@@ -26,23 +26,43 @@ import { GitHubClient, getGitHubSettings, getStorageHosts, getSyncedMediaKeys, g
 /**
  * 加载文章时，把已入库的媒体（站内存储 + 已镜像外链图片）链接重写为 CDN 地址。
  * 配置来源：设置页 serverConfig 优先，环境变量兜底；未配置则原样返回。
+ * 一次解析出「正文」和「单图」两个改写器：列表卡的 avatar 不在正文里，
+ * 过去漏掉了这一路，卡片封面始终直连 raw.githubusercontent.com。
  */
+interface GitHubCdnRewriters {
+    content: (content: string) => string;
+    image: (url: string) => string;
+}
+
+async function getGithubCdnRewriters(
+    serverConfig: CacheImpl | undefined,
+    env: Env,
+): Promise<GitHubCdnRewriters | null> {
+    if (!serverConfig) {
+        return null;
+    }
+
+    const settings = await getGitHubSettings(serverConfig, env);
+    if (!settings) {
+        return null;
+    }
+
+    const client = new GitHubClient(settings);
+    const [syncedKeys, mirroredKeys] = await Promise.all([
+        getSyncedMediaKeys(serverConfig),
+        getMirroredImageKeys(serverConfig),
+    ]);
+    const storageHosts = getStorageHosts(env);
+
+    return {
+        content: (content) => client.rewriteMediaToCdn(content, storageHosts, syncedKeys, mirroredKeys),
+        image: (url) => client.rewriteMediaUrl(url, storageHosts, syncedKeys, mirroredKeys),
+    };
+}
+
 async function applyGithubCdn(content: string, serverConfig: CacheImpl | undefined, env: Env): Promise<string> {
-  if (!serverConfig) {
-    return content;
-  }
-
-  const settings = await getGitHubSettings(serverConfig, env);
-  if (!settings) {
-    return content;
-  }
-
-  const client = new GitHubClient(settings);
-  const [syncedKeys, mirroredKeys] = await Promise.all([
-    getSyncedMediaKeys(serverConfig),
-    getMirroredImageKeys(serverConfig),
-  ]);
-  return client.rewriteMediaToCdn(content, getStorageHosts(env), syncedKeys, mirroredKeys);
+    const rewriters = await getGithubCdnRewriters(serverConfig, env);
+    return rewriters ? rewriters.content(content) : content;
 }
 
 // Lazy-loaded modules for WordPress import
@@ -111,6 +131,8 @@ export function FeedService(): Hono<{
             return c.json({ size: 0, data: [], hasNext: false });
         }
 
+        const cdn = await getGithubCdnRewriters(c.get('serverConfig'), c.get('env'));
+
         const feed_list = (await profileAsync(c, 'feed_list_db', () => db.query.feeds.findMany({
             where: where,
             columns: admin ? undefined : { draft: false, listed: false },
@@ -127,7 +149,10 @@ export function FeedService(): Hono<{
             offset: page_num * limit_num,
             limit: limit_num + 1,
         }))).map(({ content, hashtags, summary, ...other }: any) => {
-            const avatar = extractImageWithMetadata(content);
+            // 卡片封面从正文首图提取，不在正文串里，必须单独过一次 CDN 改写，
+            // 否则首页封面仍然直连 GitHub（国内基本拉不动）。
+            const rawAvatar = extractImageWithMetadata(content);
+            const avatar = rawAvatar && cdn ? cdn.image(rawAvatar) : rawAvatar;
             const plainText = stripMarkdown(content);
             return {
                 summary: summary.length > 0 ? summary : plainText.length > 100 ? plainText.slice(0, 100) : plainText,
@@ -568,6 +593,8 @@ export function SearchService(): Hono<{
                 return { size: 0, data: [], hasNext: false };
             }
 
+            const cdn = await getGithubCdnRewriters(c.get('serverConfig'), c.get('env'));
+
             const feed_list = (await db.query.feeds.findMany({
                 where,
                 columns: admin ? undefined : { draft: false, listed: false },
@@ -586,7 +613,8 @@ export function SearchService(): Hono<{
                 // Feed cards render `avatar`, so search results must expose it
                 // just like the feed list does, otherwise cards lose their
                 // cover image.
-                const avatar = extractImageWithMetadata(content);
+                const rawAvatar = extractImageWithMetadata(content);
+                const avatar = rawAvatar && cdn ? cdn.image(rawAvatar) : rawAvatar;
                 return {
                     summary: summary.length > 0 ? summary : plainText.length > 100 ? plainText.slice(0, 100) : plainText,
                     hashtags: hashtags.map(({ hashtag }: any) => hashtag),

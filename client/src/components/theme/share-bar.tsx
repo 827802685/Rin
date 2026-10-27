@@ -71,8 +71,8 @@ export function ShareBar({ title, url }: { title: string; url: string }) {
   return (
     <div className="mt-4 flex flex-col gap-2">
       <div className="flex items-center gap-2">
-        <i className="ri-share-line text-neutral-400 dark:text-neutral-500" />
-        <span className="text-sm text-neutral-500 dark:text-neutral-400">{t("theme.share.title")}</span>
+        <i className="ri-share-line t-secondary" />
+        <span className="text-sm t-secondary">{t("theme.share.title")}</span>
       </div>
       <div className="flex flex-row flex-wrap gap-2">
         {networks.map((network) => {
@@ -83,7 +83,7 @@ export function ShareBar({ title, url }: { title: string; url: string }) {
                 key={network}
                 type="button"
                 onClick={() => void handleWeixin()}
-                className="flex items-center gap-1.5 rounded-full bg-neutral-100 px-3 py-1.5 text-sm t-primary transition hover:bg-neutral-200 dark:bg-white/10 dark:hover:bg-white/15"
+                className="flex items-center gap-1.5 rounded-full border border-line bg-secondary px-3 py-1.5 text-sm t-primary transition hover:bg-hover"
                 title={meta.label}
               >
                 <i className={meta.icon} />
@@ -97,7 +97,7 @@ export function ShareBar({ title, url }: { title: string; url: string }) {
                 key={network}
                 type="button"
                 onClick={() => void handleWeixin()}
-                className="flex items-center gap-1.5 rounded-full bg-neutral-100 px-3 py-1.5 text-sm t-primary transition hover:bg-neutral-200 dark:bg-white/10 dark:hover:bg-white/15"
+                className="flex items-center gap-1.5 rounded-full border border-line bg-secondary px-3 py-1.5 text-sm t-primary transition hover:bg-hover"
                 title={meta.label}
               >
                 <i className={meta.icon} />
@@ -115,7 +115,7 @@ export function ShareBar({ title, url }: { title: string; url: string }) {
               href={href}
               target="_blank"
               rel="noopener noreferrer"
-              className="flex items-center gap-1.5 rounded-full bg-neutral-100 px-3 py-1.5 text-sm t-primary transition hover:bg-neutral-200 dark:bg-white/10 dark:hover:bg-white/15"
+              className="flex items-center gap-1.5 rounded-full border border-line bg-secondary px-3 py-1.5 text-sm t-primary transition hover:bg-hover"
               title={meta.label}
             >
               <i className={meta.icon} />

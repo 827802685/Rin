@@ -71,6 +71,25 @@
       display: none;
     }
 
+    /* 目录经常比可视区高，隐藏滚动条等于让下面一半内容「看不见也摸不到」 */
+    .toc-scroll {
+      scrollbar-width: thin;
+      scrollbar-color: var(--border-strong, #d4d4d4) transparent;
+    }
+
+    .toc-scroll::-webkit-scrollbar {
+      width: 6px;
+    }
+
+    .toc-scroll::-webkit-scrollbar-thumb {
+      background: var(--border-strong, #d4d4d4);
+      border-radius: 9999px;
+    }
+
+    .toc-scroll::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
     input[type="color"].color-input-reset {
       appearance: none;
       -webkit-appearance: none;
@@ -90,6 +109,27 @@
     input[type="color"].color-input-reset::-moz-color-swatch {
       border: none;
       border-radius: 9999px;
+    }
+
+    /* 播放进度条：appearance:none 之后浏览器不再画滑块，只剩一条无法拖拽提示的线 */
+    input[type="range"].seek-bar::-webkit-slider-thumb {
+      appearance: none;
+      -webkit-appearance: none;
+      width: 10px;
+      height: 10px;
+      border: none;
+      border-radius: 9999px;
+      background: var(--theme, #5ab0d8);
+      box-shadow: 0 0 0 2px var(--surface-raised, #fff);
+    }
+
+    input[type="range"].seek-bar::-moz-range-thumb {
+      width: 10px;
+      height: 10px;
+      border: none;
+      border-radius: 9999px;
+      background: var(--theme, #5ab0d8);
+      box-shadow: 0 0 0 2px var(--surface-raised, #fff);
     }
 
   }
