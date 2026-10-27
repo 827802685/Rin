@@ -37,7 +37,8 @@
 - class 制深色模式：`.dark` / `:root.dark` / `[data-theme="dark"]` / `[data-theme="light"]`
 - Tailwind / shadcn 令牌命名映射：`--background→surface-page`、`--foreground→text-primary`、`--card/--popover→surface-raised`、`--muted-foreground→text-muted`、`--border/--input→border-default`、`--primary→accent` …（含 Tailwind v4 的 `--color-*` 前缀）
 - 显式分档 `--<token>-light` / `--<token>-dark`
-- 4/8 位带 alpha 的十六进制（剥离 alpha，仅取 RGB）
+- **色值格式全面支持**：十六进制（3/4/6/8 位）、`rgb()/rgba()`、`hsl()/hsla()`（转 hex），以及 `oklch()/oklab()/lab()/lch()/color()/hwb()/var()`（浏览器原生，原样透传）。这是现代 Astro / Tailwind v4 主题（默认用 `oklch()`）能否导入的关键——旧实现**只认十六进制**，会整段丢弃导致 `importSchemeFromCss` 返回 `null`、回落 default，等于"Astro 支持"对绝大多数现代主题实际失效。
+- `@media not (prefers-color-scheme: dark)` 取反已处理（深色/浅色档正确互换）
 - 令牌/主色都解析不到时返回 `null`（回落 default，不报错）
 
 即：把任意 Hexo / Astro / shadcn 主题的根 CSS 粘进设置页「自定义 CSS」框，点"应用预览"即可一键导入为配色方案。
@@ -53,6 +54,8 @@
 | 3 | 同上 | 不识别 Tailwind/shadcn 令牌命名（`--background`/`--card`/`--muted-foreground`/`--primary`/`--border`/`--color-*`） | 新增 `TOKEN_ALIASES` 映射 |
 | 4 | `normalizeHex`（theme-scheme.ts） | 不支持 4/8 位带 alpha 十六进制（`#rrggbbaa`），外部 CSS 常见 → 令牌被丢弃 | 剥离 alpha 后取 RGB |
 | 5 | `settings-theme.tsx:542` | 强调色标签用 `option.label.toLowerCase()` 拼 i18n key，新增预设必须保证 label 小写且 locale 有键 | 已对齐（Lavender/Mint 均加中英文） |
+| 6 | `importSchemeFromCss` / `normalizeHex` | **严重功能 bug**：仅接受十六进制色值。现代 Astro / Tailwind v4 主题默认用 `oklch()`，`rgb()`/`hsl()` 也被丢弃 → 解析不到任何令牌、`found===0`、返回 `null`，"支持 Astro 主题导入"对绝大多数现代主题**实际无效** | 重写为 `parseColorValue`：hex 规范化、`rgb/rgba/hsl/hsla` 转 hex、`oklch/oklab/lab/lch/color/hwb/var` 原样透传，非法值跳过不污染令牌 |
+| 7 | `mediaModeOf` | `@media not (prefers-color-scheme: dark)` 取反未处理，会把深色块误判为浅色 | 识别 `not` 关键字并翻转 dark/light |
 
 > 本次 bug 扫描聚焦主题模块（可访问文件）。近期 commit 修复的「侧栏吸顶 / 目录空载 / 阅读进度条 / 深浅色适配」位于页面组件，若需要可继续对这些文件做专项扫描。
 
@@ -60,7 +63,7 @@
 
 ## 四、产物与验证
 
-- 补丁文件：`/workspace/rin-theme-enhancements.patch`（相对仓库根，4 文件，+349/−43）
+- 补丁文件：`/workspace/rin-theme-enhancements.patch`（相对仓库根，4 文件，+413/−49，含 oklch 修复）
 - 完整新文件：`/workspace/deliverables/theme-scheme.ts`（可直接覆盖）
 - 解析器单测：`/workspace/deliverables/test-importScheme.mjs`
 
@@ -72,7 +75,7 @@ git apply /workspace/rin-theme-enhancements.patch
 
 **验证：**
 ```bash
-# 1) 解析器单测（无需构建，26 项全过：Hexo / Astro / shadcn / 回归）
+# 1) 解析器单测（无需构建，38 项全过：Hexo / Astro(含 oklch) / shadcn / rgb/hsl / not 取反 / 回归）
 node /workspace/deliverables/test-importScheme.mjs
 
 # 2) 语法检查（Node 22 类型剥离）

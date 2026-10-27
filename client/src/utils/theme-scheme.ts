@@ -407,33 +407,86 @@ export function applyThemeScheme(schemeId: unknown, accentOverride?: string | nu
 // 支持 Hexo / Halo / Astro / 各类 Tailwind(shadcn) 主题：
 //   - :root / html / body                 -> 同时填 light/dark 两档
 //   - [data-color-mode="light"|"dark"]    -> 只填对应档
-//   - @media (prefers-color-scheme: …)    -> 媒体查询包裹（Astro/现代主题常见）
+//   - @media (prefers-color-scheme: …)    -> 媒体查询包裹（Astro/现代主题常见，支持 not 取反）
 //   - .dark / :root.dark / [data-theme]    -> class 制深色模式（Tailwind darkMode:'class'）
 //   - --<token>-light / --<token>-dark     -> 显式分档
 //   - Tailwind/shadcn 命名映射：--background->surface-page、--foreground->text-primary、
 //     --card/--popover->surface-raised、--muted-foreground->text-muted、--border->border-default、
 //     --primary->accent …（含 Tailwind v4 的 --color-* 前缀）
 //   - --theme-color / --accent-color / --accent / --primary -> 方案主色
+//   - 色值支持 十六进制 / rgb()/rgba()/hsl()/hsla()（转 hex）以及 oklch()/oklab()/lab()/lch()/color()/hwb()/var()（透传）
 // 未解析到的令牌回落 default 包对应档。令牌与主色都解析不到时返回 null。
 // ---------------------------------------------------------------------------
 
 export const CUSTOM_CSS_STYLE_ID = "rin-custom-css";
 
-/** 接受 3/4/6/8 位十六进制（4/8 位的 alpha 部分被剥离，仅取 RGB） */
-function normalizeHex(value: string): string | null {
-  const match = /^#([0-9a-fA-F]{3,8})$/.exec(value.trim());
-  if (!match) return null;
-  let hex = match[1];
-  if (hex.length === 3) {
-    hex = hex[0] + hex[0] + hex[1] + hex[1] + hex[2] + hex[2];
-  } else if (hex.length === 4) {
-    hex = hex.slice(0, 3);
-  } else if (hex.length === 8) {
-    hex = hex.slice(0, 6);
-  } else if (hex.length !== 6) {
-    return null;
+/**
+ * 颜色值归一化。现代 Astro / Tailwind v4 主题大量使用 oklch() / rgb() / hsl()，
+ * 旧实现只认十六进制，会整段丢失（importSchemeFromCss 直接返回 null）。这里统一处理：
+ *  - 十六进制（3/4/6/8 位）→ 6 位 hex（剥离 alpha）
+ *  - rgb()/rgba()/hsl()/hsla() → 6 位 hex（带透明通道时整段原样透传）
+ *  - oklch()/oklab()/lab()/lch()/color()/hwb()/var() → 原样透传（浏览器原生支持）
+ *  - 其余（非颜色文本 / 非法值）→ null，跳过，不污染令牌
+ */
+function toHex2(n: number): string {
+  return Math.max(0, Math.min(255, Math.round(n))).toString(16).padStart(2, "0");
+}
+
+function rgbToHex(v: string): string | null {
+  const m = /^rgba?\(\s*([\d.]+%?)\s*[ ,]+\s*([\d.]+%?)\s*[ ,/]+\s*([\d.]+%?)\s*(?:[,/]\s*([\d.]+%?)\s*)?\)$/i.exec(v);
+  if (!m) return null;
+  const comp = (s: string) => (s.endsWith("%") ? (parseFloat(s) / 100) * 255 : parseFloat(s));
+  const r = comp(m[1]);
+  const g = comp(m[2]);
+  const b = comp(m[3]);
+  const a = m[4] != null ? (m[4].endsWith("%") ? parseFloat(m[4]) / 100 : parseFloat(m[4])) : 1;
+  if ([r, g, b].some((n) => Number.isNaN(n))) return null;
+  if (a < 1) return v; // 透明通道无法无损转 hex，整段透传（仍是合法 CSS）
+  return `#${toHex2(r)}${toHex2(g)}${toHex2(b)}`;
+}
+
+function hslToHex(v: string): string | null {
+  const m = /^hsla?\(\s*([\d.]+)\s*[, ]+\s*([\d.]+)%\s*[, ]+\s*([\d.]+)%\s*(?:[,/]\s*([\d.]+%?)\s*)?\)$/i.exec(v);
+  if (!m) return null;
+  const h = (((parseFloat(m[1]) % 360) + 360) % 360);
+  const s = parseFloat(m[2]) / 100;
+  const l = parseFloat(m[3]) / 100;
+  const a = m[4] != null ? (m[4].endsWith("%") ? parseFloat(m[4]) / 100 : parseFloat(m[4])) : 1;
+  if ([h, s, l].some((n) => Number.isNaN(n))) return null;
+  if (a < 1) return v;
+  const c = (1 - Math.abs(2 * l - 1)) * s;
+  const x = c * (1 - Math.abs(((h / 60) % 2) - 1));
+  const mm = l - c / 2;
+  let r = 0, g = 0, b = 0;
+  if (h < 60) [r, g, b] = [c, x, 0];
+  else if (h < 120) [r, g, b] = [x, c, 0];
+  else if (h < 180) [r, g, b] = [0, c, x];
+  else if (h < 240) [r, g, b] = [0, x, c];
+  else if (h < 300) [r, g, b] = [x, 0, c];
+  else [r, g, b] = [c, 0, x];
+  return `#${toHex2((r + mm) * 255)}${toHex2((g + mm) * 255)}${toHex2((b + mm) * 255)}`;
+}
+
+function parseColorValue(value: string): string | null {
+  const v = value.trim();
+  if (!v) return null;
+
+  const hex = /^#([0-9a-fA-F]{3,8})$/.exec(v);
+  if (hex) {
+    let h = hex[1];
+    if (h.length === 3) h = h[0] + h[0] + h[1] + h[1] + h[2] + h[2];
+    else if (h.length === 4) h = h.slice(0, 3);
+    else if (h.length === 8) h = h.slice(0, 6);
+    else if (h.length !== 6) return null;
+    return `#${h.toLowerCase()}`;
   }
-  return `#${hex.toLowerCase()}`;
+
+  if (/^rgba?\(/i.test(v)) return rgbToHex(v);
+  if (/^hsla?\(/i.test(v)) return hslToHex(v);
+  // 浏览器原生色彩函数，直接透传（避免依赖色彩库做无损转换）
+  if (/^(oklch|oklab|lab|lch|color|hwb)\(/i.test(v)) return v;
+  if (/^var\(/i.test(v)) return v;
+  return null;
 }
 
 /** 外部令牌名 -> Rin 令牌（覆盖 Tailwind v3/v4 与 shadcn 常见命名） */
@@ -462,11 +515,16 @@ const TOKEN_ALIASES: Record<string, ThemeToken> = {
   ring: "border-strong",
 };
 
-/** 由 @media / @supports 前导判断其约束的配色档 */
+/** 由 @media / @supports 前导判断其约束的配色档（支持 not 取反） */
 function mediaModeOf(prelude: string): "light" | "dark" | null {
   const b = prelude.toLowerCase();
-  if (/prefers-color-scheme:\s*dark/.test(b) || /color-scheme:\s*dark/.test(b)) return "dark";
-  if (/prefers-color-scheme:\s*light/.test(b) || /color-scheme:\s*light/.test(b)) return "light";
+  const negated = /\bnot\b/.test(b);
+  if (/prefers-color-scheme:\s*dark/.test(b) || /color-scheme:\s*dark/.test(b)) {
+    return negated ? "light" : "dark";
+  }
+  if (/prefers-color-scheme:\s*light/.test(b) || /color-scheme:\s*light/.test(b)) {
+    return negated ? "dark" : "light";
+  }
   return null;
 }
 
@@ -585,7 +643,7 @@ export function importSchemeFromCss(cssText: string): ThemeSchemePack | null {
     let decl: RegExpExecArray | null;
     while ((decl = declRe.exec(rule.body))) {
       const name = decl[1];
-      const hex = normalizeHex(decl[2]);
+      const hex = parseColorValue(decl[2]);
       if (!hex) continue;
       if (ACCENT_NAMES.has(name)) {
         accent = hex;
