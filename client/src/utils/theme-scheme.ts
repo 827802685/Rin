@@ -206,6 +206,175 @@ export const THEME_SCHEMES: Record<string, ThemeSchemePack> = {
       "border-strong": "#55482f",
     },
   ),
+  // ---- 新增美化模板（2026-10）：薰衣草 / 薄荷 / 珊瑚 / 北欧 / 咖啡 / 赛博 ----
+  lavender: pack(
+    "lavender",
+    "#8b5cf6",
+    {
+      "surface-page": "#f6f4fb",
+      "surface-raised": "#ffffff",
+      "surface-sunken": "#efeaf8",
+      "surface-hover": "#e6dff4",
+      "surface-active": "#d8cdec",
+      "text-primary": "#1c1726",
+      "text-secondary": "#6b5e7e",
+      "text-muted": "#6f6390",
+      "border-default": "#e6dff4",
+      "border-strong": "#d3c8e8",
+    },
+    {
+      "surface-page": "#1b1726",
+      "surface-raised": "#281f38",
+      "surface-sunken": "#322744",
+      "surface-hover": "#3c2f52",
+      "surface-active": "#4a3a63",
+      "text-primary": "#f3eeff",
+      "text-secondary": "#d6cbee",
+      "text-muted": "#a99bc8",
+      "border-default": "#352a48",
+      "border-strong": "#463860",
+    },
+  ),
+  mint: pack(
+    "mint",
+    "#10b981",
+    {
+      "surface-page": "#f1faf6",
+      "surface-raised": "#ffffff",
+      "surface-sunken": "#e6f5ee",
+      "surface-hover": "#d7f0e6",
+      "surface-active": "#c2e7d8",
+      "text-primary": "#0c1a14",
+      "text-secondary": "#4f7367",
+      "text-muted": "#4d7264",
+      "border-default": "#d7f0e6",
+      "border-strong": "#bfe3d4",
+    },
+    {
+      "surface-page": "#0f1a16",
+      "surface-raised": "#1a2a24",
+      "surface-sunken": "#22332c",
+      "surface-hover": "#2a3e35",
+      "surface-active": "#385145",
+      "text-primary": "#e9f7f0",
+      "text-secondary": "#c2e6d7",
+      "text-muted": "#8fb7a8",
+      "border-default": "#243a32",
+      "border-strong": "#315045",
+    },
+  ),
+  coral: pack(
+    "coral",
+    "#e6427a",
+    {
+      "surface-page": "#fdf2f5",
+      "surface-raised": "#ffffff",
+      "surface-sunken": "#fbe6ec",
+      "surface-hover": "#f8d9e2",
+      "surface-active": "#f2c2d1",
+      "text-primary": "#2a0e16",
+      "text-secondary": "#8a4456",
+      "text-muted": "#8e4a5b",
+      "border-default": "#f8d9e2",
+      "border-strong": "#efc3d2",
+    },
+    {
+      "surface-page": "#221016",
+      "surface-raised": "#331a22",
+      "surface-sunken": "#3f222c",
+      "surface-hover": "#4c2935",
+      "surface-active": "#5e3543",
+      "text-primary": "#ffe9ef",
+      "text-secondary": "#f0c9d4",
+      "text-muted": "#c498a7",
+      "border-default": "#42232e",
+      "border-strong": "#56303d",
+    },
+  ),
+  nord: pack(
+    "nord",
+    "#88c0d0",
+    {
+      "surface-page": "#eceff4",
+      "surface-raised": "#ffffff",
+      "surface-sunken": "#e5e9f0",
+      "surface-hover": "#d8dee9",
+      "surface-active": "#c8d0e0",
+      "text-primary": "#2e3440",
+      "text-secondary": "#4c566a",
+      "text-muted": "#54607a",
+      "border-default": "#d8dee9",
+      "border-strong": "#c8d0e0",
+    },
+    {
+      "surface-page": "#2e3440",
+      "surface-raised": "#3b4252",
+      "surface-sunken": "#434c5e",
+      "surface-hover": "#4c566a",
+      "surface-active": "#5a6580",
+      "text-primary": "#eceff4",
+      "text-secondary": "#d8dee9",
+      "text-muted": "#aeb8c9",
+      "border-default": "#434c5e",
+      "border-strong": "#4c566a",
+    },
+  ),
+  coffee: pack(
+    "coffee",
+    "#b5733d",
+    {
+      "surface-page": "#f6f1ec",
+      "surface-raised": "#fffdfb",
+      "surface-sunken": "#efe6dd",
+      "surface-hover": "#e6d8cc",
+      "surface-active": "#d8c4b3",
+      "text-primary": "#2a1d12",
+      "text-secondary": "#6f5640",
+      "text-muted": "#745c46",
+      "border-default": "#e6d8cc",
+      "border-strong": "#d4bfac",
+    },
+    {
+      "surface-page": "#20160e",
+      "surface-raised": "#2e2117",
+      "surface-sunken": "#3a2a1d",
+      "surface-hover": "#473424",
+      "surface-active": "#57442f",
+      "text-primary": "#f3e9df",
+      "text-secondary": "#ddc9b6",
+      "text-muted": "#b29882",
+      "border-default": "#3c2c1e",
+      "border-strong": "#4d3a27",
+    },
+  ),
+  cyber: pack(
+    "cyber",
+    "#22d3ee",
+    {
+      "surface-page": "#eef4f8",
+      "surface-raised": "#ffffff",
+      "surface-sunken": "#e2edf5",
+      "surface-hover": "#d3e6f2",
+      "surface-active": "#bcdaec",
+      "text-primary": "#07131c",
+      "text-secondary": "#3a5a72",
+      "text-muted": "#3f627a",
+      "border-default": "#d3e6f2",
+      "border-strong": "#b8d4e6",
+    },
+    {
+      "surface-page": "#07131c",
+      "surface-raised": "#0e2230",
+      "surface-sunken": "#123042",
+      "surface-hover": "#173d54",
+      "surface-active": "#1f4f6c",
+      "text-primary": "#d7f7ff",
+      "text-secondary": "#9fdcf0",
+      "text-muted": "#6fc0d8",
+      "border-default": "#123042",
+      "border-strong": "#1d4257",
+    },
+  ),
 };
 
 export const THEME_SCHEME_IDS = Object.keys(THEME_SCHEMES);
@@ -234,42 +403,158 @@ export function applyThemeScheme(schemeId: unknown, accentOverride?: string | nu
 }
 
 // ---------------------------------------------------------------------------
-// 外部主题接入（groundwork）：从 CSS 文本解析令牌色值 + 自定义 CSS 挂载
+// 外部主题接入：从 CSS 文本解析令牌色值 + 自定义 CSS 挂载
+// 支持 Hexo / Halo / Astro / 各类 Tailwind(shadcn) 主题：
+//   - :root / html / body                 -> 同时填 light/dark 两档
+//   - [data-color-mode="light"|"dark"]    -> 只填对应档
+//   - @media (prefers-color-scheme: …)    -> 媒体查询包裹（Astro/现代主题常见）
+//   - .dark / :root.dark / [data-theme]    -> class 制深色模式（Tailwind darkMode:'class'）
+//   - --<token>-light / --<token>-dark     -> 显式分档
+//   - Tailwind/shadcn 命名映射：--background->surface-page、--foreground->text-primary、
+//     --card/--popover->surface-raised、--muted-foreground->text-muted、--border->border-default、
+//     --primary->accent …（含 Tailwind v4 的 --color-* 前缀）
+//   - --theme-color / --accent-color / --accent / --primary -> 方案主色
+// 未解析到的令牌回落 default 包对应档。令牌与主色都解析不到时返回 null。
 // ---------------------------------------------------------------------------
 
 export const CUSTOM_CSS_STYLE_ID = "rin-custom-css";
 
-const HEX_VALUE = /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/;
-
+/** 接受 3/4/6/8 位十六进制（4/8 位的 alpha 部分被剥离，仅取 RGB） */
 function normalizeHex(value: string): string | null {
-  const match = HEX_VALUE.exec(value.trim());
+  const match = /^#([0-9a-fA-F]{3,8})$/.exec(value.trim());
   if (!match) return null;
   let hex = match[1];
   if (hex.length === 3) {
     hex = hex[0] + hex[0] + hex[1] + hex[1] + hex[2] + hex[2];
+  } else if (hex.length === 4) {
+    hex = hex.slice(0, 3);
+  } else if (hex.length === 8) {
+    hex = hex.slice(0, 6);
+  } else if (hex.length !== 6) {
+    return null;
   }
   return `#${hex.toLowerCase()}`;
 }
 
-/** 剥掉注释，避免注释里的示例值被误解析 */
-function stripCssComments(css: string): string {
-  return css.replace(/\/\*[\s\S]*?\*\//g, "");
+/** 外部令牌名 -> Rin 令牌（覆盖 Tailwind v3/v4 与 shadcn 常见命名） */
+const TOKEN_ALIASES: Record<string, ThemeToken> = {
+  background: "surface-page",
+  "bg-default": "surface-page",
+  card: "surface-raised",
+  popover: "surface-raised",
+  sunken: "surface-sunken",
+  "color-muted": "surface-sunken",
+  hover: "surface-hover",
+  "color-secondary": "surface-hover",
+  active: "surface-active",
+  foreground: "text-primary",
+  "fg-default": "text-primary",
+  "text-color": "text-primary",
+  "text-default": "text-primary",
+  "color-text": "text-primary",
+  secondary: "text-secondary",
+  "secondary-foreground": "text-secondary",
+  muted: "text-muted",
+  "muted-foreground": "text-muted",
+  border: "border-default",
+  "border-color": "border-default",
+  input: "border-default",
+  ring: "border-strong",
+};
+
+/** 由 @media / @supports 前导判断其约束的配色档 */
+function mediaModeOf(prelude: string): "light" | "dark" | null {
+  const b = prelude.toLowerCase();
+  if (/prefers-color-scheme:\s*dark/.test(b) || /color-scheme:\s*dark/.test(b)) return "dark";
+  if (/prefers-color-scheme:\s*light/.test(b) || /color-scheme:\s*light/.test(b)) return "light";
+  return null;
+}
+
+/** 由选择器判断其约束的配色档 */
+function selectorMode(selector: string): "light" | "dark" | "root" | "unspecified" {
+  if (/\[data-color-mode\s*=\s*["']?dark["']?\]/i.test(selector)) return "dark";
+  if (/\[data-color-mode\s*=\s*["']?light["']?\]/i.test(selector)) return "light";
+  if (
+    /\.dark\b/.test(selector) ||
+    /(?:root|html|body)\.dark\b/.test(selector) ||
+    /\[data-theme\s*=\s*["']?dark["']?\]/i.test(selector)
+  )
+    return "dark";
+  if (/\.light\b/.test(selector) || /\[data-theme\s*=\s*["']?light["']?\]/i.test(selector)) return "light";
+  if (/:root\b|\bhtml\b|\bbody\b/.test(selector)) return "root";
+  return "unspecified";
+}
+
+/** 找到 openIdx 处 '{' 匹配的右括号，返回内部内容与结束位置 */
+function matchBrace(css: string, openIdx: number): { body: string; end: number } {
+  let depth = 1;
+  let j = openIdx + 1;
+  while (j < css.length && depth > 0) {
+    if (css[j] === "{") depth++;
+    else if (css[j] === "}") depth--;
+    j++;
+  }
+  return { body: css.slice(openIdx + 1, j - 1), end: j };
 }
 
 /**
- * 把外部主题（Hexo/Halo 等）的 CSS 文本解析成 Rin 令牌色板。
- *
- * 识别规则（刻意保守，只认与 Rin 令牌同名或 `--<token>-light/-dark` 形式的
- * 十六进制色值；命名不同的值解析不到，需先按 docs 的对照映射改名）：
- * - `:root { --surface-page: #fff }`            → 同时填 light/dark 两档
- * - `[data-color-mode="light"] { … }` / `="dark"` → 只填对应档
- * - 任何块里的 `--<token>-light` / `--<token>-dark` → 只填对应档
- * - `--theme-color` / `--accent-color` / `--accent` → 方案主色
- *
- * 未解析到的令牌回落 default 包对应档。令牌与主色都解析不到时返回 null。
+ * 把 CSS 扫描成规则列表。媒体查询/容器/特性查询（@media/@supports/@container）
+ * 作为作用域包裹，将其内部规则继承对应配色档后递归收集；@keyframes/@font-face 等
+ * 直接丢弃。嵌套规则（主题 CSS 中极少出现）按单层处理。
  */
+function scanRules(css: string, inheritMode: "light" | "dark" | null, out: Rule[]): void {
+  let i = 0;
+  let buf = "";
+  const n = css.length;
+  while (i < n) {
+    const c = css[i];
+    if (c === "{") {
+      const trimmed = buf.trim();
+      if (trimmed.startsWith("@")) {
+        const inner = matchBrace(css, i);
+        const keyword = trimmed.slice(1).split(/[\s(]/)[0];
+        const mode = mediaModeOf(trimmed);
+        if (keyword === "media" || keyword === "supports" || keyword === "container") {
+          scanRules(inner.body, mode ?? inheritMode, out);
+        }
+        // 其它 @ 规则（keyframes / font-face 等）丢弃其内容
+        buf = "";
+        i = inner.end;
+        continue;
+      }
+      const inner = matchBrace(css, i);
+      out.push({ selector: trimmed, inheritMode, body: inner.body });
+      buf = "";
+      i = inner.end;
+      continue;
+    }
+    if (c === "}") {
+      // 游离的右括号（来自被丢弃的 @ 规则）：清空缓冲即可
+      buf = "";
+      i++;
+      continue;
+    }
+    buf += c;
+    i++;
+  }
+}
+
+interface Rule {
+  selector: string;
+  inheritMode: "light" | "dark" | null;
+  body: string;
+}
+
+const ACCENT_NAMES = new Set([
+  "theme-color",
+  "accent-color",
+  "accent",
+  "primary",
+  "color-primary",
+]);
+
 export function importSchemeFromCss(cssText: string): ThemeSchemePack | null {
-  const css = stripCssComments(cssText);
+  const css = cssText.replace(/\/\*[\s\S]*?\*\//g, "");
   const fallback = THEME_SCHEMES.default;
   const light: Record<ThemeToken, string> = { ...fallback.light };
   const dark: Record<ThemeToken, string> = { ...fallback.dark };
@@ -282,26 +567,27 @@ export function importSchemeFromCss(cssText: string): ThemeSchemePack | null {
     found += 1;
   };
 
-  const blockRe = /([^{}]+)\{([^{}]*)\}/g;
-  let block: RegExpExecArray | null;
-  while ((block = blockRe.exec(css))) {
-    const selector = block[1];
-    let blockMode: "light" | "dark" | "root" = "root";
-    if (/\[data-color-mode\s*=\s*["']?dark["']?\]/.test(selector)) {
-      blockMode = "dark";
-    } else if (/\[data-color-mode\s*=\s*["']?light["']?\]/.test(selector)) {
-      blockMode = "light";
-    } else if (!/:root|\bhtml\b|\bbody\b/.test(selector)) {
-      continue;
-    }
+  const rules: Rule[] = [];
+  scanRules(css, null, rules);
+
+  for (const rule of rules) {
+    const selMode = selectorMode(rule.selector);
+    let mode: "light" | "dark" | "both" | "skip";
+    if (selMode === "dark") mode = "dark";
+    else if (selMode === "light") mode = "light";
+    else if (rule.inheritMode === "dark") mode = "dark";
+    else if (rule.inheritMode === "light") mode = "light";
+    else if (selMode === "root") mode = "both";
+    else mode = "skip";
+    if (mode === "skip") continue;
 
     const declRe = /--([A-Za-z0-9-]+)\s*:\s*([^;]+)/g;
     let decl: RegExpExecArray | null;
-    while ((decl = declRe.exec(block[2]))) {
+    while ((decl = declRe.exec(rule.body))) {
       const name = decl[1];
       const hex = normalizeHex(decl[2]);
       if (!hex) continue;
-      if (name === "theme-color" || name === "accent-color" || name === "accent") {
+      if (ACCENT_NAMES.has(name)) {
         accent = hex;
         found += 1;
         continue;
@@ -309,15 +595,17 @@ export function importSchemeFromCss(cssText: string): ThemeSchemePack | null {
       const suffixed = /^([a-z-]+)-(light|dark)$/.exec(name);
       if (suffixed) {
         const token = suffixed[1] as ThemeToken;
-        if (THEME_TOKENS.includes(token)) {
-          assign(token, suffixed[2] as "light" | "dark", hex);
-        }
+        if (THEME_TOKENS.includes(token)) assign(token, suffixed[2] as "light" | "dark", hex);
         continue;
       }
-      const token = name as ThemeToken;
-      if (THEME_TOKENS.includes(token)) {
-        assign(token, blockMode === "root" ? "both" : blockMode, hex);
-      }
+      const baseName = name.startsWith("color-") ? name.slice(6) : name;
+      const aliased = TOKEN_ALIASES[baseName] ?? TOKEN_ALIASES[name];
+      const token = (aliased && THEME_TOKENS.includes(aliased))
+        ? aliased
+        : THEME_TOKENS.includes(name as ThemeToken)
+          ? (name as ThemeToken)
+          : null;
+      if (token) assign(token, mode, hex);
     }
   }
 

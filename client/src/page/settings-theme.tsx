@@ -63,6 +63,8 @@ const THEME_COLOR_OPTIONS = [
   { label: "Blue", value: "#2563eb" },
   { label: "Teal", value: "#0f766e" },
   { label: "Orange", value: "#ea580c" },
+  { label: "Lavender", value: "#a78bfa" },
+  { label: "Mint", value: "#10b981" },
 ];
 
 const CURSOR_OPTIONS = [

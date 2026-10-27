@@ -578,7 +578,13 @@
         "forest": "林绿",
         "mono": "墨灰",
         "amber": "暖砂",
-        "custom": "自定义"
+        "custom": "自定义",
+        "lavender": "薰衣草",
+        "mint": "薄荷",
+        "coral": "珊瑚",
+        "nord": "北欧",
+        "coffee": "咖啡",
+        "cyber": "赛博"
       }
     },
     "custom_css": {
@@ -600,7 +606,9 @@
         "violet": "紫色",
         "blue": "蓝色",
         "teal": "青绿",
-        "orange": "橙色"
+        "orange": "橙色",
+        "lavender": "薰衣草",
+        "mint": "薄荷"
       }
     },
     "rss": {

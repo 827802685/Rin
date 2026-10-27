@@ -578,7 +578,13 @@
         "forest": "Forest",
         "mono": "Ink",
         "amber": "Amber",
-        "custom": "Custom (imported)"
+        "custom": "Custom (imported)",
+        "lavender": "Lavender",
+        "mint": "Mint",
+        "coral": "Coral",
+        "nord": "Nord",
+        "coffee": "Coffee",
+        "cyber": "Cyber"
       }
     },
     "custom_css": {
@@ -600,7 +606,9 @@
         "violet": "Violet",
         "blue": "Blue",
         "teal": "Teal",
-        "orange": "Orange"
+        "orange": "Orange",
+        "lavender": "Lavender",
+        "mint": "Mint"
       }
     },
     "rss": {
