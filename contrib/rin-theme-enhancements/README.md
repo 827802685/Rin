@@ -6,7 +6,7 @@
 2. **增强外部主题接入，支持 Astro（兼修解析 bug）** —— 满足"添加 theme 支持 hexo/astro"。
 3. **主题模块 bug 扫描与修复**。
 
-> 说明：仓库 `theme/` 目录下含一个数 GB 的模型文件（`芙宁娜免费模型`），导致整仓无法在沙箱内完整下载。因此本工作基于 **精准抓取的真实源码**（`client/src/utils/theme-scheme.ts`、`theme-color.ts`、`page/settings-theme.tsx`、两份 locale）完成，并通过独立单测 + 语法检查验证，而非完整 `bun build`（沙箱无法跑通）。
+> 说明：仓库 `theme/` 含较大体积的 Live2D 模型/光标资产，叠加沙箱到 GitHub 的 git/TLS 传输不稳，整仓无法在沙箱内稳定完整下载（codeload tarball 易中断）。因此本工作基于 **精准抓取的真实源码**（`client/src/utils/theme-scheme.ts`、`theme-color.ts`、`page/settings-theme.tsx`、四份 locale）完成，并通过真实模块 import + 独立单测 + 语法检查验证，而非完整 `bun build`（沙箱无法跑通）。
 
 ---
 
@@ -61,9 +61,29 @@
 
 ---
 
-## 四、产物与验证
+## 四、第三轮：测试与 i18n 集成修复（端到端验证发现）
 
-- 补丁文件：`/workspace/rin-theme-enhancements.patch`（相对仓库根，4 文件，+413/−49，含 oklch 修复）
+前两轮只改源码、没同步测试与全语言 i18n，会直接打挂上游 CI。本轮补齐：
+
+**发现的问题（均为前两轮改动的"集成断裂"）：**
+
+| # | 文件 | 断裂 | 原因 |
+|---|------|------|------|
+| A | `client/src/utils/__tests__/theme-scheme.test.ts` | 断言 `THEME_SCHEME_IDS` **恰好 6 套** → 我加 6 套变 12 → 测试红 | 测试断言硬编码数量 |
+| B | 同上 | 断言 `rgb(1,2,3)` 解析为 `null` → 我为支持 Astro 改成 rgb 转 hex → 现返回 pack → 测试红 | 旧行为被固化成断言 |
+| C | `client/src/__tests__/i18n-consistency.test.ts` | 断言 ja/zh-CN/zh-TW 键集合与 en **完全一致** → 我上一轮只给 en+zh-CN 加了 8 个新键，ja/zh-TW 缺失 → 测试红；且日/繁用户会看到裸 key（`settings.theme_scheme.options.lavender`） | i18n 补键不全 |
+
+**修复：**
+- 测试：`ships the six preset packs` → 12 套全量断言；`rgb()→null` 断言改写为"现代色彩函数"测试（`rgb()/hsl()→hex`、`oklch()/var()` 原样透传），并新增 **Astro / shadcn 导入测试**（`@media` + `.dark` 块经 Tailwind 命名映射正确分档）。
+- i18n：给 `ja`、`zh-TW` 补全 8 个键（6 方案 + 2 强调色），翻译到位（日：ラベンダー/ミント/コーラル/ノルド/コーヒー/サイバー；繁：薰衣草/薄荷/珊瑚/北歐/咖啡/賽博）。
+
+**验证：** 真实模块 `import` 跑 12 项关键断言全过；四语言各 **713 键完全对齐**（`i18n-consistency` 通过）；独立单测 38 项全过；累计补丁 `git apply --check` 干净通过。
+
+---
+
+## 五、产物与验证
+
+- 补丁文件：`/workspace/rin-theme-enhancements.patch`（相对仓库根，7 文件，+469/−56，含三轮累计改动）
 - 完整新文件：`/workspace/deliverables/theme-scheme.ts`（可直接覆盖）
 - 解析器单测：`/workspace/deliverables/test-importScheme.mjs`
 

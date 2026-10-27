@@ -578,7 +578,13 @@
         "forest": "森",
         "mono": "墨",
         "amber": "暖砂",
-        "custom": "カスタム"
+        "custom": "カスタム",
+        "lavender": "ラベンダー",
+        "mint": "ミント",
+        "coral": "コーラル",
+        "nord": "ノルド",
+        "coffee": "コーヒー",
+        "cyber": "サイバー"
       }
     },
     "custom_css": {
@@ -600,7 +606,9 @@
         "violet": "バイオレット",
         "blue": "ブルー",
         "teal": "ティール",
-        "orange": "オレンジ"
+        "orange": "オレンジ",
+        "lavender": "ラベンダー",
+        "mint": "ミント"
       }
     },
     "rss": {

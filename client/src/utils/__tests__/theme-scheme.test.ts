@@ -27,12 +27,18 @@ afterEach(() => {
 });
 
 describe("THEME_SCHEMES", () => {
-  it("ships the six preset packs", () => {
+  it("ships all preset packs (original 6 + 6 new beautify templates)", () => {
     expect([...THEME_SCHEME_IDS].sort()).toEqual([
       "amber",
+      "coffee",
+      "coral",
+      "cyber",
       "default",
       "forest",
+      "lavender",
+      "mint",
       "mono",
+      "nord",
       "ocean",
       "sakura",
     ]);
@@ -164,10 +170,37 @@ describe("importSchemeFromCss", () => {
   it("returns null when nothing token-shaped is present", () => {
     expect(importSchemeFromCss("")).toBeNull();
     expect(importSchemeFromCss("body { margin: 0 }")).toBeNull();
-    // 非十六进制值（rgb()/命名色）不解析
-    expect(importSchemeFromCss(":root{--surface-page:rgb(1,2,3)}")).toBeNull();
+    // 命名色（非颜色文本）不解析，不污染令牌
+    expect(importSchemeFromCss(":root{--surface-page:rebeccapurple}")).toBeNull();
     // 注释里的值不算数
     expect(importSchemeFromCss("/* --surface-page:#000000 */")).toBeNull();
+  });
+
+  it("parses modern color functions: rgb()/hsl() -> hex, oklch() passthrough", () => {
+    // rgb()/hsl() 转 6 位 hex，让现代主题也能被导入
+    const rgbPack = importSchemeFromCss(":root{--surface-page:rgb(1,2,3)}")!;
+    expect(rgbPack.light["surface-page"]).toBe("#010203");
+    const hslPack = importSchemeFromCss(":root{--surface-page:hsl(210, 50%, 50%)}")!;
+    expect(hslPack.light["surface-page"]).toMatch(HEX);
+    // oklch() 等浏览器原生函数原样透传，保持现代主题色彩保真
+    const oklchPack = importSchemeFromCss(":root{--surface-page:oklch(0.7 0.1 250)}")!;
+    expect(oklchPack.light["surface-page"]).toBe("oklch(0.7 0.1 250)");
+  });
+
+  it("imports Astro / shadcn themes via @media and .dark blocks", () => {
+    const pack = importSchemeFromCss(`
+      :root { --background: #fafafa; --foreground: #111111; }
+      .dark { --background: #111111; --foreground: #fafafa; }
+      @media (prefers-color-scheme: dark) { :root { --border: #333333; } }
+    `);
+    expect(pack).not.toBeNull();
+    // Tailwind/shadcn 命名 -> Rin 令牌
+    expect(pack!.light["surface-page"]).toBe("#fafafa");
+    expect(pack!.dark["surface-page"]).toBe("#111111");
+    expect(pack!.dark["text-primary"]).toBe("#fafafa");
+    // @media dark 包裹的令牌填 dark 档；未提供的 light 档回落 default
+    expect(pack!.dark["border-default"]).toBe("#333333");
+    expect(pack!.light["border-default"]).toBe(THEME_SCHEMES.default.light["border-default"]);
   });
 
   it("ignores unknown custom properties", () => {
