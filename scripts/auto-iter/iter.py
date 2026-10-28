@@ -95,10 +95,74 @@ def task_ci_hardening():
         return None, 'workflows 已具备 timeout/concurrency'
     return changes, f'为 {len(changes)} 个 workflow 增加 timeout-minutes（CI 健壮性）'
 
+def task_ci_concurrency():
+    """为缺少 concurrency 的 workflow 增加并发控制（取消同分支上一次运行）。"""
+    wfdir = os.path.join(REPO, '.github', 'workflows')
+    if not os.path.isdir(wfdir):
+        return None, '无 workflows 目录'
+    changes = {}
+    changed_any = False
+    for fn in os.listdir(wfdir):
+        if not fn.endswith(('.yml', '.yaml')):
+            continue
+        fp = os.path.join(wfdir, fn)
+        txt = open(fp, encoding='utf-8').read()
+        if 'concurrency:' in txt:
+            continue
+        blk = ('concurrency:\n'
+               '  group: ${{ github.workflow }}-${{ github.ref }}\n'
+               '  cancel-in-progress: false\n\n')
+        # 插入到 on: 块之后、jobs: 之前
+        if 'jobs:' in txt:
+            txt2 = txt.replace('jobs:', blk + 'jobs:', 1)
+        else:
+            txt2 = txt + '\n' + blk
+        if txt2 != txt:
+            changes[f'.github/workflows/{fn}'] = txt2
+            changed_any = True
+    if not changed_any:
+        return None, 'workflows 已具备 concurrency'
+    return changes, f'为 {len(changes)} 个 workflow 增加 concurrency 并发控制'
+
+def task_editorconfig():
+    """若仓库缺少 .editorconfig，则添加一个通用配置（跨编辑器保持一致性）。"""
+    p = os.path.join(REPO, '.editorconfig')
+    if os.path.exists(p):
+        return None, '.editorconfig 已存在'
+    content = (
+        "root = true\n\n"
+        "[*]\n"
+        "charset = utf-8\n"
+        "end_of_line = lf\n"
+        "insert_final_newline = true\n"
+        "trim_trailing_whitespace = true\n"
+        "indent_style = space\n"
+        "indent_size = 2\n\n"
+        "[*.{md,yml,yaml,json}]\n"
+        "trim_trailing_whitespace = false\n"
+    )
+    return {'.editorconfig': content}, '新增 .editorconfig（统一编辑器格式）'
+
+def task_readme_autoiter():
+    """在 README 中补充「自动迭代」维护说明（若不存在）。"""
+    p = os.path.join(REPO, 'README.md')
+    if not os.path.exists(p):
+        return None, '无 README.md'
+    txt = open(p, encoding='utf-8').read()
+    if 'auto-iter' in txt or '自动迭代' in txt:
+        return None, 'README 已含自动迭代说明'
+    section = (
+        "\n## 自动迭代 (auto-iter)\n\n"
+        "本仓库由 `scripts/auto-iter/` 引擎在 `auto` 分支上每日自主迭代："
+        "同步 main → 分析状态 → 最小改动 → 构建/测试门禁 → 提交 → 每 5 次成功迭代合并回 main。"
+        "定时由 GitHub Actions 工作流 `.github/workflows/auto-iterate.yml` 驱动（每天 01:00 北京）。\n"
+    )
+    return {'README.md': txt.rstrip() + '\n' + section}, '在 README 补充自动迭代维护说明'
+
 def choose_target(iter_num):
     """返回 (action_type, summary, changes) 或 (None, reason, None)。"""
     # 规则化队列：依次尝试安全的、可独立验证的改进
-    queue = [task_gitignore, task_ci_hardening]
+    queue = [task_gitignore, task_ci_hardening, task_ci_concurrency, task_editorconfig, task_readme_autoiter]
     for fn in queue:
         changes, reason = fn()
         if changes:
@@ -187,18 +251,27 @@ def main():
         rinlib.sync_local('main', REPO)
         return
 
-    # 9) 提交（含迭代编号/类型/摘要/构建测试结果）
-    print('[9] 提交到 auto 分支 ...')
-    msg = build_message(iter_num, action, summary, build_pass, test_pass)
-    sha = rinlib.put_commit('auto', changes, msg)
-    print('    提交:', sha)
-
-    # 状态更新
+    # 状态更新（提交前先落盘，使 state.json 反映本次迭代）
     st['iteration'] = iter_num
     st['since_merge'] = st.get('since_merge', 0) + 1
     st['history'].append({'iter': iter_num, 'action': action, 'summary': summary,
                           'build': 'PASS' if build_pass else 'FAIL',
-                          'tests': 'PASS' if test_pass else 'FAIL', 'sha': sha[:10], 'ts': msg.split('Timestamp: ')[-1].strip()})
+                          'tests': 'PASS' if test_pass else 'FAIL', 'sha': '',
+                          'ts': datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')})
+    os.makedirs(os.path.dirname(STATE), exist_ok=True)
+    save_state(st)
+
+    # 9) 提交（含迭代编号/类型/摘要/构建测试结果）—— 同时持久化 state.json 到 auto 分支
+    print('[9] 提交到 auto 分支 ...')
+    msg = build_message(iter_num, action, summary, build_pass, test_pass)
+    # 将 state.json 一并纳入提交，保证 GA 临时文件系统中跨次保留迭代状态
+    if os.path.commonpath([os.path.abspath(STATE), os.path.abspath(REPO)]) == os.path.abspath(REPO):
+        changes['scripts/auto-iter/state.json'] = open(STATE, encoding='utf-8').read()
+    sha = rinlib.put_commit('auto', changes, msg)
+    print('    提交:', sha)
+    # 回填本次提交 sha 到历史并再次保存
+    if st['history']:
+        st['history'][-1]['sha'] = sha[:10]
     save_state(st)
 
     # 10) 报告
