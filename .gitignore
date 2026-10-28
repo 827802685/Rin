@@ -47,3 +47,18 @@ dist-ssr
 .qoder/
 .workbuddy/
 .zcode/
+
+# --- auto-iter: 补齐产物/缓存忽略规则（迭代规范要求） ---
+build/
+dist/
+target/
+out/
+coverage/
+test-results/
+logs/
+output/
+node_modules/
+.venv/
+env/
+vendor/
+*.tmp

@@ -1,0 +1,14 @@
+{
+  "iteration": 1,
+  "since_merge": 1,
+  "last_merge_iter": 0,
+  "history": [
+    {
+      "iter": 1,
+      "action": "\u65b0\u589e\u529f\u80fd",
+      "summary": "\u5f15\u5165\u81ea\u4e3b\u8fed\u4ee3\u5f15\u64ce\uff08scripts/auto-iter\uff09+ \u8865\u5168 .gitignore \u4ea7\u7269\u5ffd\u7565\u89c4\u5219",
+      "build": "PASS",
+      "tests": "PASS"
+    }
+  ]
+}
