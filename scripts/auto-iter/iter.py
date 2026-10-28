@@ -138,12 +138,13 @@ def main():
     iter_num = args.iter if args.iter else st['iteration'] + 1
     print(f'===== Rin 迭代 #{iter_num} =====')
 
-    # 1) 同步主分支最新代码
+    # 1) 同步最新基线：优先 auto（迭代所在分支，避免重复已做的改动），否则 main
+    sync_ref = 'auto' if rinlib.branch_exists('auto') else 'main'
     if SYSYNC:
-        print('[1] 同步主分支最新代码 (api.github.com) ...')
-        rinlib.sync_local('main', REPO)
+        print(f'[1] 同步 {sync_ref} 分支最新代码 (api.github.com) ...')
+        rinlib.sync_local(sync_ref, REPO)
     else:
-        print('[1] 跳过同步（RIN_SYNC=0，使用本地/checkout 文件）')
+        print(f'[1] 跳过同步（RIN_SYNC=0，使用本地/checkout 的 {sync_ref} 文件）')
 
     # 2) 切换/确保 auto 分支
     print('[2] 确保 auto 分支 ...')

@@ -21,10 +21,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
-      - name: Checkout main
+      # 检出 auto 分支（迭代所在分支），使本地文件反映 auto 当前状态，避免重复已做改动
+      - name: Checkout auto
         uses: actions/checkout@v4
         with:
-          ref: main
+          ref: auto
           fetch-depth: 0
 
       - name: Setup Bun
