@@ -86,8 +86,8 @@ def task_ci_hardening():
         txt = open(fp, encoding='utf-8').read()
         if 'concurrency:' in txt or 'timeout-minutes:' in txt:
             continue
-        # 在每个 job 下注入 timeout-minutes: 30
-        txt2 = re.sub(r'(\n\s{2})(runs-on: .+)', r'\1\2\n\1timeout-minutes: 30', txt)
+        # 在 runs-on 所在的 job 下注入 timeout-minutes: 30（适配任意缩进）
+        txt2 = re.sub(r'(\n)(\s*)runs-on: ', r'\1\2timeout-minutes: 30\n\2', txt)
         if txt2 != txt:
             changes[f'.github/workflows/{fn}'] = txt2
             changed_any = True
