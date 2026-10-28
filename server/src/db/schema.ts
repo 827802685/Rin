@@ -16,6 +16,10 @@ export const feeds = sqliteTable("feeds", {
     listed: integer("listed").default(1).notNull(),
     draft: integer("draft").default(1).notNull(),
     top: integer("top").default(0).notNull(),
+    // P0 blog-markdown 导入器 + 内容组织所需的扩展字段
+    slug: text("slug"),         // 自定义 URL slug（可空，由导入器或手动设置）
+    cover: text("cover"),       // 文章封面图 URL（导入器从正文首图或 frontmatter 提取）
+    category: text("category"), // 分类（taxonomy），区别于扁平 hashtags
     uid: integer("uid").references(() => users.id).notNull(),
     createdAt: created_at,
     updatedAt: updated_at,

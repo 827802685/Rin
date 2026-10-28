@@ -77,3 +77,24 @@ describe("Markdown code blocks", () => {
         expect(screen.getByText("npm install")).toBeTruthy();
     });
 });
+
+describe("Markdown math and diagrams", () => {
+    beforeEach(() => {
+        installClipboard(async () => {});
+    });
+
+    it("renders KaTeX for inline and block math (regression for 公式图表)", () => {
+        const { container } = render(
+            <Markdown content={"Inline $x^2$ and block $$\\int_0^1 x\\,dx$$"} />,
+        );
+        expect(container.querySelector(".katex")).toBeTruthy();
+    });
+
+    it("transforms ```mermaid fenced blocks into a mermaid placeholder", () => {
+        const { container } = render(
+            <Markdown content={"```mermaid\ngraph TD; A-->B\n```"} />,
+        );
+        // remarkMermaid 在解析期把 mermaid 代码块转成 <pre class="mermaid_default">
+        expect(container.innerHTML).toContain("mermaid");
+    });
+});
