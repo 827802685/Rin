@@ -8,7 +8,8 @@ on:
 
 jobs:
   test-server:
-    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       
@@ -29,7 +30,8 @@ jobs:
         working-directory: ./server
 
   test-client:
-    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       
@@ -54,7 +56,8 @@ jobs:
         working-directory: ./client
 
   typecheck:
-    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       
