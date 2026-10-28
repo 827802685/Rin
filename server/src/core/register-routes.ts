@@ -13,6 +13,9 @@ import { SEOService } from "../services/seo";
 import { BlobService, StorageService } from "../services/storage";
 import { TagService } from "../services/tag";
 import { UserService } from "../services/user";
+import { MarkdownImportService } from "../services/markdown-import";
+import { TaxonomyService } from "../services/taxonomy";
+import { BacklinksService } from "../services/backlinks";
 
 export function registerRoutes(app: RinApp) {
   app.get("/", (c) => c.text("Hi"));
@@ -35,4 +38,9 @@ export function registerRoutes(app: RinApp) {
   app.route("/", SEOService());
   app.route("/favicon", FaviconService());
   app.route("/favicon.ico", FaviconService());
+
+  // P0 blog-markdown 导入器 + 内容组织（分类/相关/反链）
+  app.route("/import", MarkdownImportService());
+  app.route("/taxonomy", TaxonomyService());
+  app.route("/backlinks", BacklinksService());
 }
