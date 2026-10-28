@@ -34,6 +34,8 @@ def _req(method, path, body=None, headers=None, retries=6):
             with urllib.request.urlopen(req, timeout=60) as r:
                 txt = r.read().decode('utf-8', 'replace')
                 ctype = r.headers.get('Content-Type', '')
+                if not txt:
+                    return {}
                 if 'application/json' in ctype:
                     return json.loads(txt) if txt else {}
                 return txt
@@ -105,10 +107,12 @@ def get_commit(sha):
     return api_get(f'/repos/{OWNER}/{REPO}/git/commits/{sha}')
 
 def merge(head, base):
-    """把 head 合并进 base（base 接收合并提交），返回 merge commit sha 或 None（已是最新/冲突）。"""
+    """把 head 合并进 base（base 接收合并提交），返回 merge commit sha 或 None（已是最新/冲突/无操作）。"""
     try:
         d = api_post(f'/repos/{OWNER}/{REPO}/merges', {'base': base, 'head': head})
-        return d.get('sha')
+        if isinstance(d, dict):
+            return d.get('sha')
+        return None  # 空响应：已是最新/无操作
     except urllib.error.HTTPError as e:
         print(f'  [merge {head}->{base}] failed: {e.read().decode()[:200]}', file=sys.stderr)
         return None
