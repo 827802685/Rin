@@ -1,0 +1,49 @@
+name: Auto Iterate (Rin)
+
+# 自主项目迭代：每天 01:00 (Asia/Shanghai = 17:00 UTC) 在 auto 分支上做一次迭代，
+# 每 5 次成功迭代合并回 main。所有远端读写走 GitHub REST API（用仓库内置 GITHUB_TOKEN），
+# 因此无需把个人 PAT 存为密钥。
+on:
+  schedule:
+    - cron: "0 17 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: read
+
+concurrency:
+  group: rin-auto-iterate
+  cancel-in-progress: false
+
+jobs:
+  iterate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      # 检出 auto 分支（迭代所在分支），使本地文件反映 auto 当前状态，避免重复已做改动
+      - name: Checkout auto
+        uses: actions/checkout@v4
+        with:
+          ref: auto
+          fetch-depth: 0
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v1
+        with:
+          bun-version: 1.3.13
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Run one iteration
+        env:
+          RIN_AUTO_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RIN_LOCAL: ${{ github.workspace }}
+          RIN_SYNC: "0"
+          RIN_STATE: ${{ github.workspace }}/scripts/auto-iter/state.json
+        run: python3 scripts/auto-iter/iter.py
+
+      - name: Show report
+        if: always()
+        run: cat scripts/auto-iter/state.json || true

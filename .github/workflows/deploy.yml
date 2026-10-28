@@ -25,9 +25,14 @@ permissions:
   pull-requests: write
   actions: read
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   prepare:
-    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    ubuntu-latest
     if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
     outputs:
       is_production: ${{ steps.meta.outputs.is_production }}
@@ -92,7 +97,8 @@ jobs:
 
   deploy:
     needs: prepare
-    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    ubuntu-latest
     environment:
       name: ${{ needs.prepare.outputs.is_production == 'true' && 'production' || 'preview' }}
       url: ${{ steps.deploy.outputs.url }}

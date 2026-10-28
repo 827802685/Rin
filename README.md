@@ -196,3 +196,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
+
+## 自动迭代 (auto-iter)
+
+本仓库由 `scripts/auto-iter/` 引擎在 `auto` 分支上每日自主迭代：同步 main → 分析状态 → 最小改动 → 构建/测试门禁 → 提交 → 每 5 次成功迭代合并回 main。定时由 GitHub Actions 工作流 `.github/workflows/auto-iterate.yml` 驱动（每天 01:00 北京）。
