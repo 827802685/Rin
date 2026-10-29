@@ -19,7 +19,6 @@ import { Button } from "../components/button";
 import { Tips } from "../components/tips";
 import { renderMermaidBlocks } from "../utils/mermaid-render";
 import { AdjacentSection } from "../components/adjacent_feed.tsx";
-import { ReadingProgress } from "../components/reading-progress";
 import { stripImageUrlMetadata } from "../utils/image-upload";
 import { estimateReading } from "../utils/reading-time";
 import { ShareBar } from "../components/theme/share-bar";
@@ -127,9 +126,6 @@ export function FeedPage({ id, TOC, clean }: { id: string, TOC: () => JSX.Elemen
 
   return (
     <>
-      {/* 阅读进度条用 position: fixed 贴视口顶部。放进下面的 .ani-show 后，
-          动画 forwards 留下的 transform 会让它变成局部定位，滚动后跟着正文一起滚走。 */}
-      {feed && !error && <ReadingProgress />}
       <Waiting for={feed || error}>
       {feed && (
         <SiteMeta

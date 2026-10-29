@@ -1084,6 +1084,7 @@
       "prev": "前の曲",
       "next": "次の曲",
       "unknown_artist": "アーティスト不明",
+      "no_source": "設定で音源を指定してください",
       "collapse": "折りたたむ",
       "expand": "展開",
       "seek": "シーク",

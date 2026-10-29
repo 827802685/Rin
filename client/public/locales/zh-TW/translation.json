@@ -1084,6 +1084,7 @@
       "prev": "上一曲",
       "next": "下一曲",
       "unknown_artist": "未知藝術家",
+      "no_source": "請在後台設定音訊來源",
       "collapse": "收合",
       "expand": "展開",
       "seek": "拖動進度條",

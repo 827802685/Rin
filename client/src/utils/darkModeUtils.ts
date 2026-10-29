@@ -32,19 +32,60 @@ export function getCurrentColorMode(): "light" | "dark" {
 const FADE_CLASS = "rin-theme-fade";
 const FADE_MS = 320;
 
+// 明暗圆形扩散切换的起点（由 ThemeToggle 点击坐标写入）；无坐标时居中。
+let viewTransitionOrigin: { x: number; y: number } | null = null;
+
+/** 记录深浅切换的视觉原点（点击位置），供 View Transition 圆形扩散使用。 */
+export function setViewTransitionOrigin(x: number, y: number) {
+  viewTransitionOrigin = { x, y };
+}
+
+type ViewTransitionFunction = (callback: () => void) => { finished: Promise<void> };
+
 /**
  * 切深浅档时临时给 html 挂过渡类，让背景/文字/描边交叉淡化。
  * 类只存活一个过渡周期，避免长期给全树挂 transition 影响滚动性能。
- * 不引入 View Transitions：与 Wouter SPA 路由的兼容性风险未知，放弃。
+ *
+ * 增强：浏览器支持 View Transitions 时，用圆形 clip 从点击点扩散展开新配色
+ * （参考 VitePress）。不支持、或用户偏好 reduced-motion 时回退到原交叉淡化。
  */
 export function setDataColorModeWithFade(mode: "light" | "dark") {
   const root = document.documentElement;
-  root.classList.add(FADE_CLASS);
-  root.setAttribute("data-color-mode", mode);
-  window.setTimeout(() => {
-    root.classList.remove(FADE_CLASS);
-  }, FADE_MS);
-  window.dispatchEvent(new Event("colorSchemeChange"));
+
+  const applyMode = () => {
+    root.classList.add(FADE_CLASS);
+    root.setAttribute("data-color-mode", mode);
+    window.setTimeout(() => root.classList.remove(FADE_CLASS), FADE_MS);
+    window.dispatchEvent(new Event("colorSchemeChange"));
+  };
+
+  const reduce =
+    typeof window.matchMedia === "function" &&
+    window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const startVT = (
+    document as unknown as { startViewTransition?: ViewTransitionFunction }
+  ).startViewTransition;
+
+  if (!startVT || reduce) {
+    applyMode();
+    return;
+  }
+
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+  const x = viewTransitionOrigin?.x ?? vw / 2;
+  const y = viewTransitionOrigin?.y ?? vh / 2;
+  const r = Math.hypot(Math.max(x, vw - x), Math.max(y, vh - y));
+  root.style.setProperty("--rin-vt-x", `${x}px`);
+  root.style.setProperty("--rin-vt-y", `${y}px`);
+  root.style.setProperty("--rin-vt-r", `${r}px`);
+  viewTransitionOrigin = null;
+
+  try {
+    startVT(() => applyMode());
+  } catch {
+    applyMode();
+  }
 }
 
 export function useColorMode() {

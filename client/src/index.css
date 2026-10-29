@@ -279,3 +279,161 @@ a.toc-link {
 .is-active-link::before {
   @apply bg-theme;
 }
+
+/* =========================================================================
+   界面美化增强（2026-10）：阅读进度/毛玻璃/平滑滚动/淡入/霓虹/3D/ViewTransition
+   纯 CSS 工具类，组件按需挂 class；全部尊重 prefers-reduced-motion 降级。
+   ========================================================================= */
+
+/* ① 阅读进度条由 ReadingProgress 组件挂载（见 App.tsx），样式内联、不依赖此文件 */
+
+/* ② 毛玻璃：顶栏导航胶囊 / 弹层。配色用 surface-raised 80% 透出背景模糊 */
+.rin-glass {
+  background-color: color-mix(in srgb, var(--surface-raised) 78%, transparent);
+  backdrop-filter: blur(12px) saturate(160%);
+  -webkit-backdrop-filter: blur(12px) saturate(160%);
+}
+
+/* ③ 平滑锚点滚动 + 定制滚动条 */
+html {
+  scroll-behavior: smooth;
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong, #cbd5e1) transparent;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background-color: var(--border-strong, #cbd5e1);
+  border-radius: 9999px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background-color: var(--text-muted, #94a3b8);
+}
+
+/* ④ 滚动淡入 + 视差：元素挂 .rin-reveal / .rin-parallax，由 ScrollEffects 全局观察 */
+.rin-reveal {
+  opacity: 0;
+  transform: translateY(18px);
+  transition: opacity 0.6s ease, transform 0.6s ease;
+}
+
+.rin-reveal.is-visible {
+  opacity: 1;
+  transform: none;
+}
+
+.rin-parallax {
+  will-change: transform;
+}
+
+/* ⑥ 霓虹/渐变光束边框：旋转 conic-gradient 描边（mask 镂空只留边） */
+@property --rin-angle {
+  syntax: "<angle>";
+  inherits: false;
+  initial-value: 0deg;
+}
+
+.rin-neon-border {
+  position: relative;
+}
+
+.rin-neon-border::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1.5px;
+  background: conic-gradient(
+    from var(--rin-angle),
+    var(--theme, #5ab0d8),
+    transparent 25%,
+    var(--theme, #5ab0d8) 55%,
+    transparent 80%
+  );
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  animation: rin-neon-spin 4s linear infinite;
+  pointer-events: none;
+}
+
+@keyframes rin-neon-spin {
+  to {
+    --rin-angle: 360deg;
+  }
+}
+
+/* ⑦ 卡片悬停 3D 微交互（透视 + 轻微倾斜抬升） */
+.rin-3d-card {
+  transform: perspective(900px);
+  transform-style: preserve-3d;
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.rin-3d-card:hover {
+  transform: perspective(900px) rotateX(2.5deg) rotateY(-2.5deg) translateY(-4px);
+}
+
+/* ⑤ 明暗圆形扩散切换（View Transition）：新视图从点击点圆形展开 */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+
+::view-transition-new(root) {
+  z-index: 1;
+}
+
+::view-transition-old(root) {
+  z-index: 0;
+}
+
+::view-transition-new(root) {
+  animation: rin-vt-circle 0.42s ease both;
+}
+
+@keyframes rin-vt-circle {
+  from {
+    clip-path: circle(0px at var(--rin-vt-x, 50%) var(--rin-vt-y, 50%));
+  }
+  to {
+    clip-path: circle(var(--rin-vt-r, 150%) at var(--rin-vt-x, 50%) var(--rin-vt-y, 50%));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  .rin-reveal {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+  .rin-neon-border::before {
+    animation: none;
+  }
+  .rin-3d-card:hover {
+    transform: none;
+  }
+  ::view-transition-new(root) {
+    animation: none;
+  }
+}
