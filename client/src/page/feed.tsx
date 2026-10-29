@@ -22,6 +22,7 @@ import { AdjacentSection } from "../components/adjacent_feed.tsx";
 import { stripImageUrlMetadata } from "../utils/image-upload";
 import { estimateReading } from "../utils/reading-time";
 import { ShareBar } from "../components/theme/share-bar";
+import { Danmaku } from "../components/theme/danmaku";
 import { SidebarTocPortal } from "../components/site-sidebar/sidebar-toc-portal";
 
 function extractFirstMarkdownImageUrl(content: string) {
@@ -45,6 +46,8 @@ export function FeedPage({ id, TOC, clean }: { id: string, TOC: () => JSX.Elemen
   const { showAlert, AlertUI } = useAlert();
   const { showConfirm, ConfirmUI } = useConfirm();
   const [top, setTop] = useState<number>(0);
+  const [likes, setLikes] = useState(0);
+  const [liked, setLiked] = useState(false);
   // 阅读模式（美化⑨）：隐藏顶栏/页脚/浮层组件，专注正文
   const [readingMode, setReadingMode] = useState(false);
   useEffect(() => {
@@ -115,6 +118,8 @@ export function FeedPage({ id, TOC, clean }: { id: string, TOC: () => JSX.Elemen
           setTimeout(() => {
             setFeed(data as any);
             setTop(data.top || 0);
+            setLikes((data as any).likes ?? 0);
+            setLiked(localStorage.getItem(`rin_liked_${id}`) === "1");
             const headImageUrl = extractFirstMarkdownImageUrl(data.content);
             if (headImageUrl) {
               setHeadImage(headImageUrl);
@@ -125,6 +130,20 @@ export function FeedPage({ id, TOC, clean }: { id: string, TOC: () => JSX.Elemen
       });
     ref.current = id;
   }, [id]);
+  function likeFeed() {
+    if (!feed || liked) return;
+    client.feed
+      .like(feed.id)
+      .then(({ data, error }) => {
+        if (error) {
+          showAlert(error.value as string);
+          return;
+        }
+        setLikes(data?.likes ?? likes + 1);
+        setLiked(true);
+        localStorage.setItem(`rin_liked_${feed.id}`, "1");
+      });
+  }
   useEffect(() => {
     // mermaid 改为按需动态加载（见 utils/mermaid-render），仅当页面存在 mermaid 代码块时才拉取 chunk
     void renderMermaidBlocks();
@@ -203,6 +222,19 @@ export function FeedPage({ id, TOC, clean }: { id: string, TOC: () => JSX.Elemen
                         {feed.uv}
                       </span>
                     </p>}
+                    <button
+                      type="button"
+                      onClick={likeFeed}
+                      disabled={liked}
+                      title={liked ? t("article.liked") : t("article.like")}
+                      aria-label={liked ? t("article.liked") : t("article.like")}
+                      className={`flex items-center gap-1 text-[12px] font-normal transition ${
+                        liked ? "text-theme" : "t-muted hover:text-theme"
+                      } ${liked ? "" : "hover:scale-105"}`}
+                    >
+                      <i className={liked ? "ri-heart-3-fill" : "ri-heart-3-line"} />
+                      <span>{likes}</span>
+                    </button>
                     {reading && reading.words > 0 && (
                       <p className="text-[12px] t-muted font-normal">
                         <span>{t("article.word_count", { count: reading.words })}</span>
@@ -293,6 +325,7 @@ export function FeedPage({ id, TOC, clean }: { id: string, TOC: () => JSX.Elemen
                 </div>
               </article>
               <ShareBar title={feed.title ?? ""} url={document.URL} />
+              {feed && <Danmaku feedId={feed.id} />}
               <BacklinksSection id={feed.id} />
               <AdjacentSection id={id} setError={setError} />
               {feed && <Comments id={`${feed.id}`} />}

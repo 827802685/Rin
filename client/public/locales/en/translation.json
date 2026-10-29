@@ -119,7 +119,9 @@
       "title": "Related posts"
     },
     "untitled": "Untitled",
-    "reading_mode": "Reading mode"
+    "reading_mode": "Reading mode",
+    "like": "Like",
+    "liked": "Liked"
   },
   "avatar": {
     "url": "Avatar URL"
@@ -1185,5 +1187,13 @@
     "copy": "Copy",
     "copied": "Copied",
     "failed": "Copy failed"
+  },
+  "danmaku": {
+    "placeholder": "Send a danmaku~",
+    "send": "Send",
+    "guest_name": "Danmaku Guest"
+  },
+  "social": {
+    "aria_label": "Contact the author"
   }
 }

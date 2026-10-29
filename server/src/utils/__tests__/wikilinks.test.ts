@@ -12,7 +12,7 @@ function createTestDB() {
         CREATE TABLE feeds (
             id INTEGER PRIMARY KEY, alias TEXT, title TEXT, summary TEXT DEFAULT '', ai_summary TEXT DEFAULT '', ai_summary_status TEXT DEFAULT '', ai_summary_error TEXT DEFAULT '',
             content TEXT NOT NULL, listed INTEGER DEFAULT 1, draft INTEGER DEFAULT 1, top INTEGER DEFAULT 0,
-            slug TEXT, cover TEXT, category TEXT, uid INTEGER, created_at INTEGER, updated_at INTEGER
+            slug TEXT, cover TEXT, category TEXT, likes INTEGER DEFAULT 0 NOT NULL, uid INTEGER, created_at INTEGER, updated_at INTEGER
         );
     `);
     const db = drizzle(sqlite, { schema });

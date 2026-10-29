@@ -20,6 +20,7 @@ export const feeds = sqliteTable("feeds", {
     slug: text("slug"),         // 自定义 URL slug（可空，由导入器或手动设置）
     cover: text("cover"),       // 文章封面图 URL（导入器从正文首图或 frontmatter 提取）
     category: text("category"), // 分类（taxonomy），区别于扁平 hashtags
+    likes: integer("likes").default(0).notNull(), // 点赞计数（SQL 层 +1 递增）
     uid: integer("uid").references(() => users.id).notNull(),
     createdAt: created_at,
     updatedAt: updated_at,

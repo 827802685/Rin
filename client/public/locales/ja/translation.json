@@ -119,7 +119,9 @@
       "title": "関連記事"
     },
     "untitled": "無題",
-    "reading_mode": "閲読モード"
+    "reading_mode": "閲読モード",
+    "like": "いいね",
+    "liked": "いいね済み"
   },
   "avatar": {
     "url": "アバターURL"
@@ -1185,5 +1187,13 @@
     "copy": "コピー",
     "copied": "コピーしました",
     "failed": "コピーに失敗しました"
+  },
+  "danmaku": {
+    "placeholder": "弾幕をどうぞ～",
+    "send": "送信",
+    "guest_name": "弾幕ゲスト"
+  },
+  "social": {
+    "aria_label": "作者連絡先"
   }
 }

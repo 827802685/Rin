@@ -13,7 +13,7 @@ function createTestDB() {
         CREATE TABLE feeds (
             id INTEGER PRIMARY KEY, alias TEXT, title TEXT, summary TEXT DEFAULT '', ai_summary TEXT DEFAULT '', ai_summary_status TEXT DEFAULT '', ai_summary_error TEXT DEFAULT '',
             content TEXT NOT NULL, listed INTEGER DEFAULT 1, draft INTEGER DEFAULT 1, top INTEGER DEFAULT 0,
-            slug TEXT, cover TEXT, category TEXT, uid INTEGER, created_at INTEGER, updated_at INTEGER
+            slug TEXT, cover TEXT, category TEXT, likes INTEGER DEFAULT 0 NOT NULL, uid INTEGER, created_at INTEGER, updated_at INTEGER
         );
         CREATE TABLE hashtags (id INTEGER PRIMARY KEY, name TEXT NOT NULL, created_at INTEGER, updated_at INTEGER);
         CREATE TABLE feed_hashtags (id INTEGER PRIMARY KEY, feed_id INTEGER, hashtag_id INTEGER, created_at INTEGER, updated_at INTEGER);

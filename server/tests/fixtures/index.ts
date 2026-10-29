@@ -52,6 +52,7 @@ export function createMockDB() {
             slug TEXT,
             cover TEXT,
             category TEXT,
+            likes INTEGER DEFAULT 0 NOT NULL,
             uid INTEGER NOT NULL,
             created_at INTEGER DEFAULT (unixepoch()),
             updated_at INTEGER DEFAULT (unixepoch()),

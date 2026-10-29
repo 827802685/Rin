@@ -16,6 +16,7 @@ const RibbonBackground = lazy(() => import("./ribbon-background"));
 const PowerMode = lazy(() => import("./power-mode"));
 const NoteEffect = lazy(() => import("./note-effect"));
 const CyberEffects = lazy(() => import("./cyber-effects"));
+const SocialFloat = lazy(() => import("./social-float"));
 
 export function ThemeWidgets() {
   const config = useContext(ClientConfigContext);
@@ -29,6 +30,7 @@ export function ThemeWidgets() {
   const preloaderEnabled = config.getBoolean("widget.preloader.enabled");
   const cyberEnabled =
     config.getBoolean("widget.cyber.title_glitch") || config.getBoolean("widget.cyber.grid_background");
+  const socialEnabled = config.getBoolean("widget.social.enabled");
 
   return (
     <>
@@ -66,6 +68,11 @@ export function ThemeWidgets() {
       {cyberEnabled ? (
         <Suspense fallback={null}>
           <CyberEffects />
+        </Suspense>
+      ) : null}
+      {socialEnabled ? (
+        <Suspense fallback={null}>
+          <SocialFloat />
         </Suspense>
       ) : null}
     </>
