@@ -2,6 +2,7 @@ import { useContext, useEffect, useRef, useState } from "react"
 import { SiteMeta } from "../components/site-meta";
 import { Link, useSearch } from "wouter"
 import { FeedCard } from "../components/feed_card"
+import { Banner } from "../components/theme/banner"
 import { Waiting } from "../components/loading"
 import { client } from "../app/runtime"
 import { ProfileContext } from "../state/profile"
@@ -71,6 +72,7 @@ export function FeedsPage() {
         <SiteMeta title={t('article.title')}>
             <Waiting for={feeds.draft.size + feeds.normal.size + feeds.unlisted.size > 0 || status === 'idle'}>
                 <main className="w-full flex flex-col justify-center items-center mb-8">
+                    <Banner />
                     <div className="wauto text-start text-black dark:text-white py-4 text-4xl font-bold">
                         <p>
                             {listState === 'draft' ? t('draft_bin') : listState === 'normal' ? t('article.title') : t('unlisted')}

@@ -11,7 +11,7 @@ export const classicLayoutDefinition: HeaderLayoutDefinition = {
       <div className="hidden w-full items-center justify-between md:flex">
         <BrandLink siteConfig={siteConfig} className="mr-8 hidden flex-row items-center md:flex" />
         <div className="flex min-w-0 flex-1 items-center justify-center">
-          <div className="scrollbar-none min-w-0 max-w-full overflow-x-auto rounded-full bg-w px-2 shadow-xl shadow-light t-primary">
+          <div className="scrollbar-none min-w-0 max-w-full overflow-x-auto rounded-full bg-w px-2 shadow-xl shadow-light t-primary rin-glass">
             <div className="flex min-w-max flex-row items-center whitespace-nowrap">
               {/* 8 个菜单 + 4 个操作按钮时导航会顶到边缘被裁掉半行字：1280 下用 8px 内边距
                   与 14px 字号刚好放得下，2xl 再恢复原来的宽松样式。 */}
@@ -30,7 +30,7 @@ export const classicLayoutDefinition: HeaderLayoutDefinition = {
     return (
       <div className="flex w-full flex-row items-center justify-center md:hidden">
         <div className="w-full flex-row items-center justify-center transition-all duration-500">
-          <div className="flex flex-row items-center rounded-full bg-w px-2 shadow-xl shadow-light t-primary">
+          <div className="flex flex-row items-center rounded-full bg-w px-2 shadow-xl shadow-light t-primary rin-glass">
             <BrandLink
               siteConfig={siteConfig}
               compact

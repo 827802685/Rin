@@ -1084,6 +1084,7 @@
       "prev": "Previous track",
       "next": "Next track",
       "unknown_artist": "Unknown artist",
+      "no_source": "Configure an audio source in settings",
       "collapse": "Collapse",
       "expand": "Expand",
       "seek": "Seek",

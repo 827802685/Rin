@@ -1,4 +1,4 @@
-import { useContext, useState } from "react";
+import { useContext, useState, type MouseEvent } from "react";
 import { useTranslation } from "react-i18next";
 import ReactModal from "react-modal";
 import Popup from "reactjs-popup";
@@ -7,7 +7,7 @@ import { client } from "../../../app/runtime";
 import { ClientConfigContext } from "../../../state/config";
 import { type Profile } from "../../../state/profile";
 import { removeAuthToken } from "../../../utils/auth";
-import { useThemeMode, type ThemeMode } from "../../../utils/darkModeUtils";
+import { useThemeMode, setViewTransitionOrigin, type ThemeMode } from "../../../utils/darkModeUtils";
 import { Button } from "../../button";
 import { Input } from "../../input";
 import { HEADER_POPUP_PANEL_CLASS } from "../shared";
@@ -52,7 +52,10 @@ const THEME_MODE_LABEL: Record<ThemeMode, string> = {
 export function ThemeToggle({ className, plain = false }: { className?: string; plain?: boolean }) {
   const [mode, setMode] = useThemeMode();
 
-  const cycle = () => {
+  const cycle = (event?: MouseEvent) => {
+    if (event) {
+      setViewTransitionOrigin(event.clientX, event.clientY);
+    }
     const next = THEME_MODE_ORDER[(THEME_MODE_ORDER.indexOf(mode) + 1) % THEME_MODE_ORDER.length];
     setMode(next);
   };

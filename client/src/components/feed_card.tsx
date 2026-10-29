@@ -73,7 +73,7 @@ const FEED_CARD_STYLES: Record<
     }
 > = {
     default: {
-        card: "my-2 inline-block w-full break-inside-avoid rounded-2xl bg-w p-6 duration-300 bg-button",
+        card: "my-2 inline-block w-full break-inside-avoid rounded-2xl bg-w p-6 duration-300 bg-button rin-reveal rin-3d-card",
         content: "",
         imageWrap: "",
         meta: "text-sm t-muted",
