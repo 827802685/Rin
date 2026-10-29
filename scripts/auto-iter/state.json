@@ -1,19 +1,19 @@
 {
-  "iteration": 5,
-  "since_merge": 5,
+  "iteration": 6,
+  "since_merge": 6,
   "last_merge_iter": 0,
   "history": [
     {
       "iter": 1,
-      "action": "\u65b0\u589e\u529f\u80fd",
-      "summary": "\u5f15\u5165\u81ea\u4e3b\u8fed\u4ee3\u5f15\u64ce\uff08scripts/auto-iter\uff09+ \u8865\u5168 .gitignore \u4ea7\u7269\u5ffd\u7565\u89c4\u5219",
+      "action": "新增功能",
+      "summary": "引入自主迭代引擎（scripts/auto-iter）+ 补全 .gitignore 产物忽略规则",
       "build": "PASS",
       "tests": "PASS"
     },
     {
       "iter": 2,
-      "action": "\u4fee\u590d\u529f\u80fd",
-      "summary": "\u4e3a 3 \u4e2a workflow \u589e\u52a0 timeout-minutes\uff08CI \u5065\u58ee\u6027\uff09",
+      "action": "修复功能",
+      "summary": "为 3 个 workflow 增加 timeout-minutes（CI 健壮性）",
       "build": "PASS",
       "tests": "PASS",
       "sha": "fcb1a53c90",
@@ -21,8 +21,8 @@
     },
     {
       "iter": 3,
-      "action": "\u4fee\u590d\u529f\u80fd",
-      "summary": "\u4e3a 3 \u4e2a workflow \u589e\u52a0 concurrency \u5e76\u53d1\u63a7\u5236",
+      "action": "修复功能",
+      "summary": "为 3 个 workflow 增加 concurrency 并发控制",
       "build": "PASS",
       "tests": "PASS",
       "sha": "b70550d048",
@@ -30,8 +30,8 @@
     },
     {
       "iter": 4,
-      "action": "\u4fee\u590d\u529f\u80fd",
-      "summary": "\u65b0\u589e .editorconfig\uff08\u7edf\u4e00\u7f16\u8f91\u5668\u683c\u5f0f\uff09",
+      "action": "修复功能",
+      "summary": "新增 .editorconfig（统一编辑器格式）",
       "build": "PASS",
       "tests": "PASS",
       "sha": "b02c267009",
@@ -39,12 +39,21 @@
     },
     {
       "iter": 5,
-      "action": "\u4fee\u590d\u529f\u80fd",
-      "summary": "\u5728 README \u8865\u5145\u81ea\u52a8\u8fed\u4ee3\u7ef4\u62a4\u8bf4\u660e",
+      "action": "修复功能",
+      "summary": "在 README 补充自动迭代维护说明",
       "build": "PASS",
       "tests": "PASS",
       "sha": "",
       "ts": "2026-10-28T14:29:50Z"
+    },
+    {
+      "iter": 6,
+      "action": "修复 bug",
+      "summary": "文章点赞连点重复计数：用 useFeedLike 做在途请求去重、统一 localStorage 键；清理误入库的 Vitest 临时产物",
+      "build": "PASS",
+      "tests": "PASS",
+      "sha": "",
+      "ts": "2026-10-29T16:24:24Z"
     }
   ]
 }

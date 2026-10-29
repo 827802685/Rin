@@ -62,3 +62,6 @@ node_modules/
 env/
 vendor/
 *.tmp
+
+# Vitest 加载 vite.config.ts 时生成的临时配置产物（含时间戳，不应入库）
+vitest.config.ts.timestamp-*

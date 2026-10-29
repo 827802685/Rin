@@ -24,6 +24,7 @@ import { estimateReading } from "../utils/reading-time";
 import { ShareBar } from "../components/theme/share-bar";
 import { Danmaku } from "../components/theme/danmaku";
 import { SidebarTocPortal } from "../components/site-sidebar/sidebar-toc-portal";
+import { useFeedLike } from "../hooks/use-feed-like";
 
 function extractFirstMarkdownImageUrl(content: string) {
   const match = /!\[.*?\]\((\S+?)(?:\s+"[^"]*")?\)/.exec(content);
@@ -46,8 +47,16 @@ export function FeedPage({ id, TOC, clean }: { id: string, TOC: () => JSX.Elemen
   const { showAlert, AlertUI } = useAlert();
   const { showConfirm, ConfirmUI } = useConfirm();
   const [top, setTop] = useState<number>(0);
-  const [likes, setLikes] = useState(0);
-  const [liked, setLiked] = useState(false);
+  // 点赞状态交给 hook：在途请求去重（连点只记一次）+ localStorage 单人去重
+  const { likes, liked, hydrate: hydrateLikes, like: likeFeed } = useFeedLike({
+    storageId: id,
+    feedId: feed?.id,
+    like: (feedId) => client.feed.like(feedId),
+    onError: (error) => {
+      const message = (error as { value?: unknown } | undefined)?.value;
+      showAlert(typeof message === "string" ? message : String(error));
+    },
+  });
   // 阅读模式（美化⑨）：隐藏顶栏/页脚/浮层组件，专注正文
   const [readingMode, setReadingMode] = useState(false);
   useEffect(() => {
@@ -118,8 +127,7 @@ export function FeedPage({ id, TOC, clean }: { id: string, TOC: () => JSX.Elemen
           setTimeout(() => {
             setFeed(data as any);
             setTop(data.top || 0);
-            setLikes((data as any).likes ?? 0);
-            setLiked(localStorage.getItem(`rin_liked_${id}`) === "1");
+            hydrateLikes((data as any).likes);
             const headImageUrl = extractFirstMarkdownImageUrl(data.content);
             if (headImageUrl) {
               setHeadImage(headImageUrl);
@@ -130,20 +138,6 @@ export function FeedPage({ id, TOC, clean }: { id: string, TOC: () => JSX.Elemen
       });
     ref.current = id;
   }, [id]);
-  function likeFeed() {
-    if (!feed || liked) return;
-    client.feed
-      .like(feed.id)
-      .then(({ data, error }) => {
-        if (error) {
-          showAlert(error.value as string);
-          return;
-        }
-        setLikes(data?.likes ?? likes + 1);
-        setLiked(true);
-        localStorage.setItem(`rin_liked_${feed.id}`, "1");
-      });
-  }
   useEffect(() => {
     // mermaid 改为按需动态加载（见 utils/mermaid-render），仅当页面存在 mermaid 代码块时才拉取 chunk
     void renderMermaidBlocks();
