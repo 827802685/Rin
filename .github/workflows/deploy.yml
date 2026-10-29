@@ -32,7 +32,7 @@ concurrency:
 jobs:
   prepare:
     timeout-minutes: 30
-    ubuntu-latest
+    runs-on: ubuntu-latest
     if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
     outputs:
       is_production: ${{ steps.meta.outputs.is_production }}
@@ -98,7 +98,7 @@ jobs:
   deploy:
     needs: prepare
     timeout-minutes: 30
-    ubuntu-latest
+    runs-on: ubuntu-latest
     environment:
       name: ${{ needs.prepare.outputs.is_production == 'true' && 'production' || 'preview' }}
       url: ${{ steps.deploy.outputs.url }}
