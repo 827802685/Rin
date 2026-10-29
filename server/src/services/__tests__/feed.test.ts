@@ -784,4 +784,61 @@ describe('FeedService', () => {
             expect(row.top).toBe(0);
         });
     });
+
+    describe('POST /like/:id - Public like', () => {
+        async function createFeed(title = 'Like Feed', draft = false): Promise<number> {
+            const res = await app.request('/', {
+                method: 'POST',
+                headers: {
+                    'Authorization': 'Bearer mock_token_1',
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ title, content: 'Like Content', listed: true, draft, tags: [] }),
+            }, env);
+            expect(res.status).toBe(200);
+            const data = await res.json() as any;
+            return data.insertedId as number;
+        }
+
+        it('increments likes and returns the new count without auth', async () => {
+            const feedId = await createFeed();
+
+            const res1 = await app.request(`/like/${feedId}`, { method: 'POST' }, env);
+            expect(res1.status).toBe(200);
+            expect((await res1.json()) as any).toEqual({ likes: 1 });
+
+            const res2 = await app.request(`/like/${feedId}`, { method: 'POST' }, env);
+            expect(res2.status).toBe(200);
+            expect((await res2.json()) as any).toEqual({ likes: 2 });
+
+            const row = sqlite.prepare('SELECT likes FROM feeds WHERE id = ?').get(feedId) as any;
+            expect(row.likes).toBe(2);
+        });
+
+        it('returns 404 for unknown feed and rejects invalid id', async () => {
+            const res = await app.request('/like/99999', { method: 'POST' }, env);
+            expect(res.status).toBe(404);
+
+            const bad = await app.request('/like/abc', { method: 'POST' }, env);
+            expect(bad.status).toBe(400);
+        });
+
+        it('rejects likes on drafts', async () => {
+            const draftId = await createFeed('Draft Like Feed', true);
+            const res = await app.request(`/like/${draftId}`, { method: 'POST' }, env);
+            expect(res.status).toBe(404);
+            const row = sqlite.prepare('SELECT likes FROM feeds WHERE id = ?').get(draftId) as any;
+            expect(row.likes).toBe(0);
+        });
+
+        it('exposes likes on feed detail after cache invalidation', async () => {
+            const feedId = await createFeed();
+            await app.request(`/like/${feedId}`, { method: 'POST' }, env);
+
+            const res = await app.request(`/${feedId}`, { method: 'GET' }, env);
+            expect(res.status).toBe(200);
+            const feed = await res.json() as any;
+            expect(feed.likes).toBe(1);
+        });
+    });
 });

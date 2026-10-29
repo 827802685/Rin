@@ -400,6 +400,11 @@ class FeedAPI {
   async relatedFeeds(id: number | string): Promise<ApiResponse<RelatedFeedItem[]>> {
     return this.http.get<RelatedFeedItem[]>(`/api/taxonomy/related/${id}`);
   }
+
+  // POST /api/feed/like/:id —— 公开点赞，返回递增后的计数
+  async like(id: number | string): Promise<ApiResponse<{ likes: number }>> {
+    return this.http.post<{ likes: number }>(`/api/feed/like/${id}`, {});
+  }
 }
 
 /**

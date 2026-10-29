@@ -37,6 +37,7 @@ export interface Feed {
   };
   pv: number;
   uv: number;
+  likes: number;
   top?: number;
 }
 

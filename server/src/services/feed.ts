@@ -517,6 +517,40 @@ export function FeedService(): Hono<{
         return c.text('Updated');
     });
 
+    // POST /feed/like/:id —— 公开点赞（无需登录）。
+    // 计数在 SQL 层 `likes + 1` 递增，不依赖读到的旧值（并发安全，同 visit-stats PV 的做法）。
+    // 前端用 localStorage 做单人去重；服务端不限流，博客体量下可接受。
+    app.post('/like/:id', async (c) => {
+        const db = c.get('db');
+        const cache = c.get('cache');
+
+        const id_num = parseInt(c.req.param('id'));
+        if (!Number.isInteger(id_num) || id_num <= 0) {
+            return c.text('Invalid id', 400);
+        }
+
+        const feed = await profileAsync(c, 'feed_like_lookup', () => db.query.feeds.findFirst({
+            where: eq(feeds.id, id_num),
+            columns: { id: true, alias: true, draft: true },
+        }));
+
+        if (!feed || feed.draft) {
+            return c.text('Not found', 404);
+        }
+
+        const updated = await profileAsync(c, 'feed_like_db', () =>
+            db.update(feeds)
+                .set({ likes: sql`${feeds.likes} + 1` })
+                .where(eq(feeds.id, id_num))
+                .returning({ likes: feeds.likes }),
+        );
+
+        await profileAsync(c, 'feed_like_cache_invalidate', () => clearFeedCache(cache, id_num, feed.alias, feed.alias));
+
+        const likes = updated?.[0]?.likes ?? 0;
+        return c.json({ likes });
+    });
+
     // DELETE /feed/:id
     app.delete('/:id', async (c) => {
         const db = c.get('db');

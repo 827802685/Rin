@@ -597,6 +597,11 @@ html.rin-cyber-glitch a[aria-label="home"] {
   html.rin-cyber-glitch a[aria-label="home"] {
     animation: none;
   }
+  .rin-danmaku {
+    animation: none;
+    left: auto;
+    right: 1rem;
+  }
 }
 
 /* =========================================================================
@@ -609,3 +614,21 @@ body.rin-reading-mode [data-rin-widget] {
   display: none !important;
 }
 
+
+/* 评论弹幕（候选清单）：从右向左飘过，轨道层 pointer-events-none */
+@keyframes rin-danmaku-scroll {
+  from {
+    transform: translateX(100vw);
+  }
+  to {
+    transform: translateX(-100%);
+  }
+}
+.rin-danmaku {
+  left: 0;
+  animation-name: rin-danmaku-scroll;
+  animation-timing-function: linear;
+  animation-iteration-count: 1;
+  animation-fill-mode: both;
+  will-change: transform;
+}

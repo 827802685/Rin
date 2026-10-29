@@ -119,7 +119,9 @@
       "title": "相關文章"
     },
     "untitled": "無標題",
-    "reading_mode": "閱讀模式"
+    "reading_mode": "閱讀模式",
+    "like": "點讚",
+    "liked": "已點讚"
   },
   "avatar": {
     "url": "頭像 URL"
@@ -1185,5 +1187,13 @@
     "copy": "複製",
     "copied": "已複製",
     "failed": "複製失敗"
+  },
+  "danmaku": {
+    "placeholder": "發個彈幕唄～",
+    "send": "發射",
+    "guest_name": "彈幕訪客"
+  },
+  "social": {
+    "aria_label": "博主聯絡方式"
   }
 }

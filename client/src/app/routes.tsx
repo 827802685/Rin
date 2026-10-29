@@ -16,6 +16,7 @@ const AIPage = lazy(() => import("../page/ai").then((m) => ({ default: m.AIPage 
 const CallbackPage = lazy(() => import("../page/callback").then((m) => ({ default: m.CallbackPage })));
 const CompatTasksPage = lazy(() => import("../page/compat-tasks").then((m) => ({ default: m.CompatTasksPage })));
 import { ErrorPage } from "../page/error";
+import { NotFoundPage } from "../page/not-found";
 import { FeedPage, TOCHeader } from "../page/feed";
 import { FeedsPage } from "../page/feeds";
 import { FriendsPage } from "../page/friends";
@@ -158,7 +159,7 @@ export function AppRoutes() {
       </AppRoute>
 
       <AppRoute>
-        <ErrorPage error={t("error.not_found")} />
+        <NotFoundPage />
       </AppRoute>
     </Switch>
   );
