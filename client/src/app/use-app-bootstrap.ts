@@ -74,6 +74,18 @@ export function useAppBootstrap() {
     } else if (cachedConfig) {
       setConfig(new ConfigWrapper(cachedConfig, defaultClientConfig));
       applyThemeFromConfig(cachedConfig);
+    } else {
+      // 兜底：bootstrap.js 注入失败（脚本 404 / 执行报错）且无会话缓存时，
+      // 运行时拉一次 /api/config/client。否则前台会永远停留在默认配置——
+      // 表现为「后台改什么布局/主题前台都没反应」。
+      client.config
+        .get("client")
+        .then(({ data }) => {
+          if (data && typeof data === "object") {
+            updateClientConfig(data as Record<string, unknown>);
+          }
+        })
+        .catch(() => undefined);
     }
 
     initializedRef.current = true;
