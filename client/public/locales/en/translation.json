@@ -111,7 +111,10 @@
       "confirm": "Are you sure you want to untop this article?",
       "success": "Untopped successfully",
       "title": "Untop"
-    }
+    },
+    "backlinks": { "title": "Backlinks" },
+    "related": { "title": "Related posts" },
+    "untitled": "Untitled"
   },
   "avatar": {
     "url": "Avatar URL"
@@ -213,6 +216,10 @@
       "link": "Link",
       "link_url": "Link URL",
       "hr": "Horizontal rule",
+
+      "formula": "Formula",
+
+      "diagram": "Diagram",
       "upload_image": "Upload image"
     }
   },

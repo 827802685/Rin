@@ -111,7 +111,10 @@
       "confirm": "確定取消置頂這篇文章嗎？",
       "success": "取消置頂成功",
       "title": "取消置頂"
-    }
+    },
+    "backlinks": { "title": "反向連結" },
+    "related": { "title": "相關文章" },
+    "untitled": "無標題"
   },
   "avatar": {
     "url": "頭像 URL"
@@ -213,6 +216,10 @@
       "link": "連結",
       "link_url": "連結位址",
       "hr": "分割線",
+
+      "formula": "公式",
+
+      "diagram": "圖表",
       "upload_image": "上傳圖片"
     }
   },

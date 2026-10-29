@@ -14,6 +14,7 @@ import { useAlert } from "./dialog";
 import { useColorMode } from "../utils/darkModeUtils";
 import { uploadImageFile } from "../utils/image-upload";
 import { Markdown } from "./markdown";
+import { CodeBlockEnhancer } from "./editor/code-block-enhancer";
 
 declare module "@tiptap/core" {
   interface Storage {
@@ -85,6 +86,9 @@ export function RichTextEditor({ content, setContent, placeholder = "> 开始写
     extensions: [
       StarterKit.configure({
         heading: { levels: [1, 2, 3] },
+        // 禁用内置 codeBlock，改由 CodeBlockEnhancer（扩展 CodeBlock）提供
+        // 以支持 math/mermaid 可视化块，避免同名节点冲突。
+        codeBlock: false,
       }),
       Image.configure({ inline: false, allowBase64: false }),
       Link.configure({ openOnClick: false, autolink: true }),
@@ -97,6 +101,8 @@ export function RichTextEditor({ content, setContent, placeholder = "> 开始写
         linkify: true,
         breaks: true,
       }),
+      // 差异化：公式(KaTeX) / 图表(Mermaid) 一键插入为可视化块
+      CodeBlockEnhancer,
     ],
     content: content,
     editorProps: {
@@ -188,6 +194,21 @@ export function RichTextEditor({ content, setContent, placeholder = "> 开始写
     if (mode === "markdown") {
       setContent(value);
     }
+  };
+
+  // 差异化的「公式 / 图表」块：以 codeBlock 特殊语言(math/mermaid) 插入，
+  // 由 CodeBlockEnhancer 的 NodeView 做可视化预览，并复用 tiptap-markdown 往返序列化。
+  const insertSpecialBlock = (language: string, fallback: string) => {
+    if (!editor) return;
+    editor
+      .chain()
+      .focus()
+      .insertContent({
+        type: "codeBlock",
+        attrs: { language },
+        content: [{ type: "text", text: fallback }],
+      })
+      .run();
   };
 
   // 检测 selected 状态辅助
@@ -330,6 +351,16 @@ export function RichTextEditor({ content, setContent, placeholder = "> 开始写
                 label={t("rich_editor.toolbar.hr")}
                 icon="ri-separator"
                 onClick={() => editor.chain().focus().setHorizontalRule().run()}
+              />
+              <ToolButton
+                label={t("rich_editor.toolbar.formula")}
+                icon="ri-function-line"
+                onClick={() => insertSpecialBlock("math", "E = mc^2")}
+              />
+              <ToolButton
+                label={t("rich_editor.toolbar.diagram")}
+                icon="ri-flow-chart"
+                onClick={() => insertSpecialBlock("mermaid", "graph TD;\n A-->B")}
               />
               <span className="mx-1 hidden h-6 w-px bg-black/10 dark:bg-white/10 sm:block" aria-hidden="true" />
               <ToolButton
