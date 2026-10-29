@@ -599,3 +599,13 @@ html.rin-cyber-glitch a[aria-label="home"] {
   }
 }
 
+/* =========================================================================
+   阅读模式（美化⑨）：body.rin-reading-mode 时隐藏顶栏/页脚/浮层组件，
+   只留正文与阅读模式退出按钮（feed.tsx 渲染）。
+   ========================================================================= */
+body.rin-reading-mode [data-rin-header],
+body.rin-reading-mode footer,
+body.rin-reading-mode [data-rin-widget] {
+  display: none !important;
+}
+

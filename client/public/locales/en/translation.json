@@ -112,9 +112,14 @@
       "success": "Untopped successfully",
       "title": "Untop"
     },
-    "backlinks": { "title": "Backlinks" },
-    "related": { "title": "Related posts" },
-    "untitled": "Untitled"
+    "backlinks": {
+      "title": "Backlinks"
+    },
+    "related": {
+      "title": "Related posts"
+    },
+    "untitled": "Untitled",
+    "reading_mode": "Reading mode"
   },
   "avatar": {
     "url": "Avatar URL"
@@ -216,9 +221,7 @@
       "link": "Link",
       "link_url": "Link URL",
       "hr": "Horizontal rule",
-
       "formula": "Formula",
-
       "diagram": "Diagram",
       "upload_image": "Upload image"
     }
@@ -1128,6 +1131,53 @@
         "title": "Anchor slug length",
         "desc": "Maximum length of the auto-generated anchor text",
         "label": "Length"
+      }
+    },
+    "effects": {
+      "sakura": {
+        "title": "Falling sakura",
+        "desc": "Random sakura petals drifting across the page"
+      },
+      "ribbon": {
+        "title": "Ribbon background",
+        "desc": "Floating particle net (nest) or flowing ribbons",
+        "mode": {
+          "title": "Ribbon mode",
+          "desc": "nest = particle net, ribbon = flowing ribbons",
+          "label": "Mode"
+        }
+      },
+      "power_mode": {
+        "title": "Typing sparks",
+        "desc": "Colorful sparks and subtle shake while typing"
+      },
+      "note_click": {
+        "title": "Logo notes",
+        "desc": "Musical notes float out when clicking the site logo"
+      },
+      "wave_footer": {
+        "title": "Wave footer",
+        "desc": "Two-layer animated wave on top of the footer"
+      },
+      "preloader": {
+        "title": "Preloader",
+        "desc": "First-visit loading overlay (once per session)"
+      },
+      "hitokoto": {
+        "title": "Footer quote",
+        "desc": "Typewriter quote rotation in the footer",
+        "quotes": {
+          "title": "Quotes",
+          "desc": "JSON string array; leave empty to use built-in list"
+        }
+      },
+      "cyber_glitch": {
+        "title": "Glitch title",
+        "desc": "RGB-split glitch animation on the site title"
+      },
+      "cyber_grid": {
+        "title": "Cyber grid",
+        "desc": "Fine grid background fading toward the top"
       }
     }
   },

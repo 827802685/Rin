@@ -112,9 +112,14 @@
       "success": "取消置頂成功",
       "title": "取消置頂"
     },
-    "backlinks": { "title": "反向連結" },
-    "related": { "title": "相關文章" },
-    "untitled": "無標題"
+    "backlinks": {
+      "title": "反向連結"
+    },
+    "related": {
+      "title": "相關文章"
+    },
+    "untitled": "無標題",
+    "reading_mode": "閱讀模式"
   },
   "avatar": {
     "url": "頭像 URL"
@@ -216,9 +221,7 @@
       "link": "連結",
       "link_url": "連結位址",
       "hr": "分割線",
-
       "formula": "公式",
-
       "diagram": "圖表",
       "upload_image": "上傳圖片"
     }
@@ -1128,6 +1131,53 @@
         "title": "錨點文字長度",
         "desc": "自動產生錨點文字的最大長度",
         "label": "長度"
+      }
+    },
+    "effects": {
+      "sakura": {
+        "title": "櫻花飄落",
+        "desc": "頁面隨機飄落櫻花花瓣"
+      },
+      "ribbon": {
+        "title": "彩帶背景",
+        "desc": "漂浮粒子線網或流動彩帶背景",
+        "mode": {
+          "title": "彩帶模式",
+          "desc": "nest=粒子線網，ribbon=流動彩帶",
+          "label": "模式"
+        }
+      },
+      "power_mode": {
+        "title": "打字彩光",
+        "desc": "輸入時在游標處迸發彩光並輕微抖動"
+      },
+      "note_click": {
+        "title": "logo 音符",
+        "desc": "點擊網站 logo 飄出音符"
+      },
+      "wave_footer": {
+        "title": "波浪頁腳",
+        "desc": "頁腳頂部的雙層波浪動畫"
+      },
+      "preloader": {
+        "title": "預載入動畫",
+        "desc": "進站首屏載入遮罩（每次會話僅顯示一次）"
+      },
+      "hitokoto": {
+        "title": "頁腳一言",
+        "desc": "頁腳打字機輪播展示一句話",
+        "quotes": {
+          "title": "一言內容",
+          "desc": "JSON 字串陣列，留空使用內建清單"
+        }
+      },
+      "cyber_glitch": {
+        "title": "glitch 標題",
+        "desc": "網站標題的 RGB 錯位故障動畫"
+      },
+      "cyber_grid": {
+        "title": "賽博網格背景",
+        "desc": "頁面頂部漸隱的細網格背景"
       }
     }
   },

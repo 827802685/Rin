@@ -112,9 +112,14 @@
       "success": "トップ解除に成功しました",
       "title": "トップ解除"
     },
-    "backlinks": { "title": "被リンク" },
-    "related": { "title": "関連記事" },
-    "untitled": "無題"
+    "backlinks": {
+      "title": "被リンク"
+    },
+    "related": {
+      "title": "関連記事"
+    },
+    "untitled": "無題",
+    "reading_mode": "閲読モード"
   },
   "avatar": {
     "url": "アバターURL"
@@ -216,9 +221,7 @@
       "link": "リンク",
       "link_url": "リンクURL",
       "hr": "区切り線",
-
       "formula": "数式",
-
       "diagram": "図表",
       "upload_image": "画像をアップロード"
     }
@@ -1128,6 +1131,53 @@
         "title": "アンカー文字数",
         "desc": "自動生成するアンカー文字列の最大長",
         "label": "文字数"
+      }
+    },
+    "effects": {
+      "sakura": {
+        "title": "桜吹雪",
+        "desc": "ページに桜の花びらが舞い散ります"
+      },
+      "ribbon": {
+        "title": "リボン背景",
+        "desc": "漂う粒子ネットワーク（nest）または流れるリボン",
+        "mode": {
+          "title": "リボンモード",
+          "desc": "nest=粒子ネットワーク、ribbon=流れるリボン",
+          "label": "モード"
+        }
+      },
+      "power_mode": {
+        "title": "タイピングエフェクト",
+        "desc": "入力時にカーソル位置から色とりどりの火花が散ります"
+      },
+      "note_click": {
+        "title": "ロゴ音符",
+        "desc": "サイトロゴをクリックすると音符が舞い出ます"
+      },
+      "wave_footer": {
+        "title": "波フッター",
+        "desc": "フッター上部の二層ウェーブアニメーション"
+      },
+      "preloader": {
+        "title": "プリローダー",
+        "desc": "初回アクセス時のローディング画面（セッションごとに1回）"
+      },
+      "hitokoto": {
+        "title": "フッターの一言",
+        "desc": "フッターでタイプライター表示される一言",
+        "quotes": {
+          "title": "一言の内容",
+          "desc": "JSON文字列配列。空の場合は内蔵リストを使用"
+        }
+      },
+      "cyber_glitch": {
+        "title": "グリッチタイトル",
+        "desc": "サイトタイトルのRGBずれグリッチアニメーション"
+      },
+      "cyber_grid": {
+        "title": "サイバーグリッド",
+        "desc": "上部でフェードアウトする細かいグリッド背景"
       }
     }
   },
