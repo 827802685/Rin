@@ -437,3 +437,165 @@ html {
     animation: none;
   }
 }
+
+/* =========================================================================
+   二次元特效批次（2026-10）：樱花/彩带/波浪/预加载/音符/打字彩光/一言/赛博
+   组件均可经后台开关启用；本文件只承载对应的关键帧与工具类。
+   ========================================================================= */
+
+/* ① 打字彩光：输入时轻微抖动（PowerMode 组件挂 .rin-power-shake） */
+@keyframes rin-power-shake {
+  0%, 100% { transform: translate(0, 0); }
+  25% { transform: translate(1px, -1px); }
+  50% { transform: translate(-1px, 1px); }
+  75% { transform: translate(1px, 1px); }
+}
+
+.rin-power-shake {
+  animation: rin-power-shake 0.12s linear;
+}
+
+/* ④ 波浪页脚：双层 SVG 反向横移 */
+@keyframes rin-wave-drift {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+
+.rin-wave-front {
+  animation: rin-wave-drift 12s linear infinite;
+}
+
+.rin-wave-back {
+  animation: rin-wave-drift 18s linear infinite reverse;
+}
+
+/* ⑤ 预加载遮罩：全屏覆盖 + 旋转环，挂 .rin-preloader-leaving 淡出 */
+.rin-preloader {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--surface-page, #f2f6f9);
+  transition: opacity 0.45s ease;
+}
+
+.rin-preloader-leaving {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.rin-preloader-ring {
+  width: 42px;
+  height: 42px;
+  border-radius: 9999px;
+  border: 3px solid color-mix(in srgb, var(--theme, #5ab0d8) 25%, transparent);
+  border-top-color: var(--theme, #5ab0d8);
+  animation: rin-preloader-spin 0.9s linear infinite;
+}
+
+@keyframes rin-preloader-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ⑥ logo 音符：从品牌链接位置向上飘散淡出（JS 动态插入 .rin-note） */
+@keyframes rin-note-float {
+  0% {
+    opacity: 0;
+    transform: translateY(6px) scale(0.7);
+  }
+  15% {
+    opacity: 0.9;
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-70px) scale(1.15) rotate(8deg);
+  }
+}
+
+.rin-note {
+  position: fixed;
+  z-index: 90;
+  pointer-events: none;
+  font-size: 18px;
+  color: var(--theme, #5ab0d8);
+  text-shadow: 0 0 6px color-mix(in srgb, var(--theme, #5ab0d8) 45%, transparent);
+  animation: rin-note-float 1.1s ease-out forwards;
+}
+
+/* ⑦ 一言光标：打字竖线闪烁 */
+@keyframes rin-caret-blink {
+  0%, 49% { opacity: 1; }
+  50%, 100% { opacity: 0; }
+}
+
+.rin-hitokoto-cursor::after {
+  content: "▍";
+  margin-left: 2px;
+  color: var(--theme, #5ab0d8);
+  animation: rin-caret-blink 1s step-end infinite;
+}
+
+/* ⑧ 赛博网格背景：固定层细网格 + 径向渐隐 */
+.rin-cyber-grid-bg {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(color-mix(in srgb, var(--theme, #5ab0d8) 9%, transparent) 1px, transparent 1px),
+    linear-gradient(90deg, color-mix(in srgb, var(--theme, #5ab0d8) 9%, transparent) 1px, transparent 1px);
+  background-size: 36px 36px;
+  -webkit-mask-image: radial-gradient(ellipse 80% 60% at 50% 0%, #000 30%, transparent 100%);
+  mask-image: radial-gradient(ellipse 80% 60% at 50% 0%, #000 30%, transparent 100%);
+}
+
+/* ⑧ glitch 标题：品牌链接文字 RGB 错位抖动（html 挂 .rin-cyber-glitch） */
+@keyframes rin-glitch-shift {
+  0%, 86%, 100% {
+    text-shadow: none;
+    transform: none;
+  }
+  88% {
+    text-shadow: -2px 0 rgba(255, 61, 129, 0.75), 2px 0 rgba(0, 229, 255, 0.75);
+    transform: skewX(2deg);
+  }
+  92% {
+    text-shadow: 2px 0 rgba(255, 61, 129, 0.75), -2px 0 rgba(0, 229, 255, 0.75);
+    transform: skewX(-2deg);
+  }
+  96% {
+    text-shadow: -1px 0 rgba(255, 61, 129, 0.6), 1px 0 rgba(0, 229, 255, 0.6);
+    transform: skewX(1deg);
+  }
+}
+
+html.rin-cyber-glitch a[aria-label="home"] {
+  animation: rin-glitch-shift 3.2s infinite;
+  will-change: text-shadow, transform;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rin-power-shake {
+    animation: none;
+  }
+  .rin-wave-front,
+  .rin-wave-back {
+    animation: none;
+  }
+  .rin-preloader-ring {
+    animation: none;
+  }
+  .rin-note {
+    animation-duration: 0.01s;
+    opacity: 0;
+  }
+  .rin-hitokoto-cursor::after {
+    animation: none;
+  }
+  html.rin-cyber-glitch a[aria-label="home"] {
+    animation: none;
+  }
+}
+
