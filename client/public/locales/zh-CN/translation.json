@@ -112,9 +112,14 @@
       "success": "取消置顶成功",
       "title": "取消置顶"
     },
-    "backlinks": { "title": "反向链接" },
-    "related": { "title": "相关文章" },
-    "untitled": "无标题"
+    "backlinks": {
+      "title": "反向链接"
+    },
+    "related": {
+      "title": "相关文章"
+    },
+    "untitled": "无标题",
+    "reading_mode": "阅读模式"
   },
   "avatar": {
     "url": "头像 URL"
@@ -216,9 +221,7 @@
       "link": "链接",
       "link_url": "链接地址",
       "hr": "分割线",
-
       "formula": "公式",
-
       "diagram": "图表",
       "upload_image": "上传图片"
     }
@@ -1128,6 +1131,53 @@
         "title": "锚点文本长度",
         "desc": "自动生成锚点文本的最大长度",
         "label": "长度"
+      }
+    },
+    "effects": {
+      "sakura": {
+        "title": "樱花飘落",
+        "desc": "页面随机飘落樱花花瓣"
+      },
+      "ribbon": {
+        "title": "彩带背景",
+        "desc": "漂浮粒子线网或流动彩带背景",
+        "mode": {
+          "title": "彩带模式",
+          "desc": "nest=粒子线网，ribbon=流动彩带",
+          "label": "模式"
+        }
+      },
+      "power_mode": {
+        "title": "打字彩光",
+        "desc": "输入时在光标处迸发彩光并轻微抖动"
+      },
+      "note_click": {
+        "title": "logo 音符",
+        "desc": "点击站点 logo 飘出音符"
+      },
+      "wave_footer": {
+        "title": "波浪页脚",
+        "desc": "页脚顶部的双层波浪动画"
+      },
+      "preloader": {
+        "title": "预加载动画",
+        "desc": "进站首屏加载遮罩（每次会话仅显示一次）"
+      },
+      "hitokoto": {
+        "title": "页脚一言",
+        "desc": "页脚打字机轮播展示一句话",
+        "quotes": {
+          "title": "一言内容",
+          "desc": "JSON 字符串数组，留空使用内置列表"
+        }
+      },
+      "cyber_glitch": {
+        "title": "glitch 标题",
+        "desc": "站点标题的 RGB 错位故障动画"
+      },
+      "cyber_grid": {
+        "title": "赛博网格背景",
+        "desc": "页面顶部渐隐的细网格背景"
       }
     }
   },

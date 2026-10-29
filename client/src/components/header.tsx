@@ -74,7 +74,7 @@ export function Header({ children }: { children?: React.ReactNode }) {
       {headerLayout === "compact" ? (
         <div className="pointer-events-none fixed inset-x-0 top-0 -z-10 h-64 bg-gradient-to-b from-theme/15 to-white/0 dark:from-theme/20 dark:to-transparent" />
       ) : null}
-      <div ref={headerRef} className={containerClassName}>
+      <div ref={headerRef} data-rin-header="" className={containerClassName}>
         <div className="w-full">
           {headerLayout === "compact" ? (
             <div className="w-full">

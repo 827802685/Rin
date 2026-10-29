@@ -204,6 +204,18 @@ export function SettingsTheme() {
   const anchorEnabled = clientConfig.getBoolean("widget.anchor.enabled");
   const anchorAuto = clientConfig.getBoolean("widget.anchor.auto");
   const anchorLength = String(clientConfig.get("widget.anchor.length") ?? "60");
+  // 二次元特效批次（与 theme-widgets.tsx 读取的键一一对应）
+  const sakuraEnabled = clientConfig.getBoolean("widget.sakura.enabled");
+  const ribbonEnabled = clientConfig.getBoolean("widget.ribbon.enabled");
+  const ribbonMode = String(clientConfig.get("widget.ribbon.mode") ?? "nest");
+  const powerModeEnabled = clientConfig.getBoolean("widget.power_mode.enabled");
+  const noteClickEnabled = clientConfig.getBoolean("widget.note_click.enabled");
+  const waveFooterEnabled = clientConfig.getBoolean("widget.wave_footer.enabled");
+  const preloaderEnabled = clientConfig.getBoolean("widget.preloader.enabled");
+  const hitokotoEnabled = clientConfig.getBoolean("widget.hitokoto.enabled");
+  const hitokotoQuotes = String(clientConfig.get("widget.hitokoto.quotes") ?? "[]");
+  const cyberGlitchEnabled = clientConfig.getBoolean("widget.cyber.title_glitch");
+  const cyberGridEnabled = clientConfig.getBoolean("widget.cyber.grid_background");
 
   // 写入自定义模型列表（JSON）
   function saveCustomModels(list: { id: string; name: string; url: string }[]) {
@@ -1045,6 +1057,112 @@ export function SettingsTheme() {
               }}
             />
           ) : null}
+
+          {/* ===== 二次元特效批次 ===== */}
+          <ItemSwitch
+            title={t("theme.effects.sakura.title")}
+            description={t("theme.effects.sakura.desc")}
+            checked={sakuraEnabled}
+            onChange={(checked) => {
+              setConfigValue("widget.sakura.enabled", checked);
+            }}
+          />
+          <ItemSwitch
+            title={t("theme.effects.ribbon.title")}
+            description={t("theme.effects.ribbon.desc")}
+            checked={ribbonEnabled}
+            onChange={(checked) => {
+              setConfigValue("widget.ribbon.enabled", checked);
+            }}
+          />
+          {ribbonEnabled ? (
+            <ItemInput
+              title={t("theme.effects.ribbon.mode.title")}
+              description={t("theme.effects.ribbon.mode.desc")}
+              configKeyTitle={t("theme.effects.ribbon.mode.label")}
+              value={ribbonMode}
+              placeholder="nest"
+              onChange={(value) => {
+                setConfigValue("widget.ribbon.mode", value);
+              }}
+            />
+          ) : null}
+          <ItemSwitch
+            title={t("theme.effects.power_mode.title")}
+            description={t("theme.effects.power_mode.desc")}
+            checked={powerModeEnabled}
+            onChange={(checked) => {
+              setConfigValue("widget.power_mode.enabled", checked);
+            }}
+          />
+          <ItemSwitch
+            title={t("theme.effects.note_click.title")}
+            description={t("theme.effects.note_click.desc")}
+            checked={noteClickEnabled}
+            onChange={(checked) => {
+              setConfigValue("widget.note_click.enabled", checked);
+            }}
+          />
+          <ItemSwitch
+            title={t("theme.effects.wave_footer.title")}
+            description={t("theme.effects.wave_footer.desc")}
+            checked={waveFooterEnabled}
+            onChange={(checked) => {
+              setConfigValue("widget.wave_footer.enabled", checked);
+            }}
+          />
+          <ItemSwitch
+            title={t("theme.effects.preloader.title")}
+            description={t("theme.effects.preloader.desc")}
+            checked={preloaderEnabled}
+            onChange={(checked) => {
+              setConfigValue("widget.preloader.enabled", checked);
+            }}
+          />
+          <ItemSwitch
+            title={t("theme.effects.hitokoto.title")}
+            description={t("theme.effects.hitokoto.desc")}
+            checked={hitokotoEnabled}
+            onChange={(checked) => {
+              setConfigValue("widget.hitokoto.enabled", checked);
+            }}
+          />
+          {hitokotoEnabled ? (
+            <div className="w-full">
+              <SettingsCard>
+                <SettingsCardHeader
+                  title={t("theme.effects.hitokoto.quotes.title")}
+                  description={t("theme.effects.hitokoto.quotes.desc")}
+                />
+                <SettingsCardBody>
+                  <textarea
+                    value={hitokotoQuotes}
+                    onChange={(event) => {
+                      setConfigValue("widget.hitokoto.quotes", event.target.value);
+                    }}
+                    className={`${fieldBaseClassName} min-h-24 px-4 py-3 font-mono text-xs placeholder:text-neutral-400 dark:placeholder:text-neutral-500`}
+                    placeholder='["今日もいい日になりますように。", "愿你的代码没有 bug。"]'
+                  />
+                </SettingsCardBody>
+              </SettingsCard>
+            </div>
+          ) : null}
+          <ItemSwitch
+            title={t("theme.effects.cyber_glitch.title")}
+            description={t("theme.effects.cyber_glitch.desc")}
+            checked={cyberGlitchEnabled}
+            onChange={(checked) => {
+              setConfigValue("widget.cyber.title_glitch", checked);
+            }}
+          />
+          <ItemSwitch
+            title={t("theme.effects.cyber_grid.title")}
+            description={t("theme.effects.cyber_grid.desc")}
+            checked={cyberGridEnabled}
+            onChange={(checked) => {
+              setConfigValue("widget.cyber.grid_background", checked);
+            }}
+          />
 
           <ItemSwitch
             title={t("theme.anchor.enable.title")}

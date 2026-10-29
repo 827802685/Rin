@@ -45,6 +45,12 @@ export function FeedPage({ id, TOC, clean }: { id: string, TOC: () => JSX.Elemen
   const { showAlert, AlertUI } = useAlert();
   const { showConfirm, ConfirmUI } = useConfirm();
   const [top, setTop] = useState<number>(0);
+  // 阅读模式（美化⑨）：隐藏顶栏/页脚/浮层组件，专注正文
+  const [readingMode, setReadingMode] = useState(false);
+  useEffect(() => {
+    document.body.classList.toggle("rin-reading-mode", readingMode);
+    return () => document.body.classList.remove("rin-reading-mode");
+  }, [readingMode]);
   const config = useContext(ClientConfigContext);
   const counterEnabled = config.getBoolean('counter.enabled');
   const sidebarShell = config.get<string>('header.layout') === 'sidebar';
@@ -292,6 +298,18 @@ export function FeedPage({ id, TOC, clean }: { id: string, TOC: () => JSX.Elemen
               {feed && <Comments id={`${feed.id}`} />}
               <div className="h-16" />
             </main>
+            {/* 阅读模式浮动开关：右下角固定 */}
+            <button
+              type="button"
+              onClick={() => setReadingMode((current) => !current)}
+              title={t("article.reading_mode")}
+              aria-label={t("article.reading_mode")}
+              className={`fixed bottom-2 right-2 z-40 flex h-10 w-10 items-center justify-center rounded-full border border-black/10 bg-w text-lg shadow-2xl transition hover:scale-105 dark:border-white/10 ${
+                readingMode ? "text-theme" : "t-primary"
+              }`}
+            >
+              <i className={readingMode ? "ri-close-line" : "ri-book-open-line"} />
+            </button>
             {sidebarShell ? (
               <SidebarTocPortal>
                 <TOC />
