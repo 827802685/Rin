@@ -12,6 +12,7 @@ import { useTranslation } from "react-i18next";
 import gfm from "remark-gfm";
 import { copyText } from "../utils/clipboard";
 import remarkMermaid from "../remark/remarkMermaid";
+import remarkMathBlock from "../remark/remarkMathBlock";
 import { remarkAlert } from "remark-github-blockquote-alert";
 import remarkMath from "remark-math";
 import remarkBreaks from "remark-breaks";
@@ -134,7 +135,7 @@ export function Markdown({ content }: { content: string }) {
   const Content = useMemo(() => (
     <ReactMarkdown
       className="toc-content dark:text-neutral-300"
-      remarkPlugins={[gfm, remarkMermaid, remarkMath, remarkAlert, remarkBreaks, [remarkAnchor, { enabled: anchorEnabled, auto: anchorAuto, length: anchorLength }]]}
+      remarkPlugins={[gfm, remarkMermaid, remarkMath, remarkMathBlock, remarkAlert, remarkBreaks, [remarkAnchor, { enabled: anchorEnabled, auto: anchorAuto, length: anchorLength }]]}
       children={content}
       rehypePlugins={[rehypeKatex, rehypeRaw]}
       components={{

@@ -37,6 +37,24 @@ import type {
   LoginResponse,
 } from "@rin/api";
 
+/** 反向链接项：指向某篇文章的其他已发布文章 */
+export interface BacklinkItem {
+  id: number;
+  title: string;
+  slug: string | null;
+  summary: string;
+}
+
+/** 相关文章项：按共享标签数排序 */
+export interface RelatedFeedItem {
+  id: number;
+  title: string;
+  summary: string;
+  slug: string | null;
+  shared: number;
+  createdAt: string | null;
+}
+
 export interface SettingsConfigResponse {
   clientConfig: ConfigResponse;
   serverConfig: ConfigResponse;
@@ -371,6 +389,16 @@ class FeedAPI {
   // POST /api/feed/top/:id
   async setTop(id: number, top: number): Promise<ApiResponse<void>> {
     return this.http.post<void>(`/api/feed/top/${id}`, { top });
+  }
+
+  // GET /api/backlinks/:id —— 指向该文章的反向链接（双向链接/图谱）
+  async backlinks(id: number | string): Promise<ApiResponse<BacklinkItem[]>> {
+    return this.http.get<BacklinkItem[]>(`/api/backlinks/${id}`);
+  }
+
+  // GET /api/taxonomy/related/:id —— 相关文章（按共享标签）
+  async relatedFeeds(id: number | string): Promise<ApiResponse<RelatedFeedItem[]>> {
+    return this.http.get<RelatedFeedItem[]>(`/api/taxonomy/related/${id}`);
   }
 }
 

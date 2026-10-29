@@ -111,7 +111,10 @@
       "confirm": "この記事のトップを解除してもよろしいですか？",
       "success": "トップ解除に成功しました",
       "title": "トップ解除"
-    }
+    },
+    "backlinks": { "title": "被リンク" },
+    "related": { "title": "関連記事" },
+    "untitled": "無題"
   },
   "avatar": {
     "url": "アバターURL"
@@ -213,6 +216,10 @@
       "link": "リンク",
       "link_url": "リンクURL",
       "hr": "区切り線",
+
+      "formula": "数式",
+
+      "diagram": "図表",
       "upload_image": "画像をアップロード"
     }
   },

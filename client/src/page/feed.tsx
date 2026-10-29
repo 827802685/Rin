@@ -9,6 +9,8 @@ import { HashTag } from "../components/hashtag";
 import { Waiting } from "../components/loading";
 import { Markdown } from "../components/markdown";
 import { SiteMeta } from "../components/site-meta";
+import { BacklinksSection } from "../components/backlinks-section";
+import { transformWikilinks } from "../utils/wikilinks";
 import { client } from "../app/runtime";
 import { ClientConfigContext } from "../state/config";
 import { ProfileContext } from "../state/profile";
@@ -266,7 +268,7 @@ export function FeedPage({ id, TOC, clean }: { id: string, TOC: () => JSX.Elemen
                     ) : null}
                   </div>
                 )}
-                <Markdown content={feed.content} />
+                <Markdown content={transformWikilinks(feed.content ?? "")} />
                 <div className="mt-6 flex flex-col gap-2">
                   {hashtags.length > 0 && (
                     <div className="flex flex-row flex-wrap gap-x-2">
@@ -289,6 +291,7 @@ export function FeedPage({ id, TOC, clean }: { id: string, TOC: () => JSX.Elemen
                 </div>
               </article>
               <ShareBar title={feed.title ?? ""} url={document.URL} />
+              <BacklinksSection id={feed.id} />
               <AdjacentSection id={id} setError={setError} />
               {feed && <Comments id={`${feed.id}`} />}
               <div className="h-16" />

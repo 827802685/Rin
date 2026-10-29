@@ -111,7 +111,10 @@
       "confirm": "确定取消置顶这篇文章吗？",
       "success": "取消置顶成功",
       "title": "取消置顶"
-    }
+    },
+    "backlinks": { "title": "反向链接" },
+    "related": { "title": "相关文章" },
+    "untitled": "无标题"
   },
   "avatar": {
     "url": "头像 URL"
@@ -213,6 +216,10 @@
       "link": "链接",
       "link_url": "链接地址",
       "hr": "分割线",
+
+      "formula": "公式",
+
+      "diagram": "图表",
       "upload_image": "上传图片"
     }
   },
