@@ -273,7 +273,7 @@ export function MusicPlayer() {
   if (!track) {
     return (
       <div className="fixed bottom-2 left-2 z-40" data-rin-widget="player">
-        <div className="flex items-center gap-2 rounded-2xl border border-black/10 bg-w px-3 py-2.5 text-sm shadow-2xl dark:border-white/10 t-primary">
+        <div className="rin-glass flex items-center gap-2 rounded-2xl border border-black/10 bg-w px-3 py-2.5 text-sm shadow-2xl dark:border-white/10 t-primary">
           <i className="ri-music-2-line text-theme" aria-hidden="true" />
           <span>{t("theme.player.no_source")}</span>
         </div>
@@ -295,7 +295,7 @@ export function MusicPlayer() {
 
       {/* 歌单列表：展开时在卡片上方弹出 */}
       {listOpen && totalCount > 0 ? (
-        <div className="absolute bottom-full left-0 mb-2 max-h-[min(60vh,20rem)] w-[min(20rem,70vw)] overflow-hidden rounded-2xl border border-black/10 bg-w shadow-2xl dark:border-white/10">
+        <div className="rin-glass absolute bottom-full left-0 mb-2 max-h-[min(60vh,20rem)] w-[min(20rem,70vw)] overflow-hidden rounded-2xl border border-black/10 bg-w shadow-2xl dark:border-white/10">
           <div className="flex items-center justify-between border-b border-black/5 px-4 py-2.5 dark:border-white/5">
             <p className="text-sm font-medium t-primary">
               <i className="ri-play-list-2-line mr-1.5 text-theme" />
@@ -348,7 +348,7 @@ export function MusicPlayer() {
 
       {/* 播放器本体：展开-收起用统一的容器，带宽度/透明度过渡动画 */}
       <div
-        className={`flex items-center justify-between overflow-hidden rounded-2xl border border-black/10 bg-w shadow-2xl transition-all duration-300 ease-out dark:border-white/10 ${
+        className={`rin-glass flex items-center justify-between overflow-hidden rounded-2xl border border-black/10 bg-w shadow-2xl transition-all duration-300 ease-out dark:border-white/10 ${
           collapsed ? "w-[3.5rem]" : "w-[min(20rem,calc(100vw-1rem))]"
         }`}
       >
