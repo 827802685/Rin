@@ -25,6 +25,20 @@ export function normalizeLng(detected: string): string {
   return "en";
 }
 
+/**
+ * 把当前语言写回 <html lang>。
+ * index.html 里写死的是 `lang="en"`，切换语言后不会跟着变，会导致：
+ * 屏幕阅读器按英语音系读中文、Chrome 弹「是否翻译此页面」、搜索引擎语言判定失准。
+ * 这里只做属性同步，不参与任何渲染，重复调用幂等。
+ */
+export function syncDocumentLang(lng: string) {
+  if (typeof document === "undefined") return;
+  const next = normalizeLng(lng);
+  if (document.documentElement.lang !== next) {
+    document.documentElement.lang = next;
+  }
+}
+
 export function bootstrapApp() {
   if (bootstrapped) {
     return;
@@ -50,7 +64,11 @@ export function bootstrapApp() {
       interpolation: {
         escapeValue: false,
       },
-    });
+    })
+    .then(() => syncDocumentLang(i18n.resolvedLanguage ?? i18n.language));
+
+  // 手动切换语言时 init 的 promise 早已 settle，必须靠事件再同步一次。
+  i18n.on("languageChanged", syncDocumentLang);
 
   bootstrapped = true;
 }

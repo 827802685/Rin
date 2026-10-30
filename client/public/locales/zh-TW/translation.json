@@ -121,7 +121,14 @@
     "untitled": "無標題",
     "reading_mode": "閱讀模式",
     "like": "點讚",
-    "liked": "已點讚"
+    "liked": "已點讚",
+    "sidebar": "文章資訊",
+    "written_by": "作者",
+    "tags": "本文標籤",
+    "share": "分享",
+    "copy_link": "複製連結",
+    "link_copied": "已複製",
+    "back_to_top": "回到頂部"
   },
   "avatar": {
     "url": "頭像 URL"
@@ -262,7 +269,12 @@
       "rejected": "拒絕",
       "waiting": "待審核"
     },
-    "title": "朋友們"
+    "title": "朋友們",
+    "circle": "友鏈動態",
+    "rss": {
+      "placeholder": "RSS 訂閱地址（可選）",
+      "hint": "填寫後，該站最新文章將在「友鏈動態」頁聚合展示"
+    }
   },
   "github_login": "Github 登入",
   "hashtags": "標籤",
@@ -320,11 +332,11 @@
     "empty_description": "目前沒有排隊中或最近處理過的 AI 摘要任務。",
     "empty_title": "暫無佇列活動",
     "delete": "刪除",
-    "delete_confirm_description": "確定刪除 Feed #{{id}} 的佇列任務記錄嗎？",
+    "delete_confirm_description": "確定刪除文章 #{{id}} 的佇列任務記錄嗎？",
     "delete_confirm_title": "刪除佇列任務記錄",
     "delete_success": "佇列任務記錄已刪除",
     "deleting": "刪除中",
-    "feed_id": "Feed #{{id}}",
+    "feed_id": "文章 #{{id}}",
     "generated_at": "最近更新時間：{{date}}",
     "load_failed": "佇列狀態載入失敗",
     "loading": "正在載入佇列任務狀態...",
@@ -990,8 +1002,8 @@
       "switch": {
         "button": "換模型",
         "switching": "正在切換模型…",
-        "furina": "芙寧娜",
-        "BCSZ1.1": "八重神子"
+        "BCSZ1.1": "八重神子",
+        "furina-mini": "芙寧娜"
       },
       "error": {
         "manifest_unavailable": "模型清單不可用: {{url}}",
@@ -1195,5 +1207,13 @@
   },
   "social": {
     "aria_label": "博主聯絡方式"
+  },
+  "circle": {
+    "title": "友鏈動態",
+    "subtitle": "{{sites}} 個站點 · {{articles}} 篇文章",
+    "updated": "更新於",
+    "back_to_friends": "返回友鏈頁",
+    "empty": "還沒有可展示的友鏈動態",
+    "empty_hint": "在友鏈管理中填寫 RSS 訂閱地址後，這裡會聚合展示各站最新文章"
   }
 }

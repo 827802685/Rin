@@ -42,8 +42,10 @@ function isShadowed(sub: object) {
 }
 
 function renderWidget(fpsCap: unknown) {
+  // 封顶联动挂在 Cubism 路径上（furina-mini 自研渲染器没有 subdelegate），
+  // 显式指定 Cubism 模型，避免跟随默认模型的变化
   const config = new ConfigWrapper(
-    { "widget.live2d.scale": 1, "widget.live2d.fps_cap": fpsCap },
+    { "widget.live2d.scale": 1, "widget.live2d.fps_cap": fpsCap, "widget.live2d.defaultModel": "BCSZ1.1" },
     defaultClientConfig,
   );
   return render(
@@ -65,7 +67,7 @@ describe("Live2DWidget 渲染封顶的设置联动", () => {
     // 保存「30 帧」：Provider 下发新实例，组件只 re-render，不重新挂载插件
     act(() => {
       view.rerender(
-        <ClientConfigContext.Provider value={new ConfigWrapper({ "widget.live2d.scale": 1, "widget.live2d.fps_cap": 30 }, defaultClientConfig)}>
+        <ClientConfigContext.Provider value={new ConfigWrapper({ "widget.live2d.scale": 1, "widget.live2d.fps_cap": 30, "widget.live2d.defaultModel": "BCSZ1.1" }, defaultClientConfig)}>
           <Live2DWidget />
         </ClientConfigContext.Provider>,
       );
@@ -76,7 +78,7 @@ describe("Live2DWidget 渲染封顶的设置联动", () => {
     // 改回「不封顶」：撤掉遮蔽，恢复原型方法
     act(() => {
       view.rerender(
-        <ClientConfigContext.Provider value={new ConfigWrapper({ "widget.live2d.scale": 1, "widget.live2d.fps_cap": 0 }, defaultClientConfig)}>
+        <ClientConfigContext.Provider value={new ConfigWrapper({ "widget.live2d.scale": 1, "widget.live2d.fps_cap": 0, "widget.live2d.defaultModel": "BCSZ1.1" }, defaultClientConfig)}>
           <Live2DWidget />
         </ClientConfigContext.Provider>,
       );

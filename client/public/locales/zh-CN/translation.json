@@ -121,7 +121,14 @@
     "untitled": "无标题",
     "reading_mode": "阅读模式",
     "like": "点赞",
-    "liked": "已点赞"
+    "liked": "已点赞",
+    "sidebar": "文章信息",
+    "written_by": "作者",
+    "tags": "本文标签",
+    "share": "分享",
+    "copy_link": "复制链接",
+    "link_copied": "已复制",
+    "back_to_top": "回到顶部"
   },
   "avatar": {
     "url": "头像 URL"
@@ -262,7 +269,12 @@
       "rejected": "拒绝",
       "waiting": "待审核"
     },
-    "title": "朋友们"
+    "title": "朋友们",
+    "circle": "友链动态",
+    "rss": {
+      "placeholder": "RSS 订阅地址（可选）",
+      "hint": "填写后，该站最新文章将在「友链动态」页聚合展示"
+    }
   },
   "github_login": "Github 登录",
   "hashtags": "标签",
@@ -320,11 +332,11 @@
     "empty_description": "当前没有排队中或最近处理过的 AI 摘要任务。",
     "empty_title": "暂无队列活动",
     "delete": "删除",
-    "delete_confirm_description": "确定删除 Feed #{{id}} 的队列任务记录吗？",
+    "delete_confirm_description": "确定删除文章 #{{id}} 的队列任务记录吗？",
     "delete_confirm_title": "删除队列任务记录",
     "delete_success": "队列任务记录已删除",
     "deleting": "删除中",
-    "feed_id": "Feed #{{id}}",
+    "feed_id": "文章 #{{id}}",
     "generated_at": "最近更新时间：{{date}}",
     "load_failed": "队列状态加载失败",
     "loading": "正在加载队列任务状态...",
@@ -990,8 +1002,8 @@
       "switch": {
         "button": "换模型",
         "switching": "正在切换模型…",
-        "furina": "芙宁娜",
-        "BCSZ1.1": "八重神子"
+        "BCSZ1.1": "八重神子",
+        "furina-mini": "芙宁娜"
       },
       "error": {
         "manifest_unavailable": "模型清单不可用: {{url}}",
@@ -1195,5 +1207,13 @@
   },
   "social": {
     "aria_label": "博主联系方式"
+  },
+  "circle": {
+    "title": "友链动态",
+    "subtitle": "{{sites}} 个站点 · {{articles}} 篇文章",
+    "updated": "更新于",
+    "back_to_friends": "返回友链页",
+    "empty": "还没有可展示的友链动态",
+    "empty_hint": "在友链管理中填写 RSS 订阅地址后，这里会聚合展示各站最新文章"
   }
 }

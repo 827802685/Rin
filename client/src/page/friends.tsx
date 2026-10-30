@@ -25,6 +25,7 @@ type FriendItem = {
     accepted: number;
     health: string;
     sort_order?: number;
+    rss?: string | null;
 };
 
 async function publish({ name, avatar, desc, url, showAlert }: { name: string, avatar: string, desc: string, url: string, showAlert: ShowAlertType }) {
@@ -84,6 +85,12 @@ export function FriendsPage() {
     return (<SiteMeta title={t('friends.title')}>
         <Waiting for={friendsAvailable.length !== 0 || friendsUnavailable.length !== 0 || status === "idle"}>
             <main className="w-full flex flex-col justify-center items-center mb-8 t-primary ani-show">
+                <div className="wauto flex justify-end py-2">
+                    <a href="/circle" className="inline-flex items-center gap-1.5 text-sm px-4 py-2 rounded-full bg-button bg-w hover:scale-[1.03] transition-transform">
+                        <i className="ri-rss-line"></i>
+                        {t('friends.circle')}
+                    </a>
+                </div>
                 <FriendList title={t('friends.title')} show={friendsAvailable.length > 0} friends={friendsAvailable} />
                 <FriendList title={t('friends.left')} show={friendsUnavailable.length > 0} friends={friendsUnavailable} />
                 <FriendList title={t('friends.review.waiting')} show={waitList.length > 0} friends={waitList} />
@@ -139,6 +146,7 @@ function Friend({ friend }: { friend: FriendItem }) {
     const [name, setName] = useState(friend.name)
     const [desc, setDesc] = useState(friend.desc || "")
     const [url, setUrl] = useState(friend.url)
+    const [rss, setRss] = useState(friend.rss || "")
     const [status, setStatus] = useState(friend.accepted)
     const [sortOrder, setSortOrder] = useState(friend.sort_order || 0)
     const [modalIsOpen, setIsOpen] = useState(false);
@@ -168,6 +176,7 @@ function Friend({ friend }: { friend: FriendItem }) {
             name,
             desc,
             url,
+            rss,
             accepted: status,
             sort_order: sortOrder
         }).then(({ error }) => {
@@ -179,7 +188,7 @@ function Friend({ friend }: { friend: FriendItem }) {
                 })
             }
         })
-    }, [avatar, name, desc, url, status, sortOrder])
+    }, [avatar, name, desc, url, rss, status, sortOrder])
 
     const statusOption = [
         { value: -1, label: t('friends.review.rejected') },
@@ -281,6 +290,8 @@ function Friend({ friend }: { friend: FriendItem }) {
                     <Input value={desc} setValue={setDesc} placeholder={t('description')} variant="flat" className="mt-2" />
                     <Input value={avatar} setValue={setAvatar} placeholder={t('avatar.url')} variant="flat" className="mt-2" />
                     <Input value={url} setValue={setUrl} placeholder={t('url')} variant="flat" className="my-2" />
+                    <Input value={rss} setValue={setRss} placeholder={t('friends.rss.placeholder')} variant="flat" className="my-2" />
+                    <p className="text-xs text-neutral-400 self-start -mt-1">{t('friends.rss.hint')}</p>
                     <div className='flex flex-row justify-center space-x-2'>
                         <FlatActionButton onClick={deleteFriend} className="mt-2 text-theme">{t('delete.title')}</FlatActionButton>
                         <FlatActionButton onClick={updateFriend} className="mt-2 t-primary">{t('save')}</FlatActionButton>

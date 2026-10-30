@@ -104,6 +104,7 @@ export function createMockDB() {
             uid INTEGER NOT NULL,
             accepted INTEGER DEFAULT 0 NOT NULL,
             health TEXT DEFAULT '' NOT NULL,
+            rss TEXT,
             sort_order INTEGER DEFAULT 0 NOT NULL,
             created_at INTEGER DEFAULT (unixepoch()),
             updated_at INTEGER DEFAULT (unixepoch()),
