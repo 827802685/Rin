@@ -121,7 +121,14 @@
     "untitled": "无标题",
     "reading_mode": "阅读模式",
     "like": "点赞",
-    "liked": "已点赞"
+    "liked": "已点赞",
+    "sidebar": "文章信息",
+    "written_by": "作者",
+    "tags": "本文标签",
+    "share": "分享",
+    "copy_link": "复制链接",
+    "link_copied": "已复制",
+    "back_to_top": "回到顶部"
   },
   "avatar": {
     "url": "头像 URL"

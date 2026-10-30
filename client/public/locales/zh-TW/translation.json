@@ -121,7 +121,14 @@
     "untitled": "無標題",
     "reading_mode": "閱讀模式",
     "like": "點讚",
-    "liked": "已點讚"
+    "liked": "已點讚",
+    "sidebar": "文章資訊",
+    "written_by": "作者",
+    "tags": "本文標籤",
+    "share": "分享",
+    "copy_link": "複製連結",
+    "link_copied": "已複製",
+    "back_to_top": "回到頂部"
   },
   "avatar": {
     "url": "頭像 URL"

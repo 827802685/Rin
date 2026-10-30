@@ -121,7 +121,14 @@
     "untitled": "Untitled",
     "reading_mode": "Reading mode",
     "like": "Like",
-    "liked": "Liked"
+    "liked": "Liked",
+    "sidebar": "Article info",
+    "written_by": "Written by",
+    "tags": "Tags",
+    "share": "Share",
+    "copy_link": "Copy link",
+    "link_copied": "Link copied",
+    "back_to_top": "Back to top"
   },
   "avatar": {
     "url": "Avatar URL"

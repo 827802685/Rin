@@ -1,6 +1,6 @@
 {
-  "iteration": 7,
-  "since_merge": 1,
+  "iteration": 8,
+  "since_merge": 2,
   "last_merge_iter": 6,
   "history": [
     {
@@ -63,6 +63,15 @@
       "tests": "PASS",
       "sha": "",
       "ts": "2026-10-30T06:47:09Z"
+    },
+    {
+      "iter": 8,
+      "action": "新增功能",
+      "summary": "文章页左侧 256px 空占位改为 sticky 信息栏：作者卡(含头像/站点简介)、本文标签、复制链接分享、随视口高度触发的回到顶部",
+      "build": "PASS",
+      "tests": "PASS",
+      "sha": "",
+      "ts": "2026-10-30T07:16:14Z"
     }
   ]
 }

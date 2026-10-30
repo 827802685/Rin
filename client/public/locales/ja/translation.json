@@ -121,7 +121,14 @@
     "untitled": "無題",
     "reading_mode": "閲読モード",
     "like": "いいね",
-    "liked": "いいね済み"
+    "liked": "いいね済み",
+    "sidebar": "記事情報",
+    "written_by": "著者",
+    "tags": "タグ",
+    "share": "シェア",
+    "copy_link": "リンクをコピー",
+    "link_copied": "コピーしました",
+    "back_to_top": "トップへ戻る"
   },
   "avatar": {
     "url": "アバターURL"

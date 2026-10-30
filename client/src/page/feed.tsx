@@ -19,6 +19,7 @@ import { Button } from "../components/button";
 import { Tips } from "../components/tips";
 import { renderMermaidBlocks } from "../utils/mermaid-render";
 import { AdjacentSection } from "../components/adjacent_feed.tsx";
+import { ArticleSideRail } from "../components/article-side-rail";
 import { stripImageUrlMetadata } from "../utils/image-upload";
 import { estimateReading } from "../utils/reading-time";
 import { ShareBar } from "../components/theme/share-bar";
@@ -176,7 +177,7 @@ export function FeedPage({ id, TOC, clean }: { id: string, TOC: () => JSX.Elemen
         )}
         {feed && !error && (
           <>
-            {!sidebarShell && <div className="xl:w-64" />}
+            {!sidebarShell && <ArticleSideRail feed={feed} />}
             <main className="wauto">
               <article
                 className="rounded-2xl bg-w m-2 px-6 py-4"
