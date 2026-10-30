@@ -26,7 +26,7 @@ export function TagCloud({ tags, title }: { tags: TagItem[]; title?: string }) {
           <Link
             key={tag.id}
             href={`/hashtag/${encodeURIComponent(tag.name)}`}
-            className="rounded-full bg-secondary px-3 py-1 text-sm t-secondary bg-button"
+            className="rounded-full bg-secondary px-3 py-1 text-sm t-secondary bg-button rin-glass-pill"
           >
             #{tag.name}
             <span className="ml-1 text-xs t-muted">{tag.feeds}</span>

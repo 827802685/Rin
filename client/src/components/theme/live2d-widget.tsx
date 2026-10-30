@@ -1631,7 +1631,7 @@ export function Live2DWidget() {
         <button
           type="button"
           onClick={() => setHidden(false)}
-          className="fixed bottom-4 z-40 rounded-full bg-theme px-3 py-2 text-white shadow-lg transition hover:bg-theme-hover"
+          className="fixed bottom-4 z-40 rounded-full bg-theme px-3 py-2 text-white shadow-lg transition hover:bg-theme-hover rin-glass-accent"
           style={anchorStyle}
           aria-label={t("theme.live2d.show")}
         >
@@ -1843,7 +1843,7 @@ export function Live2DWidget() {
                       type="button"
                       onClick={handleChatSend}
                       disabled={chatLoading}
-                      className="shrink-0 rounded-full bg-theme px-3 py-1.5 text-xs text-white transition hover:bg-theme-hover disabled:opacity-50"
+                      className="shrink-0 rounded-full bg-theme px-3 py-1.5 text-xs text-white transition hover:bg-theme-hover disabled:opacity-50 rin-glass-accent"
                     >
                       {t("theme.live2d.chat.send")}
                     </button>

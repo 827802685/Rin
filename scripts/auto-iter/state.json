@@ -1,7 +1,7 @@
 {
-  "iteration": 10,
-  "since_merge": 4,
-  "last_merge_iter": 6,
+  "iteration": 12,
+  "since_merge": 1,
+  "last_merge_iter": 11,
   "history": [
     {
       "iter": 1,
@@ -90,6 +90,24 @@
       "tests": "PASS",
       "sha": "",
       "ts": "2026-10-30T10:32:57Z"
+    },
+    {
+      "iter": 11,
+      "action": "新增功能",
+      "summary": "友链聚合页（朋友圈 /circle）：friends 表 rss 列、GET /friend/circle 聚合（超时+缓存+零依赖解析）、新页时间线流、管理弹窗 RSS 输入、4 语言 i18n",
+      "build": "PASS",
+      "tests": "PASS",
+      "sha": "",
+      "ts": "2026-10-31T06:40:00Z"
+    },
+    {
+      "iter": 12,
+      "action": "新增功能",
+      "summary": "小尺寸液态玻璃：新增 .rin-glass-pill/.rin-glass-accent，套到顶部导航选项卡（选中项胶囊）、分页、标签、分享、AI/设置/弹窗操作按钮、音乐播放器、看板娘；亮色靠投影+环境色晕染，暗色靠提亮+顶棱高光",
+      "build": "PASS",
+      "tests": "PASS",
+      "sha": "",
+      "ts": "2026-10-31T07:10:00Z"
     }
   ]
 }

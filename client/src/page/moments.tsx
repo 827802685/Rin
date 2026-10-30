@@ -181,7 +181,7 @@ export function MomentsPage() {
                             {profile?.permission && (
                                 <button 
                                     onClick={openCreateModal}
-                                    className="text-sm font-normal rounded-full px-4 py-2 text-white bg-theme"
+                                    className="text-sm font-normal rounded-full px-4 py-2 text-white bg-theme rin-glass-accent"
                                 >
                                     {t('publish.title')}
                                 </button>
@@ -211,7 +211,7 @@ export function MomentsPage() {
                                 ) : hasNextPage ? (
                                     <button
                                         onClick={loadMore}
-                                        className="text-sm font-normal rounded-full px-4 py-2 text-white bg-theme"
+                                        className="text-sm font-normal rounded-full px-4 py-2 text-white bg-theme rin-glass-accent"
                                     >
                                         {t('load_more')}
                                     </button>

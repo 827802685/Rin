@@ -437,7 +437,7 @@ export function MusicPlayer() {
             <button
               type="button"
               onClick={togglePlay}
-              className="rin-neon-border flex h-9 w-9 items-center justify-center rounded-full bg-theme text-base text-white shadow-md transition hover:scale-105 hover:bg-theme-hover"
+              className="rin-neon-border flex h-9 w-9 items-center justify-center rounded-full bg-theme text-base text-white shadow-md transition hover:scale-105 hover:bg-theme-hover rin-glass-accent"
               aria-label={playing ? t("theme.player.pause") : t("theme.player.play")}
             >
               <i className={playing ? "ri-pause-fill" : "ri-play-fill"} />

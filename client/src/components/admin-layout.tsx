@@ -20,7 +20,7 @@ function AdminNavItem({
       href={href}
       className={`flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium transition-colors ${
         active
-          ? "bg-theme text-white"
+          ? "bg-theme text-white rin-glass-accent"
           : "t-primary hover:bg-neutral-100 dark:hover:bg-white/5"
       }`}
     >

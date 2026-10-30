@@ -130,7 +130,7 @@ export function Danmaku({ feedId }: { feedId: number | string }) {
                     type="button"
                     onClick={() => void send()}
                     disabled={sending || input.trim().length === 0}
-                    className="flex h-7 items-center gap-1 rounded-full bg-theme px-3 text-xs text-white transition hover:bg-theme-hover disabled:opacity-50"
+                    className="flex h-7 items-center gap-1 rounded-full bg-theme px-3 text-xs text-white transition hover:bg-theme-hover disabled:opacity-50 rin-glass-accent"
                 >
                     <i className="ri-send-plane-fill" />
                     {t("danmaku.send")}
