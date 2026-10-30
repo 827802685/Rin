@@ -997,8 +997,8 @@
       "switch": {
         "button": "モデル切替",
         "switching": "モデルを切替中…",
-        "furina": "フリーナ",
-        "BCSZ1.1": "八重神子"
+        "BCSZ1.1": "八重神子",
+        "furina-mini": "フリーナ"
       },
       "error": {
         "manifest_unavailable": "モデルマニフェストを取得できません: {{url}}",

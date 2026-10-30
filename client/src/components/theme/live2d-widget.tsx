@@ -14,7 +14,13 @@ import {
   playAction,
   stopAllMotions,
 } from "./live2d/actions";
-import { bundledRootFor, pickCdnRoot, precacheAllModels, prefetchModel } from "./live2d/cache";
+import {
+  REMOTE_CDN_CANDIDATES,
+  bundledRootFor,
+  pickCdnRoot,
+  precacheAllModels,
+  prefetchModel,
+} from "./live2d/cache";
 import { enginePathsFor, pickSameOriginEngineRoot } from "./live2d/engine";
 import {
   capSubdelegateDpr,
@@ -298,8 +304,14 @@ async function patchLive2dApp(): Promise<boolean> {
  *   - 对同一 URL 的去重：预取与插件加载同一文件时只计一次字节数；
  *   - retarget()：换模型时原地换分母并清零分子（见下方 ProgressTracker 注释）。
  */
-type ProgressTarget = {
-  // 目标模型名；null 表示自定义模型（URL 认不出名字，退回"含 /model/ 即计"的老口径）
+// FurinaMini（作者仓库的自研渲染器）暴露的最小实例面：销毁 + 表情切换。
+// 渲染器本身自带视线跟随/自动眨眼/空闲表情，这里只接需要降级映射的部分。
+type FurinaMiniInstance = {
+  destroy?: () => void;
+  setExpression?: (v: string | number) => void;
+};
+
+type ProgressTarget = {  // 目标模型名；null 表示自定义模型（URL 认不出名字，退回"含 /model/ 即计"的老口径）
   name: string | null;
   // 分母（总字节）；0 表示未知，UI 只显示已下载量
   total: number;
@@ -545,6 +557,8 @@ export function Live2DWidget() {
   const tipsTimerRef = useRef<number | null>(null);
   const chatScrollRef = useRef<HTMLDivElement | null>(null);
   const renderedRef = useRef(false);
+  // FurinaMini（自研渲染器）实例：furina-mini 模型不走 Cubism，动作按钮降级走它的 setExpression
+  const furinaMiniRef = useRef<FurinaMiniInstance | null>(null);
   const lastProgressAtRef = useRef(Date.now());
   // 拖动状态镜像（ref 版，供动画帧读取）
   const draggingRef = useRef(false);
@@ -703,6 +717,27 @@ export function Live2DWidget() {
    * 兜底方案：仅当渲染器实例尚未就绪时，才走"重挂载组件重新 initWidget"的老路径
    * （init 流程会按命中根的 model_list 重新解析 modelId，口径唯一）。
    */
+  /**
+   * 按当前渲染器播动作：Cubism 走 actions.playAction；
+   * furina-mini 没有骨骼动作，降级为最接近的表情（wave→微笑、shake→猫嘴、dance→脸红）。
+   */
+  function playActionForCurrent(name: ActionName) {
+    const mini = furinaMiniRef.current;
+    if (mini && typeof mini.setExpression === "function") {
+      const expr =
+        ({ wave: "smile", shake: "catMouth", dance: "blush", pet: "smile" } as Record<string, string>)[
+          name
+        ] ?? "smile";
+      try {
+        mini.setExpression(expr);
+      } catch {
+        // ignore
+      }
+      return;
+    }
+    playAction(name);
+  }
+
   function switchModel(name: string) {
     // 内置模型存在 BUILTIN_MODELS，自定义模型在其配置表里
     const isBase = (BUILTIN_MODELS as readonly string[]).includes(name);
@@ -714,6 +749,14 @@ export function Live2DWidget() {
     progressTrackerRef.current?.retarget(progressTargetFor(name));
     setProgress(null);
     showTips(t("theme.live2d.switch.switching"), 3000);
+
+    // furina-mini 是独立渲染器（非 Cubism），changeModel 快路径不适用：
+    // 进入/离开都重挂载，由两个渲染 effect 按分支接管（离开后 Cubism 尚未就绪，
+    // 下方 canChange 判定自然为 false，同样落到重挂载兜底）
+    if (name === "furina-mini") {
+      setModelVersion((v) => v + 1);
+      return;
+    }
 
     const app = (window as unknown as { __rinLive2dApp?: unknown }).__rinLive2dApp;
     const canChange = app && typeof (app as { changeModel?: unknown }).changeModel === "function";
@@ -751,7 +794,7 @@ export function Live2DWidget() {
   }
 
   function petModel() {
-    playAction("pet");
+    playActionForCurrent("pet");
     const tips = [
       t("theme.live2d.talk.poke1"),
       t("theme.live2d.talk.poke2"),
@@ -761,7 +804,7 @@ export function Live2DWidget() {
   }
 
   function playCustomAction(name: ActionName) {
-    playAction(name);
+    playActionForCurrent(name);
     const tipKey =
       name === "wave"
         ? t("theme.live2d.actions.tip.wave")
@@ -846,6 +889,11 @@ export function Live2DWidget() {
   }
 
   useEffect(() => {
+    // furina-mini 走独立渲染器分支（见下方 FurinaMini effect），不初始化 Cubism 插件。
+    // 两个 effect 同依赖 [modelVersion]：进入 furina-mini 时这里整体跳过，
+    // 离开时 FurinaMini effect 的 cleanup 先销毁自研实例，再由本 effect 挂 Cubism。
+    if (activeModel === "furina-mini") return;
+
     let disposed = false;
 
     // ---- 首次挂载，清掉可能残留的插件会话状态，保证每次挂载都从干净状态开始 ----
@@ -1248,6 +1296,123 @@ export function Live2DWidget() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [modelVersion]);
 
+  // ---- FurinaMini（自研渲染器）渲染分支 ----
+  // furina-mini 不经过 Cubism 插件：全套资源约 2.4MB（38KB 渲染器 + 1.65MB 量化网格
+  // + 0.69MB WebP 图集），由作者仓库的 FurinaMini.mount 独立渲染，自带视线跟随、
+  // 自动眨眼与空闲表情（follow / idle / autoExpr 选项默认开启），无需主 effect 的
+  // 就绪轮询与空闲轮播——mount resolve 即视为就绪。
+  // 与主 effect 互斥：activeModel 为 furina-mini 时主 effect 整体跳过。
+  useEffect(() => {
+    if (activeModel !== "furina-mini") return;
+    const cage = modelAreaRef.current;
+    if (!cage) return;
+
+    let disposed = false;
+    const host = document.createElement("div");
+    host.id = "rin-furina-mini";
+    // 与 #waifu 同居一个缩放容器：外层已负责定位/缩放/轮廓贴合，这里只铺满
+    host.style.cssText =
+      "position:relative;width:100%;height:100%;overflow:hidden;transition:transform .45s cubic-bezier(.22,.61,.36,1)";
+    cage.appendChild(host);
+
+    // 随滚动轻浮：滚动 delta 的一部分反向写到容器 transform 上（有缓动回中），
+    // 与渲染器内部的鼠标视线跟随（target）互不干扰；幅度压得很小，只求"跟着页面动"的呼吸感
+    let lastScrollY = window.scrollY;
+    const onScrollFloat = () => {
+      const dy = window.scrollY - lastScrollY;
+      lastScrollY = window.scrollY;
+      if (!dy) return;
+      const offset = Math.max(-14, Math.min(14, dy * -0.08));
+      host.style.transform = `translateY(${offset}px)`;
+      window.setTimeout(() => {
+        if (!disposed) host.style.transform = "translateY(0)";
+      }, 90);
+    };
+    window.addEventListener("scroll", onScrollFloat, { passive: true });
+
+    (async () => {
+      // 资源小、加载快，不走流式进度（tracker 只按 /model/ 路径计数），用加载遮罩即可
+      setProgress(null);
+      // 独立的经典 script 加载器：不能用 loadModuleScript —— 它按 data 标记全局判重，
+      // 第一个候选根失败后残留的空 script 会让第二个候选永远等不到 load 事件（死锁）。
+      // 且 furina-mini.js 是 IIFE（非 ES module），经典 script 语义也更贴切。
+      const loadClassic = (src: string) =>
+        new Promise<void>((resolve, reject) => {
+          const el = document.createElement("script");
+          el.src = src;
+          el.async = false;
+          el.onload = () => resolve();
+          el.onerror = () => {
+            el.remove();
+            reject(new Error(`Failed to load ${src}`));
+          };
+          document.head.appendChild(el);
+        });
+      const bases = REMOTE_CDN_CANDIDATES.map((root) => `${root}furina-mini/`);
+      for (const base of bases) {
+        try {
+          // dpdns 加速镜像对脚本返回 text/plain + nosniff，浏览器会拒绝执行——
+          // 这里靠 onerror 快速失败落到下一个候选（github.io，MIME 正确）
+          await loadClassic(`${base}furina-mini.js`);
+          const mount = (
+            window as unknown as { FurinaMini?: { mount?: unknown } }
+          ).FurinaMini?.mount as
+            | ((el: HTMLElement, opts: Record<string, unknown>) => Promise<FurinaMiniInstance>)
+            | undefined;
+          if (typeof mount !== "function") {
+            throw new Error("FurinaMini.mount is unavailable");
+          }
+          const instance = await mount(host, {
+            base,
+            // 画布宽度：夹在加载盒的宽度里，避免小容器被 420px 默认值撑破
+            size: Math.max(200, Math.min(420, boxW)),
+            frames: [
+              "blink",
+              "eyeLeft",
+              "eyeRight",
+              "eyeUp",
+              "eyeDown",
+              "smile",
+              "catMouth",
+              "mouthOpen",
+              "angry",
+              "cry",
+              "blush",
+            ],
+          });
+          if (disposed) {
+            instance?.destroy?.();
+            return;
+          }
+          furinaMiniRef.current = instance;
+          renderedRef.current = true;
+          setRendered(true);
+          setError(null);
+          return;
+        } catch {
+          // 尝试下一个候选根
+        }
+      }
+      if (!disposed) {
+        setError(t("theme.live2d.loading.stalled"));
+      }
+    })();
+
+    return () => {
+      disposed = true;
+      window.removeEventListener("scroll", onScrollFloat);
+      try {
+        furinaMiniRef.current?.destroy?.();
+      } catch {
+        // ignore
+      }
+      furinaMiniRef.current = null;
+      host.remove();
+    };
+    // 与主 effect 相同的触发口径：只在重挂载（切模型）时重建
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [modelVersion]);
+
   // 设置里修改默认模型 / 增删自定义模型后，重载看板娘以应用新的模型列表。
   // 依赖这两个配置值的变化；变化时重置回默认模型并重挂载插件。
   const settingsModelsSig = `${config.get<string>("widget.live2d.defaultModel")}|${config.get<string>("widget.live2d.customModels")}`;
@@ -1394,7 +1559,7 @@ export function Live2DWidget() {
     if (now - lastPetAtRef.current < 1500) return; // 连点冷却，避免动作排队
     if (!renderedRef.current || isActionPlaying()) return;
     lastPetAtRef.current = now;
-    playAction("pet");
+    playActionForCurrent("pet");
   }
 
   // 用 ref 保存最新 handler，便于在 effect 清理里移除

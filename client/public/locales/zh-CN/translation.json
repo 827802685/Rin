@@ -997,8 +997,8 @@
       "switch": {
         "button": "换模型",
         "switching": "正在切换模型…",
-        "furina": "芙宁娜",
-        "BCSZ1.1": "八重神子"
+        "BCSZ1.1": "八重神子",
+        "furina-mini": "芙宁娜"
       },
       "error": {
         "manifest_unavailable": "模型清单不可用: {{url}}",

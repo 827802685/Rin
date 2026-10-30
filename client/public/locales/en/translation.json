@@ -997,8 +997,8 @@
       "switch": {
         "button": "Switch model",
         "switching": "Switching model...",
-        "furina": "Furina",
-        "BCSZ1.1": "Yae Miko"
+        "BCSZ1.1": "Yae Miko",
+        "furina-mini": "Furina"
       },
       "error": {
         "manifest_unavailable": "Model manifest unavailable: {{url}}",

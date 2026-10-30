@@ -8,9 +8,13 @@
 // MODEL_FILES_BY_NAME / EXPECTED_TOTAL_BY_NAME 补对应条目（i18n 的
 // theme.live2d.switch.<id> 是展示名）。
 
-// 内置模型 id。furina 走远端 CDN（moc3 约 95MB 超 Cloudflare Pages 25MiB 上限，
-// 无法打包）；BCSZ1.1 整模型约 22MB，随博客打包成静态资源（见 vite.config.ts）。
-export const BUILTIN_MODELS = ["furina", "BCSZ1.1"] as const;
+// 内置模型 id。furina-mini 是作者自研渲染器（FurinaMini）的芙宁娜精简版：
+// 38KB 渲染器 + 1.65MB 量化网格 + 0.69MB WebP 图集 ≈ 2.4MB，走作者仓库远端根
+// （与引擎七件套同仓库），不需要 Cubism Core，live2d-widget.tsx 有专门的渲染分支；
+// BCSZ1.1 整模型约 22MB，随博客打包成静态资源（见 vite.config.ts）。
+// 原 Cubism 版 furina（moc3 约 95MB，只能走远端 CDN）已被 furina-mini 替换并从
+// 内置列表移除：同样角色、2.4MB 对 95MB，且 2.4MB 可以放心当默认模型。
+export const BUILTIN_MODELS = ["furina-mini", "BCSZ1.1"] as const;
 
 export type BuiltinModel = (typeof BUILTIN_MODELS)[number];
 
@@ -48,14 +52,14 @@ export function allModelIds(custom: CustomModel[] = []): string[] {
   return [...BUILTIN_MODELS, ...custom.map((c) => c.id)];
 }
 
-// 默认模型 id：配置值合法（内置 id 或自定义 id）则用之，否则回退 BCSZ1.1。
-// 回退目标必须是可随站打包的轻模型：furina 的 moc3 约 95MB，只能走远端 CDN，
-// 拿它当兜底会让一个未配置的访客直接下载 95MB 并把整页拖到约 12 帧。
+// 默认模型 id：配置值合法（内置 id 或自定义 id）则用之，否则回退 furina-mini。
+// 回退目标必须是轻模型：furina-mini 全套约 2.4MB（自研渲染器，无需 Cubism Core），
+// 未配置的访客也能秒开看板娘；BCSZ1.1 约 22MB 只适合做备选。
 export function resolveDefaultName(configured: unknown, custom: CustomModel[] = []): string {
   const s = typeof configured === "string" ? configured.trim() : "";
   if ((BUILTIN_MODELS as readonly string[]).includes(s)) return s;
   if (custom.some((c) => c.id === s)) return s;
-  return "BCSZ1.1";
+  return "furina-mini";
 }
 
 // 自定义模型的唯一 id（设置页"添加模型"时生成）
@@ -64,8 +68,13 @@ export function newCustomModelId(): string {
 }
 
 // 各模型的核心大文件（用于预取，加速首次加载）。自定义模型无常量表，走 index.json 全量预缓存。
+// furina-mini 的文件带子目录前缀：三个文件都在远端根的 furina-mini/ 下。
 export const MODEL_FILES_BY_NAME: Record<string, string[]> = {
-  furina: ["furina.moc3", "furina.8192/texture_00.png"],
+  "furina-mini": [
+    "furina-mini/furina-mini.js",
+    "furina-mini/furina-mesh.bin",
+    "furina-mini/furina-atlas.webp",
+  ],
   "BCSZ1.1": ["BCSZ1.1.moc3", "textures/texture_00.png"],
 };
 
@@ -80,7 +89,8 @@ export const MODEL_FILES_BY_NAME: Record<string, string[]> = {
 // BCSZ1.1 的贴图已从 8192² 降到 4096²（13.25MB → 3.41MB，无损 RGBA）：桌面帧时与贴图
 // 无关（取决于 moc3 的 ArtMesh 数量），但移动端省掉的是带宽和 268MB → 67MB 的纹理显存。
 export const EXPECTED_TOTAL_BY_NAME: Record<string, number> = {
-  furina: 103754246,
+  // furina-mini：渲染器 38614 + 量化网格 1654484 + WebP 图集 693444（实测 Content-Length）
+  "furina-mini": 2386542,
   "BCSZ1.1": 5911380,
 };
 
@@ -102,7 +112,8 @@ const GENERIC_SYSTEM_PROMPT =
   "请用中文回复，每次回复不超过 80 字，不要使用 Markdown 格式。";
 
 const CHAT_PROMPT_BY_MODEL: Record<BuiltinModel, string> = {
-  furina: FURINA_SYSTEM_PROMPT,
+  // furina-mini 与原 Cubism furina 是同一个角色（芙宁娜），人设沿用
+  "furina-mini": FURINA_SYSTEM_PROMPT,
   "BCSZ1.1": GENERIC_SYSTEM_PROMPT,
 };
 

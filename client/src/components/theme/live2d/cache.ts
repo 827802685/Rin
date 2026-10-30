@@ -23,7 +23,8 @@ export const REMOTE_CDN_CANDIDATES = [
 // 各模型优先使用的本地/打包根（非远端 CDN）。BCSZ1.1 生产走随博客分发的打包根。
 // 仅对内置模型生效；自定义模型不看根，直接用其配置 url（在 switchModel/prefetch 中另行处理）。
 export function bundledRootFor(name: string): string {
-  if (name === "furina") return "";
+  // furina-mini 走远端根（与引擎同仓库，全套仅约 2.4MB），本地不打包
+  if (name === "furina-mini") return "";
   if (import.meta.env.DEV) return `${location.origin}/rin-live2d-cdn/`;
   return `${location.origin}/live2d-bundled/`;
 }

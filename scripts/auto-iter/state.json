@@ -1,6 +1,6 @@
 {
-  "iteration": 9,
-  "since_merge": 3,
+  "iteration": 10,
+  "since_merge": 4,
   "last_merge_iter": 6,
   "history": [
     {
@@ -81,6 +81,15 @@
       "tests": "PASS",
       "sha": "",
       "ts": "2026-10-30T09:36:45Z"
+    },
+    {
+      "iter": 10,
+      "action": "新增功能",
+      "summary": "看板娘默认模型替换为作者的 furina-mini 自研渲染器（95MB→2.4MB）+ 模型切换/表情降级/随滚动轻浮",
+      "build": "PASS",
+      "tests": "PASS",
+      "sha": "",
+      "ts": "2026-10-30T10:32:57Z"
     }
   ]
 }

@@ -25,7 +25,8 @@ export const CLIENT_CONFIG_DEFAULTS = new Map(
     "widget.live2d.scale": 1,
     "widget.live2d.layout": "",
     "widget.live2d.edge": false,
-    "widget.live2d.defaultModel": "BCSZ1.1",
+    // 默认看板娘模型：furina-mini（自研渲染器，全套约 2.4MB），未配置的访客也能秒开
+    "widget.live2d.defaultModel": "furina-mini",
     "widget.live2d.customModels": "[]",
     "widget.live2d.fps_cap": 0,
     "widget.live2d.preload": false,
