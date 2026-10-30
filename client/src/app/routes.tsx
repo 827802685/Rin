@@ -20,6 +20,7 @@ import { NotFoundPage } from "../page/not-found";
 import { FeedPage, TOCHeader } from "../page/feed";
 import { FeedsPage } from "../page/feeds";
 import { FriendsPage } from "../page/friends";
+const FriendCirclePage = lazy(() => import("../page/fcircle").then((m) => ({ default: m.FriendCirclePage })));
 const HealthPage = lazy(() => import("../page/health").then((m) => ({ default: m.HealthPage })));
 import { HashtagPage } from "../page/hashtag";
 import { HashtagsPage } from "../page/hashtags";
@@ -58,6 +59,10 @@ export function AppRoutes() {
 
       <AppRoute path="/friends">
         <FriendsPage />
+      </AppRoute>
+
+      <AppRoute path="/circle">
+        <FriendCirclePage />
       </AppRoute>
 
       <AppRoute path="/ai">

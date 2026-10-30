@@ -269,7 +269,12 @@
       "rejected": "拒否されました",
       "waiting": "審査待ち"
     },
-    "title": "友人"
+    "title": "友人",
+    "circle": "フレンド動態",
+    "rss": {
+      "placeholder": "RSS フィード URL（任意）",
+      "hint": "設定すると、このサイトの最新記事が「フレンド動態」ページに表示されます"
+    }
   },
   "github_login": "Github ログイン",
   "hashtags": "ラベル",
@@ -1202,5 +1207,13 @@
   },
   "social": {
     "aria_label": "作者連絡先"
+  },
+  "circle": {
+    "title": "フレンド動態",
+    "subtitle": "{{sites}} サイト · {{articles}} 件の記事",
+    "updated": "更新日時",
+    "back_to_friends": "友人リンクに戻る",
+    "empty": "表示できるフレンドの記事はまだありません",
+    "empty_hint": "友人リンク管理で RSS フィード URL を設定すると、各サイトの最新記事がここに表示されます"
   }
 }

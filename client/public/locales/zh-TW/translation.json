@@ -269,7 +269,12 @@
       "rejected": "拒絕",
       "waiting": "待審核"
     },
-    "title": "朋友們"
+    "title": "朋友們",
+    "circle": "友鏈動態",
+    "rss": {
+      "placeholder": "RSS 訂閱地址（可選）",
+      "hint": "填寫後，該站最新文章將在「友鏈動態」頁聚合展示"
+    }
   },
   "github_login": "Github 登入",
   "hashtags": "標籤",
@@ -1202,5 +1207,13 @@
   },
   "social": {
     "aria_label": "博主聯絡方式"
+  },
+  "circle": {
+    "title": "友鏈動態",
+    "subtitle": "{{sites}} 個站點 · {{articles}} 篇文章",
+    "updated": "更新於",
+    "back_to_friends": "返回友鏈頁",
+    "empty": "還沒有可展示的友鏈動態",
+    "empty_hint": "在友鏈管理中填寫 RSS 訂閱地址後，這裡會聚合展示各站最新文章"
   }
 }

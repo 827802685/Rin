@@ -85,6 +85,7 @@ export const friendUpdateSchema = t.Object({
   desc: t.String({ optional: true }),
   avatar: t.String({ optional: true }),
   url: t.String({ optional: true }),
+  rss: t.String({ optional: true }),
   accepted: t.Numeric({ optional: true }),
   sort_order: t.Numeric({ optional: true }),
 });

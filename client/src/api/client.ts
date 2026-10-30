@@ -22,6 +22,7 @@ import type {
   CreateCommentRequest,
   Friend,
   FriendListResponse,
+  FriendCircleResponse,
   CreateFriendRequest,
   UpdateFriendRequest,
   Moment,
@@ -208,6 +209,7 @@ export type {
   CreateCommentRequest,
   Friend,
   FriendListResponse,
+  FriendCircleResponse,
   CreateFriendRequest,
   UpdateFriendRequest,
   Moment,
@@ -482,6 +484,11 @@ class FriendAPI {
   // GET /api/friend
   async list(): Promise<ApiResponse<FriendListResponse>> {
     return this.http.get<FriendListResponse>("/api/friend");
+  }
+
+  // GET /api/friend/circle —— 友链动态聚合（朋友圈）
+  async circle(): Promise<ApiResponse<FriendCircleResponse>> {
+    return this.http.get<FriendCircleResponse>("/api/friend/circle");
   }
 
   // POST /api/friend

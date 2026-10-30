@@ -209,11 +209,33 @@ export interface Friend {
   uid: number;
   updatedAt: string;
   health: string;
+  rss?: string | null;
 }
 
 export interface FriendListResponse {
   friend_list: Friend[];
   apply_list: Friend | null;
+}
+
+/** 友链聚合动态（朋友圈）单篇文章 */
+export interface FriendCircleItem {
+  title: string;
+  link: string;
+  date: string | null;
+}
+
+/** 友链聚合动态单个站点 */
+export interface FriendCircleSite {
+  id: number;
+  name: string;
+  avatar: string;
+  url: string;
+  items: FriendCircleItem[];
+}
+
+export interface FriendCircleResponse {
+  sites: FriendCircleSite[];
+  updated_at: string;
 }
 
 export interface CreateFriendRequest {
@@ -228,6 +250,7 @@ export interface UpdateFriendRequest {
   desc?: string;
   avatar?: string;
   url?: string;
+  rss?: string;
   accepted?: number;
   sort_order?: number;
 }

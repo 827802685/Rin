@@ -269,7 +269,12 @@
       "rejected": "拒绝",
       "waiting": "待审核"
     },
-    "title": "朋友们"
+    "title": "朋友们",
+    "circle": "友链动态",
+    "rss": {
+      "placeholder": "RSS 订阅地址（可选）",
+      "hint": "填写后，该站最新文章将在「友链动态」页聚合展示"
+    }
   },
   "github_login": "Github 登录",
   "hashtags": "标签",
@@ -1202,5 +1207,13 @@
   },
   "social": {
     "aria_label": "博主联系方式"
+  },
+  "circle": {
+    "title": "友链动态",
+    "subtitle": "{{sites}} 个站点 · {{articles}} 篇文章",
+    "updated": "更新于",
+    "back_to_friends": "返回友链页",
+    "empty": "还没有可展示的友链动态",
+    "empty_hint": "在友链管理中填写 RSS 订阅地址后，这里会聚合展示各站最新文章"
   }
 }

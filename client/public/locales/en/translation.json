@@ -269,7 +269,12 @@
       "rejected": "Rejected",
       "waiting": "Pending review"
     },
-    "title": "Friends"
+    "title": "Friends",
+    "circle": "Friend Circle",
+    "rss": {
+      "placeholder": "RSS feed URL (optional)",
+      "hint": "Once set, latest posts from this site appear on the Friend Circle page"
+    }
   },
   "github_login": "Github Login",
   "hashtags": "Hashtags",
@@ -1202,5 +1207,13 @@
   },
   "social": {
     "aria_label": "Contact the author"
+  },
+  "circle": {
+    "title": "Friend Circle",
+    "subtitle": "{{sites}} sites · {{articles}} posts",
+    "updated": "Updated",
+    "back_to_friends": "Back to friends",
+    "empty": "No friend posts yet",
+    "empty_hint": "Add RSS feed URLs in friend management, and latest posts from your friends will show up here"
   }
 }
