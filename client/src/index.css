@@ -287,11 +287,49 @@ a.toc-link {
 
 /* ① 阅读进度条由 ReadingProgress 组件挂载（见 App.tsx），样式内联、不依赖此文件 */
 
-/* ② 毛玻璃：顶栏导航胶囊 / 弹层。配色用 surface-raised 80% 透出背景模糊 */
-.rin-glass {
-  background-color: color-mix(in srgb, var(--surface-raised) 78%, transparent);
-  backdrop-filter: blur(12px) saturate(160%);
-  -webkit-backdrop-filter: blur(12px) saturate(160%);
+/* ② 液态玻璃：顶栏导航胶囊。
+   踩坑记录：该元素通常同时挂 .bg-w（定义在 base.css 的 @layer base 里），
+   两者都是单类选择器，谁在后面谁赢；实测计算值曾长期是 rgb(255,255,255)，
+   背景不透明 → backdrop-filter 模糊的是被自己挡住的内容，等于没生效。
+   这里用双类名提特异性，不依赖文件顺序，也不用 !important。
+   高光用 background-image 而不是 ::before：伪元素需要父级 position:relative，
+   而胶囊本身是 overflow-x 滚动容器，改定位会挪动内部下拉菜单的基准。 */
+.rin-glass.rin-glass {
+  background-color: color-mix(in srgb, var(--surface-raised) 74%, transparent);
+  background-image:
+    radial-gradient(140% 90% at 50% -30%, rgba(255, 255, 255, 0.9), rgba(255, 255, 255, 0) 55%),
+    linear-gradient(115deg, rgba(255, 255, 255, 0.35) 0%, rgba(255, 255, 255, 0) 30%);
+  backdrop-filter: blur(16px) saturate(180%);
+  -webkit-backdrop-filter: blur(16px) saturate(180%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.92), /* 顶棱高光 */
+    inset 0 -1px 0 rgba(15, 23, 42, 0.05), /* 底部暗边，读作玻璃厚度 */
+    inset 0 0 0 1px rgba(255, 255, 255, 0.38), /* 内描边 */
+    0 1px 2px rgba(15, 23, 42, 0.05),
+    0 10px 30px -12px rgba(15, 23, 42, 0.22);
+}
+
+/* 暗色：白玻璃换成低透明白，高光压到 16%，阴影转纯黑 */
+[data-color-mode="dark"] .rin-glass.rin-glass {
+  background-color: rgba(255, 255, 255, 0.08);
+  background-image: radial-gradient(
+    140% 90% at 50% -30%,
+    rgba(255, 255, 255, 0.22),
+    rgba(255, 255, 255, 0) 55%
+  );
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.16),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.45),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.06),
+    0 10px 30px -12px rgba(0, 0, 0, 0.75);
+}
+
+/* 不支持 backdrop-filter 时退回近乎不透明，避免正文从导航底下透出来干扰阅读 */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .rin-glass.rin-glass {
+    background-color: color-mix(in srgb, var(--surface-raised) 96%, transparent);
+    background-image: none;
+  }
 }
 
 /* ③ 平滑锚点滚动 + 定制滚动条 */

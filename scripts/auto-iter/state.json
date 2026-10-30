@@ -1,6 +1,6 @@
 {
-  "iteration": 6,
-  "since_merge": 0,
+  "iteration": 7,
+  "since_merge": 1,
   "last_merge_iter": 6,
   "history": [
     {
@@ -54,6 +54,15 @@
       "tests": "PASS",
       "sha": "",
       "ts": "2026-10-29T16:24:24Z"
+    },
+    {
+      "iter": 7,
+      "action": "修复功能",
+      "summary": "顶栏毛玻璃被 .bg-w 覆盖失效 → 双类名提特异性并升级为液态玻璃；<html lang> 跟随语言切换；中文队列文案去英文",
+      "build": "PASS",
+      "tests": "PASS",
+      "sha": "",
+      "ts": "2026-10-30T06:47:09Z"
     }
   ]
 }

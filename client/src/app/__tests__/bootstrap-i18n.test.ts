@@ -4,7 +4,7 @@
 import { expect, it, describe } from "vitest";
 import { readdirSync } from "node:fs";
 import { join } from "node:path";
-import { SUPPORTED_LNGS, normalizeLng } from "../bootstrap";
+import { SUPPORTED_LNGS, normalizeLng, syncDocumentLang } from "../bootstrap";
 
 describe("normalizeLng", () => {
   it("把裸 zh 收敛到 zh-CN（手机浏览器最常见的上报形式）", () => {
@@ -36,6 +36,30 @@ describe("normalizeLng", () => {
     for (const raw of ["zh", "zh-TW", "zh-hant-hk", "en-GB", "ja", "ko-KR", "pt-BR", "xx"]) {
       expect(SUPPORTED_LNGS).toContain(normalizeLng(raw));
     }
+  });
+});
+
+describe("syncDocumentLang", () => {
+  it("把当前语言写回 html lang，供屏幕阅读器与搜索引擎识别", () => {
+    document.documentElement.lang = "en";
+    syncDocumentLang("zh-CN");
+    expect(document.documentElement.lang).toBe("zh-CN");
+  });
+
+  it("复用 normalizeLng，繁体与未知语言都会收敛到真实存在的标签", () => {
+    syncDocumentLang("zh-Hant-TW");
+    expect(document.documentElement.lang).toBe("zh-TW");
+    syncDocumentLang("ja-JP");
+    expect(document.documentElement.lang).toBe("ja");
+    syncDocumentLang("fr");
+    expect(document.documentElement.lang).toBe("en");
+  });
+
+  it("重复调用不会抖动（值相等时不重复赋值）", () => {
+    syncDocumentLang("zh-CN");
+    document.documentElement.lang = "zh-CN";
+    syncDocumentLang("zh-CN");
+    expect(document.documentElement.lang).toBe("zh-CN");
   });
 });
 
