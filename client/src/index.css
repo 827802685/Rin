@@ -841,11 +841,22 @@ body.rin-reading-mode [data-rin-widget] {
   }
 }
 
-.rin-l2d-trigger {
+/* 双写类名提升特异性：要压过上方 .rin-glass-pill.rin-glass-pill 的背景与模糊 */
+.rin-l2d-trigger.rin-l2d-trigger {
   color: rgb(var(--theme-rgb));
   transition:
     transform 160ms var(--rin-l2d-ease),
     color 160ms var(--rin-l2d-ease);
+  /* 触发球本体不要 backdrop-blur：它正下方就是面板投下的阴影，
+     玻璃会把阴影一起采样进来，展开瞬间整颗球发黑，和白色面板断成两种材质。
+     球底下只有页面背景，模糊本来也没有意义，直接给一层近乎不实的底 + 保留顶光渐变。 */
+  background-color: color-mix(in srgb, var(--surface-raised) 97%, transparent);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+
+[data-color-mode="dark"] .rin-l2d-trigger.rin-l2d-trigger {
+  background-color: rgba(255, 255, 255, 0.16);
 }
 
 .rin-l2d-trigger:active {
