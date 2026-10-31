@@ -745,3 +745,19 @@ body.rin-reading-mode [data-rin-widget] {
   animation-fill-mode: both;
   will-change: transform;
 }
+
+
+/* 看板娘 furina-mini（作者自研渲染器）画布：必须显式接管指针。
+   pointer-events 是可继承属性，模型容器与整棵外层都是 pointer-events:none，
+   渲染器自带样式里没有声明这一项，画布就会一路继承成 none —— 命中测试根本到不了
+   画布，表现为"模型完全点不动、拖不走、摸不到"（Cubism 分支靠 override-style 里
+   的 #live2d{pointer-events:auto} 才没有这个坑）。
+   只开画布本体：容器里 canvas 之外的留白仍然点击穿透给页面。 */
+#rin-furina-mini canvas {
+  pointer-events: auto;
+  cursor: grab;
+}
+
+#rin-furina-mini canvas:active {
+  cursor: grabbing;
+}
