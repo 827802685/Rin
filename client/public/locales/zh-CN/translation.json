@@ -1021,6 +1021,38 @@
       "edge": {
         "title": "趴在屏幕边缘",
         "desc": "模型放大并趴在屏幕底部边缘，只露出上半身（桌面模式）"
+      },
+      "expr": {
+        "button": "表情",
+        "reset": "重置",
+        "smile": "微笑",
+        "catMouth": "猫嘴",
+        "mouthOpen": "张嘴",
+        "angry": "生气",
+        "cry": "委屈",
+        "blush": "脸红",
+        "cat_mouth": "猫嘴",
+        "stars": "星星眼",
+        "sweat": "流汗",
+        "cheek_rest": "托腮",
+        "smart": "机灵",
+        "cover_mouth": "捂嘴",
+        "antenna_fan": "呆毛"
+      },
+      "chat_prompt": {
+        "title": "聊天人设",
+        "desc": "自定义看板娘聊天的系统提示词；留空使用各模型内置人设，{{name}} 会替换成当前模型名",
+        "placeholder": "你是{{name}}，这个博客的看板娘……（留空使用内置人设）"
+      },
+      "cache": {
+        "title": "模型缓存",
+        "stats": "已缓存",
+        "empty": "暂无缓存，切换或下载模型后自动累积",
+        "checking": "统计中…",
+        "download": "立即下载",
+        "download_started": "已开始后台下载全部内置模型",
+        "clear": "清理",
+        "cleared": "模型缓存已清空"
       }
     },
     "cursor": {

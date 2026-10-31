@@ -30,6 +30,8 @@ export const CLIENT_CONFIG_DEFAULTS = new Map(
     "widget.live2d.customModels": "[]",
     "widget.live2d.fps_cap": 0,
     "widget.live2d.preload": false,
+    // 聊天自定义人设：留空用各模型内置人设，{{name}} 占位符替换成当前模型名
+    "widget.live2d.chatPrompt": "",
     "widget.cursor.enabled": false,
     "widget.cursor.scheme": "furina",
     // 三键为逐态覆盖，留空表示跟随 widget.cursor.scheme

@@ -20,6 +20,8 @@ import {
   pickCdnRoot,
   precacheAllModels,
   prefetchModel,
+  readMemoizedRoot,
+  rememberRoot,
 } from "./live2d/cache";
 import { enginePathsFor, pickSameOriginEngineRoot } from "./live2d/engine";
 import {
@@ -308,7 +310,11 @@ async function patchLive2dApp(): Promise<boolean> {
 // 渲染器本身自带视线跟随/自动眨眼/空闲表情，这里只接需要降级映射的部分。
 type FurinaMiniInstance = {
   destroy?: () => void;
-  setExpression?: (v: string | number) => void;
+  setExpression?: (v: string | number, holdMs?: number) => void;
+  // 渲染循环每帧检查它：置 false 停止绘制但保留上下文与纹理（切换保活用）
+  visible?: boolean;
+  // 容器尺寸变化后重算画布像素尺寸
+  resize?: () => void;
 };
 
 type ProgressTarget = {  // 目标模型名；null 表示自定义模型（URL 认不出名字，退回"含 /model/ 即计"的老口径）
@@ -547,6 +553,7 @@ export function Live2DWidget() {
   // 设置里改帧率数值时由下方 effect 调用
   const applyRenderCapsRef = useRef<(() => void) | null>(null);
   const [showActions, setShowActions] = useState(false);
+  const [showExprs, setShowExprs] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
   // 工具栏收起成一颗球：点开才展开功能面板（6 个常驻按钮的视觉噪音太大）
   const [dockOpen, setDockOpen] = useState(false);
@@ -562,6 +569,12 @@ export function Live2DWidget() {
   const renderedRef = useRef(false);
   // FurinaMini（自研渲染器）实例：furina-mini 模型不走 Cubism，动作按钮降级走它的 setExpression
   const furinaMiniRef = useRef<FurinaMiniInstance | null>(null);
+  // furina-mini 实例保活用的容器与状态：切走只隐藏、不销毁（详见渲染分支注释）
+  const furinaHostRef = useRef<HTMLDivElement | null>(null);
+  const furinaAttemptRef = useRef(0);
+  const furinaActiveRef = useRef(false);
+  const furinaUnmountedRef = useRef(false);
+  const furinaScrollFloatCleanupRef = useRef<(() => void) | null>(null);
   const lastProgressAtRef = useRef(Date.now());
   // 换模型的连点闸门：两次切换至少间隔 800ms。
   // 没有它时快速双击会在同一批渲染里读到旧 activeModel，连开两次重挂载，
@@ -746,6 +759,39 @@ export function Live2DWidget() {
     playAction(name);
   }
 
+  /**
+   * 应用/重置表情。
+   * furina-mini：setExpression 接收 frames 名（smile/angry/…），重置传索引 0（blink，中性帧）。
+   * Cubism：setExpression(name)，重置没有直接 API——停掉表情/动作管理器，
+   * 空闲表情轮播稍后会自然接管。
+   */
+  function applyExpression(name: string | null) {
+    const mini = furinaMiniRef.current;
+    if (mini && typeof mini.setExpression === "function") {
+      try {
+        mini.setExpression(name ?? 0);
+      } catch {
+        // ignore
+      }
+      return;
+    }
+    const model = getLive2dModel();
+    if (!model) return;
+    if (name === null) {
+      stopAllMotions(model);
+      return;
+    }
+    try {
+      model.setExpression?.(name);
+    } catch {
+      // ignore
+    }
+  }
+
+  // 表情面板条目：furina-mini 用它的 frames 名；Cubism 用 CDN 配置里的 Expression Name
+  //（IDLE_EXPRESSIONS 与空闲轮播同一套，保证这些表情真实存在）。
+  const FURINA_EXPRESSIONS = ["smile", "catMouth", "mouthOpen", "angry", "cry", "blush"];
+
   function switchModel(name: string) {
     // 内置模型存在 BUILTIN_MODELS，自定义模型在其配置表里
     const isBase = (BUILTIN_MODELS as readonly string[]).includes(name);
@@ -849,8 +895,14 @@ export function Live2DWidget() {
 
     // 服务端有 30 条上限：system + 最近 20 条历史 + 新消息。
     // 人设跟随当前模型（内置模型各有人设，自定义模型带角色名生成）。
+    // 设置里填了自定义人设（widget.live2d.chatPrompt）时优先用之：
+    // {{name}} 占位符替换成当前模型展示名，方便一份人设多模型复用。
+    const customPrompt = (configRef.current.get<string>("widget.live2d.chatPrompt") ?? "").trim();
+    const systemPrompt = customPrompt
+      ? customPrompt.replaceAll("{{name}}", activeDisplayName)
+      : chatPromptFor(activeModel, customModelsRef.current);
     const payload: AIChatMessage[] = [
-      { role: "system", content: chatPromptFor(activeModel, customModelsRef.current) },
+      { role: "system", content: systemPrompt },
       ...nextDisplay,
     ];
     const { data, error } = await client.chat.send(payload);
@@ -898,6 +950,7 @@ export function Live2DWidget() {
       if (dockRef.current && target && !dockRef.current.contains(target)) {
         setDockOpen(false);
         setShowActions(false);
+        setShowExprs(false);
       }
     };
     const onKeyDown = (event: KeyboardEvent) => {
@@ -905,8 +958,9 @@ export function Live2DWidget() {
         return;
       }
       // Esc 先收二级浮层，再收主面板，逐层退
-      if (showActions) {
+      if (showActions || showExprs) {
         setShowActions(false);
+        setShowExprs(false);
         return;
       }
       setDockOpen(false);
@@ -917,7 +971,7 @@ export function Live2DWidget() {
       document.removeEventListener("pointerdown", onPointerDown);
       document.removeEventListener("keydown", onKeyDown);
     };
-  }, [dockOpen, showActions]);
+  }, [dockOpen, showActions, showExprs]);
 
   /**
    * 插件被加载后同步插入 #waifu（其内含 #waifu-canvas > canvas#live2d、#waifu-tips、#waifu-tool）。
@@ -926,6 +980,9 @@ export function Live2DWidget() {
    */
   function adoptPluginDom() {
     const cage = modelAreaRef.current;
+    // 摘掉上一轮卸载留下的气泡替身（body 直属的隐藏 #waifu-tips），
+    // 避免与插件新建的真实气泡形成重复 id
+    document.querySelectorAll("body > #waifu-tips").forEach((el) => el.remove());
     const waifu = document.getElementById("waifu");
     if (cage && waifu && waifu.parentElement !== cage) {
       cage.appendChild(waifu);
@@ -938,8 +995,8 @@ export function Live2DWidget() {
 
   useEffect(() => {
     // furina-mini 走独立渲染器分支（见下方 FurinaMini effect），不初始化 Cubism 插件。
-    // 两个 effect 同依赖 [modelVersion]：进入 furina-mini 时这里整体跳过，
-    // 离开时 FurinaMini effect 的 cleanup 先销毁自研实例，再由本 effect 挂 Cubism。
+    // 两个 effect 同依赖 [modelVersion]：进入 furina-mini 时这里整体跳过；
+    // 离开时 furina 实例只隐藏不销毁（保活），由本 effect 挂 Cubism。
     if (activeModel === "furina-mini") return;
 
     let disposed = false;
@@ -1190,13 +1247,6 @@ export function Live2DWidget() {
         //    不等插件脚本加载，让大体积 moc3 尽早开始下载
         prefetchModel(cdnRoot, activeModel);
 
-        // 2.5) 后台全量预缓存全部内置模型：把每个模型的全部资源
-        //      （moc3/贴图/动作/物理/口型）写入本地 Cache Storage。首次进入即下载一次，
-        //      之后切换模型都命中本地缓存、不再重复下载。（不阻塞主流程）
-        //      widget.live2d.preload 关闭时跳过仅远端可得的大模型（furina 约 95MB），
-        //      当前正在展示的模型仍由上面的 prefetchModel 正常下载。
-        precacheAllModels(config.getBoolean("widget.live2d.preload"));
-
         // 3) 加载样式与插件脚本（均为判重，可安全重复挂载）
         // 引擎根在 effect 一开头就由 patchLive2dApp 发起探测，这里只是取结果。
         const paths = enginePathsFor(await resolveEngineRoot());
@@ -1327,6 +1377,14 @@ export function Live2DWidget() {
       // ---- 卸载时清理插件注入的 DOM / 脚本，尽量不破坏页面其它区域 ----
       // 注：插件会在 window/document 上注册一些监听器与 setInterval，这些全局引用
       // 无法在此移除（插件没有暴露销毁句柄）；已把可移除的 DOM/脚本/样式/图片补丁清理干净。
+      // 插件的气泡定时器每次都 getElementById("waifu-tips") 再写 innerHTML —— 把
+      // #waifu 连根删掉后，下一次定时器触发就是 "Cannot set properties of null"。
+      // 留一个隐藏替身（文档末尾，永远排在真实气泡之后）接住写入，
+      // adoptPluginDom 在下次初始化时摘掉替身。
+      const tipsStub = document.createElement("div");
+      tipsStub.id = "waifu-tips";
+      tipsStub.style.display = "none";
+      document.body.appendChild(tipsStub);
       document.getElementById("waifu")?.remove();
       document.getElementById("waifu-toggle")?.remove();
       document.getElementById(OVERRIDE_STYLE_ID)?.remove();
@@ -1354,28 +1412,99 @@ export function Live2DWidget() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [modelVersion]);
 
+  // ---- 全量预缓存（独立于渲染分支）----
+  // 这段逻辑原先挂在 Cubism 主 effect 里：默认模型换成 furina-mini 后主 effect 一进来就
+  // early return，预缓存从未执行过（线上实测 Cache Storage 一直是空的，切换模型每次
+  // 都重新下载）。现在独立成 effect：只要看板娘真正画出来了就跑一次，与当前是哪个模型无关。
+  //
+  // 延后到首屏模型渲染完成、浏览器空闲时再下：首屏自己在拉 2.4MB，同时开 BCSZ 的 22MB
+  // 会抢带宽，反而让首屏更慢。只跑一次（precachedRef），切模型不再重复触发。
+  const precachedRef = useRef(false);
+  useEffect(() => {
+    if (!rendered || precachedRef.current) return;
+    precachedRef.current = true;
+    const run = () => precacheAllModels(configRef.current.getBoolean("widget.live2d.preload"));
+    const ric = (
+      window as unknown as {
+        requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => number;
+      }
+    ).requestIdleCallback;
+    if (typeof ric === "function") {
+      ric(run, { timeout: 8000 });
+      return;
+    }
+    const timer = window.setTimeout(run, 4000);
+    return () => window.clearTimeout(timer);
+  }, [rendered]);
+
   // ---- FurinaMini（自研渲染器）渲染分支 ----
   // furina-mini 不经过 Cubism 插件：全套资源约 2.4MB（38KB 渲染器 + 1.65MB 量化网格
   // + 0.69MB WebP 图集），由作者仓库的 FurinaMini.mount 独立渲染，自带视线跟随、
-  // 自动眨眼与空闲表情（follow / idle / autoExpr 选项默认开启），无需主 effect 的
-  // 就绪轮询与空闲轮播——mount resolve 即视为就绪。
+  // 自动眨眼与空闲表情（follow / idle 选项默认开启）。
   // 与主 effect 互斥：activeModel 为 furina-mini 时主 effect 整体跳过。
+  //
+  // 实例保活：切走时不 destroy，只把容器藏起来、把实例 visible 置 false。
+  // 渲染器自己的循环里就有 `if (self.visible === false || self.pageVisible === false) return;`
+  // —— 置 false 能停掉绘制，同时保住 WebGL 上下文、纹理与已经解析好的网格。
+  // 切回来只要 visible=true 就是"立刻出现"：不重下 2.4MB、不重新解析网格、不重建上下文。
+  // 真正销毁只发生在组件卸载（见下方 unmount effect）。
+  const furinaActive = activeModel === "furina-mini";
+  furinaActiveRef.current = furinaActive;
+
   useEffect(() => {
-    if (activeModel !== "furina-mini") return;
+    // StrictMode 的"模拟卸载→重挂载"会先跑一遍卸载 effect（把 unmounted 置 true、删掉宿主）
+    // 再重跑本 effect。不复位的话，重挂载永远不发生、在途异步回来也只静默销毁——
+    // 表现为 furina 永远挂不上，且无任何错误（真实卸载不受影响：卸载后组件不再重跑）。
+    furinaUnmountedRef.current = false;
+    const existing = furinaMiniRef.current;
+    const host = furinaHostRef.current;
+
+    if (!furinaActive) {
+      if (host) host.style.display = "none";
+      if (existing) existing.visible = false;
+      return;
+    }
+
+    // 已有宿主：恢复显示即可。宿主存在但实例引用为空 = mount 仍在途（弱网/无 WebGL 时
+    // load() 可能迟迟不返回）——此时绝不能再走创建路径，否则会叠加第二次 mount，
+    // 旧的在途异步完成后两套画布互相覆盖。画布是 mount 同步创建的，恢复显示就能看到。
+    if (host && host.isConnected) {
+      host.style.display = "";
+      const cvReady = !!host.querySelector("canvas");
+      if (existing) {
+        existing.visible = true;
+        try {
+          existing.setExpression?.(0);
+        } catch {
+          // ignore
+        }
+      }
+      renderedRef.current = cvReady;
+      setRendered(cvReady);
+      setError(null);
+      return;
+    }
+
+    // 首次挂载（或上一次挂载失败后重试）
     const cage = modelAreaRef.current;
     if (!cage) return;
+    // attempt 令牌：每次真正发起新挂载就自增，旧异步完成时发现自己不是当前轮次
+    // 就静默退场。替代原来的 furinaMountingRef 布尔闸门——那个闸门在 StrictMode
+    // 双跑下会把第二次 effect 挡在门外，而第一次的宿主已被模拟卸载清掉，无人重建。
+    const attempt = ++furinaAttemptRef.current;
+    furinaHostRef.current?.remove();
 
-    let disposed = false;
     // 与 Cubism 分支同一口径：进来先回到"未就绪"，由本分支的异步加载决定何时放行
     renderedRef.current = false;
     setRendered(false);
     setError(null);
-    const host = document.createElement("div");
-    host.id = "rin-furina-mini";
+    const el = document.createElement("div");
+    el.id = "rin-furina-mini";
     // 与 #waifu 同居一个缩放容器：外层已负责定位/缩放/轮廓贴合，这里只铺满
-    host.style.cssText =
+    el.style.cssText =
       "position:relative;width:100%;height:100%;overflow:hidden;transition:transform .45s cubic-bezier(.22,.61,.36,1)";
-    cage.appendChild(host);
+    cage.appendChild(el);
+    furinaHostRef.current = el;
 
     // 随滚动轻浮：滚动 delta 的一部分反向写到容器 transform 上（有缓动回中），
     // 与渲染器内部的鼠标视线跟随（target）互不干扰；幅度压得很小，只求"跟着页面动"的呼吸感
@@ -1385,12 +1514,15 @@ export function Live2DWidget() {
       lastScrollY = window.scrollY;
       if (!dy) return;
       const offset = Math.max(-14, Math.min(14, dy * -0.08));
-      host.style.transform = `translateY(${offset}px)`;
+      el.style.transform = `translateY(${offset}px)`;
       window.setTimeout(() => {
-        if (!disposed) host.style.transform = "translateY(0)";
+        if (furinaHostRef.current === el) el.style.transform = "translateY(0)";
       }, 90);
     };
     window.addEventListener("scroll", onScrollFloat, { passive: true });
+    if (furinaScrollFloatCleanupRef.current) furinaScrollFloatCleanupRef.current();
+    furinaScrollFloatCleanupRef.current = () =>
+      window.removeEventListener("scroll", onScrollFloat);
 
     (async () => {
       // 资源小、加载快，不走流式进度（tracker 只按 /model/ 路径计数），用加载遮罩即可
@@ -1400,17 +1532,26 @@ export function Live2DWidget() {
       // 且 furina-mini.js 是 IIFE（非 ES module），经典 script 语义也更贴切。
       const loadClassic = (src: string) =>
         new Promise<void>((resolve, reject) => {
-          const el = document.createElement("script");
-          el.src = src;
-          el.async = false;
-          el.onload = () => resolve();
-          el.onerror = () => {
-            el.remove();
+          const node = document.createElement("script");
+          node.src = src;
+          node.async = false;
+          node.onload = () => resolve();
+          node.onerror = () => {
+            node.remove();
             reject(new Error(`Failed to load ${src}`));
           };
-          document.head.appendChild(el);
+          document.head.appendChild(node);
         });
-      const bases = REMOTE_CDN_CANDIDATES.map((root) => `${root}furina-mini/`);
+      // 上次成功的根优先（pickCdnRoot 的 sessionStorage 记忆），避免每次都先撞
+      // dpdns 镜像的 MIME 错误再回退 github.io，白等一轮 onerror。
+      const memoRoot = readMemoizedRoot("furina-mini");
+      const allBases = REMOTE_CDN_CANDIDATES.map((root) => `${root}furina-mini/`);
+      const bases = memoRoot
+        ? [
+            `${memoRoot}furina-mini/`,
+            ...allBases.filter((b) => b !== `${memoRoot}furina-mini/`),
+          ]
+        : allBases;
       for (const base of bases) {
         try {
           // dpdns 加速镜像对脚本返回 text/plain + nosniff，浏览器会拒绝执行——
@@ -1424,13 +1565,15 @@ export function Live2DWidget() {
           if (typeof mount !== "function") {
             throw new Error("FurinaMini.mount is unavailable");
           }
-          const instance = await mount(host, {
+          const instance = await mount(el, {
             base,
             // 画布宽度：夹在加载盒的宽度里，避免小容器被 420px 默认值撑破
             size: Math.max(200, Math.min(420, boxW)),
             // 关掉渲染器自带的拖动：它只改自己画布的 transform，既不保存位置，
             // 也会和外层的整体拖拽叠加成"双倍位移"。拖动统一交给外层 React 处理。
             draggable: false,
+            // 关掉自动表情：表情面板是手动控制，自动表情会在几秒后把用户选的表情顶掉
+            autoExpr: false,
             frames: [
               "blink",
               "eyeLeft",
@@ -1445,18 +1588,28 @@ export function Live2DWidget() {
               "blush",
             ],
           });
-          if (disposed) {
+          if (furinaUnmountedRef.current || attempt !== furinaAttemptRef.current) {
             instance?.destroy?.();
+            el.remove();
             return;
           }
           furinaMiniRef.current = instance;
+          rememberRoot("furina-mini", base.replace(/furina-mini\/$/, ""));
           // 让画布接管指针：模型容器是 pointer-events-none，而 pointer-events 是可继承属性，
           // 画布不显式声明就会继承成 none —— 表现为"模型完全点不动、拖不走"（Cubism 分支
           // 靠 override-style 里 #live2d{pointer-events:auto} 才没这个问题）。
           // 只开画布本体，容器留白仍然点击穿透给页面。
-          const cv = host.querySelector("canvas");
+          const cv = el.querySelector("canvas");
           if (cv) {
             cv.style.pointerEvents = "auto";
+          }
+          // 挂载期间用户可能已经切走：实例留着，藏起来即可（下次切回秒显）
+          if (!furinaActiveRef.current) {
+            el.style.display = "none";
+            instance.visible = false;
+            renderedRef.current = true;
+            setRendered(true);
+            return;
           }
           renderedRef.current = true;
           setRendered(true);
@@ -1466,28 +1619,47 @@ export function Live2DWidget() {
           // 尝试下一个候选根
         }
       }
-      if (!disposed) {
+      if (attempt === furinaAttemptRef.current && !furinaUnmountedRef.current) {
         // 两个候选根都失败：把空容器收掉，交给 error 分支显示提示，
         // 否则会留一个空白方块盖在页面上
-        host.remove();
+        el.remove();
+        furinaHostRef.current = null;
         setError(t("theme.live2d.loading.stalled"));
       }
     })();
+    // 只跟随"是否该显示 furina-mini"：切模型不再重建实例，这正是保活的意义
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [furinaActive]);
 
+  // 组件卸载才真正销毁实例、摘掉 DOM 与滚动监听
+  useEffect(() => {
     return () => {
-      disposed = true;
-      window.removeEventListener("scroll", onScrollFloat);
+      furinaUnmountedRef.current = true;
+      // 让在途的挂载异步作废（完成后走 destroy 分支，不会写回已卸载的组件状态）
+      furinaAttemptRef.current++;
+      furinaScrollFloatCleanupRef.current?.();
+      furinaScrollFloatCleanupRef.current = null;
       try {
         furinaMiniRef.current?.destroy?.();
       } catch {
         // ignore
       }
       furinaMiniRef.current = null;
-      host.remove();
+      furinaHostRef.current?.remove();
+      furinaHostRef.current = null;
     };
-    // 与主 effect 相同的触发口径：只在重挂载（切模型）时重建
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [modelVersion]);
+  }, []);
+
+  // 容器尺寸变化（设置里改缩放、窗口 resize）时让保活的实例重算画布像素尺寸，
+  // 否则切回来会按旧尺寸拉伸。
+  useEffect(() => {
+    if (!furinaActive) return;
+    try {
+      furinaMiniRef.current?.resize?.();
+    } catch {
+      // ignore
+    }
+  }, [boxW, boxH, furinaActive]);
 
   // 设置里修改默认模型 / 增删自定义模型后，重载看板娘以应用新的模型列表。
   // 依赖这两个配置值的变化；变化时重置回默认模型并重挂载插件。
@@ -1713,6 +1885,16 @@ export function Live2DWidget() {
       onClick: switchToNextModel,
     },
     { id: "poke", icon: "ri-hand-heart-line", label: t("theme.live2d.poke"), onClick: petModel },
+    {
+      id: "expr",
+      icon: "ri-emotion-happy-line",
+      label: t("theme.live2d.expr.button"),
+      pressed: showExprs,
+      onClick: () => {
+        setShowExprs((value) => !value);
+        setShowActions(false);
+      },
+    },
   ];
   const dockActionItems: { name: ActionName; icon: string }[] = [
     { name: "wave", icon: "ri-hand-heart-line" },
@@ -1778,7 +1960,7 @@ export function Live2DWidget() {
             <div
               data-open={dockOpen}
               aria-hidden={!dockOpen}
-              style={{ "--rin-n": 6 } as React.CSSProperties}
+              style={{ "--rin-n": 7 } as React.CSSProperties}
               className="rin-l2d-panel rin-glass-pill flex flex-col items-center gap-1 rounded-[26px] p-1.5"
             >
               {dockItems.map((item, index) => (
@@ -1826,7 +2008,10 @@ export function Live2DWidget() {
                 </div>
                 <button
                   type="button"
-                  onClick={() => setShowActions((value) => !value)}
+                  onClick={() => {
+                    setShowActions((value) => !value);
+                    setShowExprs(false);
+                  }}
                   aria-label={t("theme.live2d.actions.button")}
                   aria-haspopup="true"
                   aria-expanded={showActions}
@@ -1836,6 +2021,64 @@ export function Live2DWidget() {
                   <i aria-hidden="true" className="ri-magic-line text-[17px]" />
                   <span className="rin-l2d-tip" aria-hidden="true">
                     {t("theme.live2d.actions.button")}
+                  </span>
+                </button>
+              </div>
+
+              {/* 表情：向左弹出文字列表（表情没有合适图标，文字更直观），最后一项是重置 */}
+              <div
+                className="rin-l2d-item relative flex items-center"
+                style={{ "--rin-i": dockItems.length } as React.CSSProperties}
+              >
+                <div
+                  data-open={showExprs && !error}
+                  aria-hidden={!showExprs}
+                  className="rin-l2d-flyout rin-glass-pill absolute right-full top-1/2 mr-1.5 flex -translate-y-1/2 flex-col gap-0.5 rounded-2xl p-1.5"
+                >
+                  {(furinaActive ? FURINA_EXPRESSIONS : IDLE_EXPRESSIONS).map((name) => (
+                    <button
+                      key={name}
+                      type="button"
+                      onClick={() => {
+                        applyExpression(name);
+                        setShowExprs(false);
+                        setDockOpen(false);
+                      }}
+                      aria-label={t(`theme.live2d.expr.${name}`)}
+                      className="rin-l2d-btn relative flex h-8 min-w-20 items-center justify-center whitespace-nowrap rounded-full px-3 text-xs"
+                    >
+                      {t(`theme.live2d.expr.${name}`)}
+                    </button>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      applyExpression(null);
+                      setShowExprs(false);
+                      setDockOpen(false);
+                    }}
+                    aria-label={t("theme.live2d.expr.reset")}
+                    className="rin-l2d-btn relative flex h-8 min-w-20 items-center justify-center whitespace-nowrap rounded-full border-t border-black/5 px-3 pt-0.5 text-xs dark:border-white/10"
+                  >
+                    <i aria-hidden="true" className="ri-restart-line mr-1 text-[13px]" />
+                    {t("theme.live2d.expr.reset")}
+                  </button>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowExprs((value) => !value);
+                    setShowActions(false);
+                  }}
+                  aria-label={t("theme.live2d.expr.button")}
+                  aria-haspopup="true"
+                  aria-expanded={showExprs}
+                  data-active={showExprs ? "true" : undefined}
+                  className="rin-l2d-btn relative flex h-10 w-10 items-center justify-center rounded-full"
+                >
+                  <i aria-hidden="true" className={`${dockItems.find((i) => i.id === "expr")?.icon ?? "ri-emotion-happy-line"} text-[17px]`} />
+                  <span className="rin-l2d-tip" aria-hidden="true">
+                    {t("theme.live2d.expr.button")}
                   </span>
                 </button>
               </div>

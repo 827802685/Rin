@@ -1021,6 +1021,38 @@
       "edge": {
         "title": "画面の下端に伏せる",
         "desc": "モデルを拡大して画面下端に伏せ、上半身だけを表示します"
+      },
+      "expr": {
+        "button": "表情",
+        "reset": "リセット",
+        "smile": "笑顔",
+        "catMouth": "猫口",
+        "mouthOpen": "口開き",
+        "angry": "怒り",
+        "cry": "泣き",
+        "blush": "照れ",
+        "cat_mouth": "猫口",
+        "stars": "星目",
+        "sweat": "汗",
+        "cheek_rest": "頬杖",
+        "smart": "賢そう",
+        "cover_mouth": "口を覆う",
+        "antenna_fan": "アホ毛"
+      },
+      "chat_prompt": {
+        "title": "チャット人格",
+        "desc": "看板娘チャットのシステムプロンプト。空欄で各モデル内蔵の人格を使用（{{name}} は現在のモデル名に置換）",
+        "placeholder": "あなたは{{name}}、このブログの看板娘です…（空欄で内蔵人格）"
+      },
+      "cache": {
+        "title": "モデルキャッシュ",
+        "stats": "キャッシュ済み",
+        "empty": "キャッシュなし。モデルの切替・ダウンロードで蓄積されます",
+        "checking": "集計中…",
+        "download": "今すぐダウンロード",
+        "download_started": "すべての内蔵モデルのダウンロードを開始しました",
+        "clear": "削除",
+        "cleared": "モデルキャッシュを削除しました"
       }
     },
     "cursor": {

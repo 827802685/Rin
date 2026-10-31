@@ -67,13 +67,16 @@ export function newCustomModelId(): string {
   return `custom-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
 }
 
-// 各模型的核心大文件（用于预取，加速首次加载）。自定义模型无常量表，走 index.json 全量预缓存。
-// furina-mini 的文件带子目录前缀：三个文件都在远端根的 furina-mini/ 下。
+// 各模型的核心大文件（用于预取 / 预缓存）。均写相对模型目录的文件名，
+// 目录由 cache.ts 的 modelAssetBase 统一拼（furina-mini → <root>furina-mini/，
+// Cubism → <root>model/<name>/）：这里再带一层目录会拼成双重路径、全部 404。
 export const MODEL_FILES_BY_NAME: Record<string, string[]> = {
+  // 自研渲染器四件套：脚本本体 + 量化网格 + 人物图集 + 魔杖贴图
   "furina-mini": [
-    "furina-mini/furina-mini.js",
-    "furina-mini/furina-mesh.bin",
-    "furina-mini/furina-atlas.webp",
+    "furina-mini.js",
+    "furina-mesh.bin",
+    "furina-atlas.webp",
+    "furina-wand.webp",
   ],
   "BCSZ1.1": ["BCSZ1.1.moc3", "textures/texture_00.png"],
 };
