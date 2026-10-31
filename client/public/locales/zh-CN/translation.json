@@ -257,8 +257,7 @@
     "retry": "重试",
     "tags_title": "热门标签",
     "view_tags": "查看标签",
-    "view_timeline": "查看时间线",
-    "narrow_title": "站点信息与标签"
+    "view_timeline": "查看时间线"
   },
   "friends": {
     "apply": "申请友链",
@@ -552,7 +551,7 @@
       "preview": {
         "classic": "品牌、居中导航和操作区保持当前这套平衡布局。",
         "compact": "几乎去掉所有装饰，只保留最必要的信息和操作。",
-        "sidebar": "左正文右侧栏；屏幕宽度不足 1024px 时侧栏折叠到正文下方，可点开查看。"
+        "sidebar": "左正文右侧栏，窄屏折叠单列。"
       }
     },
     "header_behavior": {

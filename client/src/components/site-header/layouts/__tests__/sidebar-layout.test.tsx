@@ -1,14 +1,9 @@
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 // SiteSidebar 会打标签接口，壳层测试只关心槽位结构，mock 掉数据组件
 vi.mock("../../../site-sidebar/sidebar", () => ({
     SiteSidebar: () => <div data-testid="site-sidebar" />,
-}));
-
-// 壳层里的窄屏折叠面板要取按钮文案，测试环境没有 i18n 实例，直接回显 key
-vi.mock("react-i18next", () => ({
-    useTranslation: () => ({ t: (key: string) => key }),
 }));
 
 const { getHeaderLayoutDefinition } = await import("../../layout-registry");
@@ -63,31 +58,6 @@ describe("sidebarLayoutDefinition.renderRouteShell", () => {
             </div>,
         );
 
-        expect(container.querySelector(".min-w-0.flex-1")?.textContent).toContain("rendered-content");
-    });
-
-    it("mounts a collapsed sidebar panel for narrow screens", () => {
-        const { container } = render(
-            <div>
-                {sidebarLayoutDefinition.renderRouteShell({
-                    header: <div />,
-                    content: "rendered-content",
-                    footer: <div />,
-                })}
-            </div>,
-        );
-
-        // 桌面 aside 之外还要有一份窄屏入口，否则手机上的侧栏内容彻底丢失
-        const toggle = container.querySelector("button[aria-expanded]");
-        expect(toggle).not.toBeNull();
-        expect(toggle!.getAttribute("aria-expanded")).toBe("false");
-        expect(toggle!.textContent).toContain("sidebar.narrow_title");
-        // 默认收起：展开前不重复挂载侧栏数据组件
-        expect(screen.getAllByTestId("site-sidebar")).toHaveLength(1);
-
-        fireEvent.click(toggle!);
-
-        expect(toggle!.getAttribute("aria-expanded")).toBe("true");
-        expect(screen.getAllByTestId("site-sidebar")).toHaveLength(2);
+        expect(container.querySelector(".min-w-0.flex-1")?.textContent).toBe("rendered-content");
     });
 });
