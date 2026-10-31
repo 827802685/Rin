@@ -1,6 +1,6 @@
 {
-  "iteration": 15,
-  "since_merge": 2,
+  "iteration": 16,
+  "since_merge": 3,
   "last_merge_iter": 13,
   "history": [
     {
@@ -144,6 +144,15 @@
       "tests": "PASS",
       "sha": "",
       "ts": "2026-10-31T03:30:00Z"
+    },
+    {
+      "iter": 16,
+      "action": "优化 UI",
+      "summary": "看板娘工具栏重构：6 个 32px 常驻圆钮收成一颗 48px 玻璃球 + 52px 竖排玻璃面板；补 hover/active/focus-visible 三态、自绘 tooltip（替代原生 title）、aria-expanded/pressed、Esc 与点外收起、prefers-reduced-motion、触屏不依赖 hover",
+      "build": "PASS",
+      "tests": "PASS",
+      "sha": "",
+      "ts": "2026-10-31T08:10:00Z"
     }
   ],
   "rejected": [
