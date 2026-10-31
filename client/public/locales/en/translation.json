@@ -1021,6 +1021,38 @@
       "edge": {
         "title": "Rest at screen edge",
         "desc": "Enlarge the model and let it rest on the bottom edge of the screen, showing only the upper body"
+      },
+      "expr": {
+        "button": "Expression",
+        "reset": "Reset",
+        "smile": "Smile",
+        "catMouth": "Cat mouth",
+        "mouthOpen": "Open mouth",
+        "angry": "Angry",
+        "cry": "Teary",
+        "blush": "Blush",
+        "cat_mouth": "Cat mouth",
+        "stars": "Star eyes",
+        "sweat": "Sweating",
+        "cheek_rest": "Cheek rest",
+        "smart": "Smart",
+        "cover_mouth": "Cover mouth",
+        "antenna_fan": "Antenna"
+      },
+      "chat_prompt": {
+        "title": "Chat persona",
+        "desc": "Custom system prompt for the chatbot; leave empty to use each model's built-in persona. {{name}} is replaced with the current model name",
+        "placeholder": "You are {{name}}, the mascot of this blog... (empty = built-in persona)"
+      },
+      "cache": {
+        "title": "Model cache",
+        "stats": "Cached",
+        "empty": "No cache yet — fills up as you view or download models",
+        "checking": "Counting…",
+        "download": "Download all",
+        "download_started": "Started background download of all built-in models",
+        "clear": "Clear",
+        "cleared": "Model cache cleared"
       }
     },
     "cursor": {

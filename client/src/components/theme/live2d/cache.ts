@@ -29,29 +29,75 @@ export function bundledRootFor(name: string): string {
   return `${location.origin}/live2d-bundled/`;
 }
 
+// 模型资源目录。目录结构并不统一，拼错就是 404、缓存永远空：
+//   - furina-mini（自研渲染器）：<root>furina-mini/ 直接放 js/bin/webp，没有 index.json；
+//   - Cubism 模型：<root>model/<name>/ 下按 index.json 的 FileReferences 组织。
+// 预取、预缓存、渲染器加载三处必须共用这一个口径，否则「明明缓存过、切换还在下载」。
+export function modelAssetBase(root: string, name: string): string {
+  if (name === "furina-mini") return `${root}furina-mini/`;
+  return `${root}model/${name}/`;
+}
+
+// 上次探测成功的根记在 sessionStorage：同一会话里再切模型不必从头试一遍候选，
+// 少一次（远端甚至要超时的）探测往返。命中记忆根后仍会做一次轻量校验，失败照旧回退。
+const ROOT_MEMO_PREFIX = "rin.live2d.root:";
+
+function readRootMemo(name: string): string {
+  try {
+    return sessionStorage.getItem(ROOT_MEMO_PREFIX + name) ?? "";
+  } catch {
+    return "";
+  }
+}
+
+function writeRootMemo(name: string, root: string): void {
+  try {
+    sessionStorage.setItem(ROOT_MEMO_PREFIX + name, root);
+  } catch {
+    // ignore
+  }
+}
+
+// 给渲染分支用的公开接口：furina-mini 的脚本加载要按"上次成功的根"优先，
+// 否则每次切到它都会先撞一遍 dpdns 镜像的 MIME 错误。
+export const readMemoizedRoot = readRootMemo;
+export const rememberRoot = writeRootMemo;
+
+// 单个根的可用性探测：furina-mini 的根下没有 model_list.json（自研渲染器的资源
+// 平铺在 furina-mini/ 目录里），所以按"该根是否真有目标模型"来探，而不是按清单文件。
+async function probeRoot(root: string, name: string): Promise<boolean> {
+  const url =
+    name === "furina-mini" ? `${root}furina-mini/furina-mini.js` : `${root}model_list.json`;
+  try {
+    const res = await fetch(url, { mode: "cors" });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
 // 探测可用的模型源：按目标模型组装候选根（本地/打包根优先），
-// 依次请求该根下的 model_list.json，返回第一个能正常返回模型清单的根地址。
+// 依次请求探测 URL，返回第一个可用的根地址。
 export async function pickCdnRoot(name: string): Promise<string> {
   const localRoot = bundledRootFor(name);
   const candidates = [...(localRoot ? [localRoot] : []), ...REMOTE_CDN_CANDIDATES];
-  for (const root of candidates) {
-    try {
-      const res = await fetch(`${root}model_list.json`, { mode: "cors" });
-      if (res.ok) {
-        // 根可达即可（切换按 name 直接拼 index.json，不依赖 model_list 的下标/content）
-        return root;
-      }
-    } catch {
-      // 尝试下一个候选
+  // 记忆根提到候选首位（仍要探测：换个网络环境它可能就挂了）
+  const memo = readRootMemo(name);
+  const ordered =
+    memo && candidates.includes(memo) ? [memo, ...candidates.filter((r) => r !== memo)] : candidates;
+  for (const root of ordered) {
+    if (await probeRoot(root, name)) {
+      writeRootMemo(name, root);
+      return root;
     }
   }
-  return candidates[0];
+  return ordered[0];
 }
 
 // 探测到模型根地址后立即并行预取当前模型的核心文件（moc3/贴图），
 // 不等插件脚本加载；插件稍后请求同一 URL 时命中浏览器/SW 缓存。
 export function prefetchModel(cdnRoot: string, name: string) {
-  const base = `${cdnRoot}model/${name}/`;
+  const base = modelAssetBase(cdnRoot, name);
   const files = MODEL_FILES_BY_NAME[name] ?? [];
   for (const file of files) {
     fetch(`${base}${file}`, { mode: "cors" }).catch(() => {
@@ -96,16 +142,25 @@ function sendCacheMessage(urls: string[]): void {
 // 对给定模型整目录预缓存：拉取 index.json → 收集全部文件 → 写入本地缓存。
 // 不依赖固定文件表，能覆盖贴图/动作/物理/口型等所有资源，真正做到"下载一次不再重下"。
 // 一律走 nativeFetch：旁路进度统计与 Layout 注入，避免干扰当前模型的下载进度。
+//
+// furina-mini 没有 index.json（自研渲染器的资源是固定四件套），走 MODEL_FILES_BY_NAME；
+// 其余模型按 index.json 递归收集。两者最终都归一成 URL 列表写进 Cache Storage。
 async function precacheModel(cdnRoot: string, name: string): Promise<void> {
   try {
-    const index = await nativeFetch(`${cdnRoot}model/${name}/index.json`, { mode: "cors" });
-    if (!index.ok) return;
-    const manifest = (await index.json()) as { FileReferences?: unknown };
-    const files = new Set<string>();
-    collectModelFiles(manifest, files);
-    if (files.size === 0) return;
-    const base = `${cdnRoot}model/${name}/`;
-    const urls = [...files].map((f) => `${base}${f}`);
+    const base = modelAssetBase(cdnRoot, name);
+    const listed = MODEL_FILES_BY_NAME[name];
+    const urls: string[] = [];
+    if (listed) {
+      for (const f of listed) urls.push(`${base}${f}`);
+    } else {
+      const index = await nativeFetch(`${base}index.json`, { mode: "cors" });
+      if (!index.ok) return;
+      const manifest = (await index.json()) as { FileReferences?: unknown };
+      const files = new Set<string>();
+      collectModelFiles(manifest, files);
+      for (const f of files) urls.push(`${base}${f}`);
+    }
+    if (urls.length === 0) return;
     if (navigator.serviceWorker?.controller) {
       sendCacheMessage(urls);
     } else {
@@ -134,4 +189,55 @@ export function precacheAllModels(includeRemoteLarge = true): void {
     }
   });
   void Promise.allSettled(jobs);
+}
+
+// ---- 缓存状态（设置页展示 / 手动管理） ----
+// 与 sw.js 的 CACHE_NAME 保持一致：版本不同则读写的是两个桶，页面看不到 SW 写的内容。
+export const LIVE2D_CACHE_NAME = "rin-live2d-v4";
+
+export type ModelCacheStats = {
+  // 缓存条目数（每个文件一条）
+  count: number;
+  // 命中 MIME 里的 Content-Length 求和，拿不到长度时按 0 计
+  bytes: number;
+  // 分模型的条目数，用于界面判断"哪个模型已经下好了"
+  perModel: Record<string, number>;
+};
+
+// 统计当前 Cache Storage 里的模型缓存。页面与 SW 同源，直接读即可。
+export async function getModelCacheStats(): Promise<ModelCacheStats> {
+  const out: ModelCacheStats = { count: 0, bytes: 0, perModel: {} };
+  try {
+    const cache = await caches.open(LIVE2D_CACHE_NAME);
+    const requests = await cache.keys();
+    out.count = requests.length;
+    for (const req of requests) {
+      const url = req.url;
+      const model = BUILTIN_MODELS.find((n) => url.includes(modelAssetBase("", n)));
+      if (model) out.perModel[model] = (out.perModel[model] ?? 0) + 1;
+      const res = await cache.match(req, { ignoreVary: true });
+      const len = Number(res?.headers.get("content-length") ?? 0);
+      if (Number.isFinite(len)) out.bytes += len;
+    }
+  } catch {
+    // 无 Cache Storage（隐私模式等）：返回全零
+  }
+  return out;
+}
+
+// 清空模型缓存（含历史版本桶），下次进入会重新下载。
+export async function clearModelCache(): Promise<void> {
+  try {
+    const keys = await caches.keys();
+    await Promise.all(
+      keys.filter((k) => k.startsWith("rin-live2d")).map((k) => caches.delete(k)),
+    );
+  } catch {
+    // ignore
+  }
+}
+
+// 手动"立即下载全部模型"：无视 preload 开关，强制把范围兜底打开。
+export function downloadAllModels(): void {
+  precacheAllModels(true);
 }

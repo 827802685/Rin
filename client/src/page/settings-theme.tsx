@@ -6,8 +6,10 @@ import {
   SettingsCardBody,
   SettingsCardHeader,
   SettingsCardRow,
+  TextArea,
 } from "@rin/ui";
-import { useMemo, useState } from "react";
+import { Button } from "../components/button";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Helmet } from "react-helmet";
 import { useTranslation } from "react-i18next";
 import ReactLoading from "react-loading";
@@ -25,6 +27,7 @@ import { BUILTIN_MODELS, newCustomModelId, parseCustomModels, resolveDefaultName
 import { CURSOR_SCHEME_IDS } from "../components/theme/cursor-registry";
 import { AMBIENT_TYPES, normalizeAmbientType } from "../components/theme/ambient-background";
 import { FPS_CAP_OPTIONS, normalizeFpsCap } from "../components/theme/live2d/perf";
+import { clearModelCache, downloadAllModels, getModelCacheStats } from "../components/theme/live2d/cache";
 import { useSiteConfig } from "../hooks/useSiteConfig";
 import { useSettingsDraft } from "../hooks/use-settings-draft";
 import { applyThemeColor, normalizeThemeColor } from "../utils/theme-color";
@@ -118,6 +121,13 @@ function CursorPicker({
   );
 }
 
+// 缓存占用格式化：字节 → KB/MB，只保留一位小数
+function formatCacheBytes(bytes: number): string {
+  if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  if (bytes >= 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${bytes} B`;
+}
+
 export function SettingsTheme() {
   const { t } = useTranslation();
   const siteConfig = useSiteConfig();
@@ -138,6 +148,24 @@ export function SettingsTheme() {
   // 设置页"添加自定义模型"表单
   const [newModelName, setNewModelName] = useState("");
   const [newModelUrl, setNewModelUrl] = useState("");
+
+  // 聊天人设（留空用各模型内置人设，{{name}} 占位符在发送时替换成模型名）
+  const live2dChatPromptRaw = clientConfig.get("widget.live2d.chatPrompt");
+  const live2dChatPrompt = String(live2dChatPromptRaw ?? "");
+
+  // 模型缓存统计（进入页面读一次；清理/下载后手动刷新）
+  const [live2dCacheStats, setLive2dCacheStats] = useState<{ count: number; bytes: number } | null>(null);
+  const refreshLive2dCacheStats = useCallback(async () => {
+    try {
+      const stats = await getModelCacheStats();
+      setLive2dCacheStats({ count: stats.count, bytes: stats.bytes });
+    } catch {
+      setLive2dCacheStats({ count: 0, bytes: 0 });
+    }
+  }, []);
+  useEffect(() => {
+    void refreshLive2dCacheStats();
+  }, [refreshLive2dCacheStats]);
 
   const themeColorValue = normalizeThemeColor(String(clientConfig.get("theme.color") ?? "#5ab0d8"));
   const schemeValue = String(clientConfig.get("theme.scheme") ?? "default");
@@ -665,6 +693,71 @@ export function SettingsTheme() {
                   setConfigValue("widget.live2d.preload", checked);
                 }}
               />
+              {/* 聊天人设：留空用各模型内置人设；{{name}} 占位符会替换成当前模型名 */}
+              <div className="w-full">
+                <SettingsCard>
+                  <SettingsCardRow
+                    header={
+                      <SettingsCardHeader
+                        title={t("theme.live2d.chat_prompt.title")}
+                        description={t("theme.live2d.chat_prompt.desc")}
+                      />
+                    }
+                    action={<span />}
+                  />
+                  <SettingsCardBody>
+                    <TextArea
+                      rows={4}
+                      value={live2dChatPrompt}
+                      placeholder={t("theme.live2d.chat_prompt.placeholder")}
+                      onChange={(event) => {
+                        setConfigValue("widget.live2d.chatPrompt", event.target.value);
+                      }}
+                    />
+                  </SettingsCardBody>
+                </SettingsCard>
+              </div>
+              {/* 缓存管理：模型资源下载一次就落在 Cache Storage，这里看占用/清理/手动预载 */}
+              <div className="w-full">
+                <SettingsCard>
+                  <SettingsCardRow
+                    header={
+                      <SettingsCardHeader
+                        title={t("theme.live2d.cache.title")}
+                        description={
+                          live2dCacheStats
+                            ? live2dCacheStats.count > 0
+                              ? `${t("theme.live2d.cache.stats")}：${live2dCacheStats.count} · ${formatCacheBytes(live2dCacheStats.bytes)}`
+                              : t("theme.live2d.cache.empty")
+                            : t("theme.live2d.cache.checking")
+                        }
+                      />
+                    }
+                    action={
+                      <div className="flex items-center gap-2">
+                        <Button
+                          title={t("theme.live2d.cache.download")}
+                          onClick={() => {
+                            downloadAllModels();
+                            showAlert(t("theme.live2d.cache.download_started"));
+                            window.setTimeout(refreshLive2dCacheStats, 5000);
+                            window.setTimeout(refreshLive2dCacheStats, 15000);
+                          }}
+                        />
+                        <Button
+                          secondary
+                          title={t("theme.live2d.cache.clear")}
+                          onClick={async () => {
+                            await clearModelCache();
+                            await refreshLive2dCacheStats();
+                            showAlert(t("theme.live2d.cache.cleared"));
+                          }}
+                        />
+                      </div>
+                    }
+                  />
+                </SettingsCard>
+              </div>
               {/* 模型管理：内置 + 自定义统一列出，点"设为默认"切换默认模型，添加表单在底部 */}
               <SettingsCard>
                 <SettingsCardRow

@@ -1,6 +1,6 @@
 {
-  "iteration": 16,
-  "since_merge": 3,
+  "iteration": 17,
+  "since_merge": 4,
   "last_merge_iter": 13,
   "history": [
     {
@@ -153,6 +153,15 @@
       "tests": "PASS",
       "sha": "",
       "ts": "2026-10-31T08:10:00Z"
+    },
+    {
+      "iter": 17,
+      "action": "功能迭代",
+      "summary": "看板娘补完：模型资源预缓存修复（furina-mini 四件套此前不匹配 SW 特征、预缓存挂在 Cubism 分支默认模型下从不执行，SW v4 + 独立空闲预缓存 effect）；furina-mini 实例跨切换保活（StrictMode 模拟卸载毒化 unmounted 标记/挂载在途时切回会叠加第二次 mount 两处修复，attempt 令牌方案）；新增表情切换面板（furina frames/Cubism expressions/重置）；设置页新增聊天人设提示词（{{name}} 占位）与模型缓存管理（占用统计/立即下载/清理）；插件卸载后气泡定时器写已删 DOM 的 pageerror 用隐藏替身修复",
+      "build": "PASS",
+      "tests": "PASS",
+      "sha": "",
+      "ts": "2026-10-31T21:15:00Z"
     }
   ],
   "rejected": [

@@ -10,7 +10,11 @@
 // cache-first 会永远命中旧字节 —— 例如 8192² 贴图换成 4096² 后，老访客仍会
 // 从本地缓存拿到 13.25MB 的原图，表现为"改了但没生效、还是卡"。
 // activate 阶段会删掉所有非当前名的缓存（见下方 cleanup）。
-const CACHE_NAME = "rin-live2d-v3";
+//
+// v4：修正 furina-mini 的资源识别。v3 只认 model/ 目录与 .moc3/.png 等 Cubism 扩展名，
+// 而自研渲染器的四个文件（furina-mini.js / furina-mesh.bin / furina-atlas.webp /
+// furina-wand.webp）一个都不匹配 → 缓存永远是空的，每次切换都重下 2.4MB。
+const CACHE_NAME = "rin-live2d-v4";
 
 // Live2D 模型资源来源特征：
 // 1) 远端 GitHub 加速代理 / github.io 直连（furina 等未随站打包的模型）；
@@ -25,11 +29,20 @@ const MODEL_ORIGINS = [
 ];
 
 // 模型文件特征（远端仓库片段 + 本站打包根 + 通用模型扩展名）
+// 注意要覆盖自研渲染器 furina-mini 的四件套：.js（渲染器本体）、.bin（量化网格）、
+// .webp（图集/魔杖），它们都在 /Live2D/furina-mini/ 下、路径里没有 model/ 段。
 const MODEL_PATH_RE =
-  /model\/|live2d-bundled\/|\.moc3$|\.model3\.json$|texture|\.png$|\.motion3\.json$|\.physics3\.json$|\.cdi3\.json$|\.exp3\.json$|\.wav$|\.mp3$/;
+  /model\/|live2d-bundled\/|\.moc3$|\.model3\.json$|texture|\.(png|webp|jpe?g)$|\.motion3\.json$|\.physics3\.json$|\.cdi3\.json$|\.exp3\.json$|\.(wav|mp3)$|\.bin$/;
+
+// furina-mini 目录（自研渲染器）：该目录下除模型数据外还有渲染器脚本本体。
+const FURINA_MINI_RE = /\/Live2D\/furina-mini\/|^\/rin-live2d-cdn\/furina-mini\//;
 
 function isLive2dAsset(url) {
   const u = new URL(url);
+  // 自研渲染器目录：整目录视为模型资产（脚本 + 网格 + 图集）
+  if (FURINA_MINI_RE.test(u.pathname)) {
+    return true;
+  }
   // 后端代理根：仓库路径居中（/827802685/Live2D/refs/...）
   if (MODEL_ORIGINS.includes(u.host) && u.pathname.includes("/Live2D/")) {
     return MODEL_PATH_RE.test(u.pathname);
