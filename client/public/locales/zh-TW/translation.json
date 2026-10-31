@@ -257,7 +257,8 @@
     "retry": "重試",
     "tags_title": "熱門標籤",
     "view_tags": "查看標籤",
-    "view_timeline": "查看時間軸"
+    "view_timeline": "查看時間軸",
+    "narrow_title": "站點資訊與標籤"
   },
   "friends": {
     "apply": "申請友情連結",
@@ -551,7 +552,7 @@
       "preview": {
         "classic": "品牌、置中導覽與操作區維持目前這套平衡配置。",
         "compact": "幾乎移除所有裝飾，只保留最必要的資訊與操作。",
-        "sidebar": "左正文右側欄，窄欄摺疊單列。"
+        "sidebar": "左正文右側欄；螢幕寬度不足 1024px 時側欄折疊到正文下方，可點開查看。"
       }
     },
     "header_behavior": {

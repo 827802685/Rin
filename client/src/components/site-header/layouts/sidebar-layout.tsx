@@ -1,3 +1,5 @@
+import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { classicLayoutDefinition } from "./classic-layout";
 import { PreviewBrand, PreviewCanvas, PreviewContent } from "../preview-primitives";
 import type { HeaderLayoutDefinition } from "../layout-types";
@@ -5,6 +7,39 @@ import { SiteSidebar } from "../../site-sidebar/sidebar";
 
 // 顶栏沿用 classic 的渲染；两栏结构在 route shell 里做
 const { renderDesktop, renderMobile } = classicLayoutDefinition;
+
+/**
+ * 窄屏（< lg）下侧栏整体隐藏会把站点简介、社交链接、标签云全丢掉。
+ * 这里折叠成一块可展开的面板挂在正文下方：默认收起不抢阅读空间，
+ * 但至少给窄屏读者留了入口，而不是让"侧栏双列"在手机上凭空消失。
+ */
+function NarrowScreenSidebar() {
+  const { t } = useTranslation();
+  const [open, setOpen] = useState(false);
+
+  return (
+    <div className="mt-6 lg:hidden">
+      <button
+        type="button"
+        aria-expanded={open}
+        onClick={() => setOpen((value) => !value)}
+        className="rin-glass-pill flex w-full items-center justify-between rounded-2xl border border-line bg-w px-4 py-3 text-sm t-secondary transition-colors hover:text-theme"
+      >
+        <span className="flex items-center gap-2">
+          <i className="ri-layout-right-2-line" aria-hidden />
+          {t("sidebar.narrow_title")}
+        </span>
+        <i className={open ? "ri-arrow-up-s-line" : "ri-arrow-down-s-line"} aria-hidden />
+      </button>
+      {open ? (
+        <div className="mt-3">
+          {/* withTocSlot=false：目录槽位只能有一份，桌面 aside 已经占用了 */}
+          <SiteSidebar withTocSlot={false} />
+        </div>
+      ) : null}
+    </div>
+  );
+}
 
 export const sidebarLayoutDefinition: HeaderLayoutDefinition = {
   kind: "sidebar",
@@ -42,7 +77,10 @@ export const sidebarLayoutDefinition: HeaderLayoutDefinition = {
         {header}
         <div className="mx-auto flex w-full max-w-6xl flex-1 items-start gap-6 px-4 py-4 sm:px-6 lg:px-10">
           {/* 页面自己已经有一层 <main>，这里再用 main 会嵌套出两个主地标 */}
-          <div className="min-w-0 flex-1 [&_.wauto]:w-full">{rawContent ?? content}</div>
+          <div className="min-w-0 flex-1 [&_.wauto]:w-full">
+            {rawContent ?? content}
+            <NarrowScreenSidebar />
+          </div>
           <aside className="sticky top-24 hidden w-72 shrink-0 lg:block">
             <div className="scrollbar-none flex max-h-[calc(100vh-7.5rem)] flex-col overflow-y-auto">
               <SiteSidebar />

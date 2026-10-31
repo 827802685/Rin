@@ -1,6 +1,6 @@
 {
-  "iteration": 12,
-  "since_merge": 1,
+  "iteration": 13,
+  "since_merge": 2,
   "last_merge_iter": 11,
   "history": [
     {
@@ -108,6 +108,15 @@
       "tests": "PASS",
       "sha": "",
       "ts": "2026-10-31T07:10:00Z"
+    },
+    {
+      "iter": 13,
+      "action": "修复 Bug",
+      "summary": "窄屏侧栏双列：sidebar 布局 <lg 时正文末尾渲染可展开的折叠侧栏；修复窄屏文章目录被传送进隐藏 aside；SiteSidebar 支持 withTocSlot；标签接口 5 分钟缓存；设置项说明改准确",
+      "build": "PASS",
+      "tests": "PASS",
+      "sha": "",
+      "ts": "2026-10-31T07:57:00Z"
     }
   ]
 }
