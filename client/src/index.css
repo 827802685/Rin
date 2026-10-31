@@ -765,3 +765,211 @@ body.rin-reading-mode [data-rin-widget] {
 #rin-furina-mini canvas:active {
   cursor: grabbing;
 }
+
+/* ============================================================
+   看板娘工具栏：收起成一颗球，点开向上展开竖排玻璃面板
+   ------------------------------------------------------------
+   旧实现是 6 个 32px 圆钮常驻在模型旁边。一列裸图标摊在页面上，
+   既占地方又把正文的注意力分走，而且没有主次（"隐藏"和"聊天"一样重），
+   只剩原生 title 提示（延迟 1s、样式不可控、触屏完全无效）。
+   现在：触发球 44px（触控标准），面板项 40px，视觉与命中都够用；
+   面板复用站点已有的 .rin-glass-pill 玻璃语言，不引入新配色。
+   ============================================================ */
+.rin-l2d-dock {
+  --rin-l2d-ease: cubic-bezier(0.2, 0, 0, 1);
+  --rin-l2d-ease-out: cubic-bezier(0.4, 0, 1, 1);
+}
+
+.rin-l2d-btn {
+  position: relative;
+  color: var(--text-secondary);
+  transition:
+    color 150ms var(--rin-l2d-ease),
+    background-color 150ms var(--rin-l2d-ease),
+    transform 150ms var(--rin-l2d-ease),
+    opacity 200ms var(--rin-l2d-ease),
+    translate 200ms var(--rin-l2d-ease);
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* 视觉 40px，命中区扩到 44px（WCAG 2.5.8 / HIG 44pt），不靠放大图标换取 */
+.rin-l2d-btn::after {
+  content: "";
+  position: absolute;
+  inset: -2px;
+  border-radius: 9999px;
+}
+
+/* "隐藏"这类低频且会让挂件整体消失的动作，权重压到最低 */
+.rin-l2d-btn[data-tone="quiet"] {
+  color: var(--text-muted);
+}
+
+.rin-l2d-btn[data-active="true"] {
+  color: rgb(var(--theme-rgb));
+  background-color: rgb(var(--theme-rgb) / 0.12);
+}
+
+.rin-l2d-btn:active {
+  transform: scale(0.94);
+}
+
+.rin-l2d-btn:focus-visible,
+.rin-l2d-trigger:focus-visible {
+  outline: 2px solid rgb(var(--theme-rgb));
+  outline-offset: 2px;
+  color: rgb(var(--theme-rgb));
+}
+
+/* hover 只在精确指针设备挂载：触屏上 :hover 会"粘住"，
+   第一次 tap 只点亮 hover、点不到功能，要第二下才生效。 */
+@media (hover: hover) and (pointer: fine) {
+  .rin-l2d-btn:hover {
+    color: rgb(var(--theme-rgb));
+    background-color: rgb(var(--theme-rgb) / 0.1);
+    transform: scale(1.06);
+  }
+
+  .rin-l2d-btn[data-tone="quiet"]:hover {
+    color: var(--text-secondary);
+    background-color: var(--surface-hover);
+  }
+
+  .rin-l2d-trigger:hover {
+    transform: scale(1.04);
+  }
+}
+
+.rin-l2d-trigger {
+  color: rgb(var(--theme-rgb));
+  transition:
+    transform 160ms var(--rin-l2d-ease),
+    color 160ms var(--rin-l2d-ease);
+}
+
+.rin-l2d-trigger:active {
+  transform: scale(0.94);
+}
+
+/* 面板显隐：收起 160ms 快速退场、展开 200ms 缓入。
+   visibility 用延迟过渡，收起动画播完才真正摘掉，避免按钮在半透明时就被隐藏。 */
+.rin-l2d-panel {
+  transform-origin: bottom center;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(6px) scale(0.94);
+  transition:
+    opacity 160ms var(--rin-l2d-ease-out),
+    transform 160ms var(--rin-l2d-ease-out),
+    visibility 0s linear 160ms;
+}
+
+.rin-l2d-panel[data-open="true"] {
+  opacity: 1;
+  visibility: visible;
+  transform: none;
+  transition:
+    opacity 200ms var(--rin-l2d-ease),
+    transform 200ms var(--rin-l2d-ease),
+    visibility 0s;
+}
+
+/* 逐项入场：位移用独立的 translate 属性而不是 transform，
+   这样 hover 的 scale、active 的 scale 不会被入场规则覆盖掉。
+   delay 只挂在展开方向，收起时归零，否则最后一项会"拖尾巴"。 */
+.rin-l2d-panel .rin-l2d-item {
+  opacity: 0;
+  translate: 0 4px;
+}
+
+.rin-l2d-panel[data-open="true"] .rin-l2d-item {
+  opacity: 1;
+  translate: 0 0;
+  /* 从底部（靠近触发球）往上一项项冒出，而不是从顶部开始掉下来 */
+  transition:
+    opacity 200ms var(--rin-l2d-ease)
+      calc(30ms + (var(--rin-n, 6) - 1 - var(--rin-i, 0)) * 16ms),
+    translate 200ms var(--rin-l2d-ease)
+      calc(30ms + (var(--rin-n, 6) - 1 - var(--rin-i, 0)) * 16ms),
+    color 150ms var(--rin-l2d-ease),
+    background-color 150ms var(--rin-l2d-ease),
+    transform 150ms var(--rin-l2d-ease);
+}
+
+/* 动作二级浮层：向左弹出，只做不透明度与位移，不缩放到 0 免得读作"卡片翻出来" */
+.rin-l2d-flyout {
+  opacity: 0;
+  visibility: hidden;
+  translate: 8px 0;
+  transition:
+    opacity 140ms var(--rin-l2d-ease-out),
+    translate 140ms var(--rin-l2d-ease-out),
+    visibility 0s linear 140ms;
+}
+
+.rin-l2d-flyout[data-open="true"] {
+  opacity: 1;
+  visibility: visible;
+  translate: 0 0;
+  transition:
+    opacity 180ms var(--rin-l2d-ease),
+    translate 180ms var(--rin-l2d-ease),
+    visibility 0s;
+}
+
+/* 自绘 tooltip：桌面端延迟 320ms 出现（避免划过就闪一片），
+   触屏端不显示，无障碍名由按钮的 aria-label 兜底。 */
+.rin-l2d-tip {
+  position: absolute;
+  top: 50%;
+  right: calc(100% + 10px);
+  translate: 4px -50%;
+  opacity: 0;
+  pointer-events: none;
+  white-space: nowrap;
+  padding: 4px 8px;
+  border: 1px solid var(--border-default);
+  border-radius: 8px;
+  color: var(--text-primary);
+  background-color: var(--surface-raised);
+  box-shadow: 0 6px 16px -8px rgb(0 0 0 / 0.45);
+  font-size: 11px;
+  line-height: 1.4;
+  transition:
+    opacity 120ms ease-out,
+    translate 120ms ease-out;
+}
+
+.rin-l2d-btn:focus-visible > .rin-l2d-tip {
+  opacity: 1;
+  translate: 0 -50%;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .rin-l2d-btn:hover > .rin-l2d-tip {
+    opacity: 1;
+    translate: 0 -50%;
+    transition-delay: 320ms;
+  }
+}
+
+/* 减少动效：只关掉位移与缩放（它们最容易引发不适），状态切换本身仍然瞬时可见。
+   tooltip 的 -50% 是垂直居中的定位值，不能被归零，单独处理。 */
+@media (prefers-reduced-motion: reduce) {
+  .rin-l2d-panel,
+  .rin-l2d-flyout,
+  .rin-l2d-btn,
+  .rin-l2d-item,
+  .rin-l2d-trigger {
+    transition-duration: 1ms !important;
+    transition-delay: 0ms !important;
+    transform: none !important;
+    translate: 0 0 !important;
+  }
+
+  .rin-l2d-tip {
+    transition-duration: 1ms !important;
+    transition-delay: 0ms !important;
+  }
+}

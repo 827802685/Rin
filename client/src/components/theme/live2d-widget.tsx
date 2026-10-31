@@ -548,12 +548,15 @@ export function Live2DWidget() {
   const applyRenderCapsRef = useRef<(() => void) | null>(null);
   const [showActions, setShowActions] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
+  // 工具栏收起成一颗球：点开才展开功能面板（6 个常驻按钮的视觉噪音太大）
+  const [dockOpen, setDockOpen] = useState(false);
   const [chatMessages, setChatMessages] = useState<AIChatMessage[]>([]);
   const [chatInput, setChatInput] = useState("");
   const [chatLoading, setChatLoading] = useState(false);
   const [chatError, setChatError] = useState<string | null>(null);
   const modelAreaRef = useRef<HTMLDivElement | null>(null);
   const outerRef = useRef<HTMLDivElement | null>(null);
+  const dockRef = useRef<HTMLDivElement | null>(null);
   const tipsTimerRef = useRef<number | null>(null);
   const chatScrollRef = useRef<HTMLDivElement | null>(null);
   const renderedRef = useRef(false);
@@ -880,6 +883,41 @@ export function Live2DWidget() {
     document.addEventListener("pointerdown", onPointerDown);
     return () => document.removeEventListener("pointerdown", onPointerDown);
   }, [chatOpen]);
+
+  /**
+   * 工具栏展开态的收起逻辑：点面板外、按 Esc 收起。
+   * 不做 hover 展开——触屏上 :hover 会「第一下只展开、第二下才点到」。
+   */
+  useEffect(() => {
+    if (!dockOpen) {
+      return;
+    }
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target as Node | null;
+      // 触发球在 dockRef 内，点它交给 onClick 自己 toggle，不会被误判成「外部」
+      if (dockRef.current && target && !dockRef.current.contains(target)) {
+        setDockOpen(false);
+        setShowActions(false);
+      }
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") {
+        return;
+      }
+      // Esc 先收二级浮层，再收主面板，逐层退
+      if (showActions) {
+        setShowActions(false);
+        return;
+      }
+      setDockOpen(false);
+    };
+    document.addEventListener("pointerdown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [dockOpen, showActions]);
 
   /**
    * 插件被加载后同步插入 #waifu（其内含 #waifu-canvas > canvas#live2d、#waifu-tips、#waifu-tool）。
@@ -1652,6 +1690,36 @@ export function Live2DWidget() {
     window.addEventListener("pointercancel", onWindowUpRef.current);
   }
 
+  // 工具栏项：数组顺序即面板里从上到下的顺序（动作项单独插在“摸一摸”之后）
+  const dockItems: {
+    id: string;
+    icon: string;
+    label: string;
+    onClick: () => void;
+    pressed?: boolean;
+  }[] = [
+    { id: "home", icon: "ri-home-4-line", label: t("theme.live2d.home"), onClick: goHome },
+    {
+      id: "chat",
+      icon: "ri-chat-3-line",
+      label: t("theme.live2d.chat.button"),
+      pressed: chatOpen,
+      onClick: () => setChatOpen((value) => !value),
+    },
+    {
+      id: "switch",
+      icon: "ri-refresh-line",
+      label: t("theme.live2d.switch.button"),
+      onClick: switchToNextModel,
+    },
+    { id: "poke", icon: "ri-hand-heart-line", label: t("theme.live2d.poke"), onClick: petModel },
+  ];
+  const dockActionItems: { name: ActionName; icon: string }[] = [
+    { name: "wave", icon: "ri-hand-heart-line" },
+    { name: "shake", icon: "ri-emotion-normal-line" },
+    { name: "dance", icon: "ri-music-2-line" },
+  ];
+
   const anchorStyle: React.CSSProperties =
     position === "left" ? { left: "1rem" } : { right: "1rem" };
 
@@ -1669,11 +1737,12 @@ export function Live2DWidget() {
         <button
           type="button"
           onClick={() => setHidden(false)}
-          className="fixed bottom-4 z-40 rounded-full bg-theme px-3 py-2 text-white shadow-lg transition hover:bg-theme-hover rin-glass-accent"
+          className="fixed bottom-4 z-40 flex h-12 w-12 items-center justify-center rounded-full text-lg text-white shadow-lg transition hover:brightness-105 rin-glass-accent"
           style={anchorStyle}
           aria-label={t("theme.live2d.show")}
+          title={t("theme.live2d.show")}
         >
-          <i className="ri-magic-line" />
+          <i aria-hidden="true" className="ri-sparkling-2-line" />
         </button>
       ) : null}
       {/* pointer-events-none：整个看板娘占位块比可见人物大得多（方形模型区 + 行容器留白），
@@ -1697,85 +1766,125 @@ export function Live2DWidget() {
             工具栏留在左侧会正好压住标签云药丸；换到右侧后落在侧栏外的留白里。
             用 flex-row-reverse 而不重排 JSX，气泡/画布的插件定位不受影响。 */}
         <div className={`flex flex-row-reverse items-end gap-1 ${dragging ? "pointer-events-none" : ""}`}>
-          {/* 竖排工具栏：首页 / 聊天 / 换模型 / 摸一摸 / 动作 / 隐藏（从上到下） */}
-          <div className="pointer-events-auto relative flex flex-col items-center gap-1">
-            {showActions && !error ? (
-              <div className="absolute right-full top-1/2 mr-2 flex -translate-y-1/2 flex-col gap-1 rounded-2xl border border-black/10 bg-w p-1.5 shadow dark:border-white/10">
-                {(["wave", "shake", "dance"] as ActionName[]).map((name) => (
-                  <button
-                    key={name}
-                    type="button"
-                    onClick={() => playCustomAction(name)}
-                    className="flex h-8 w-8 items-center justify-center rounded-full text-base transition hover:scale-110 hover:bg-neutral-100 dark:hover:bg-white/10"
-                    aria-label={t(`theme.live2d.actions.${name}`)}
-                    title={t(`theme.live2d.actions.${name}`)}
-                  >
-                    <i
-                      className={
-                        name === "wave"
-                          ? "ri-hand-heart-line"
-                          : name === "shake"
-                            ? "ri-emotion-normal-line"
-                            : "ri-music-2-line"
-                      }
-                    />
-                  </button>
-                ))}
+          {/* 工具栏：收起态只有一颗玻璃球，点开向上展开竖排面板，动作再向左弹二级浮层。
+              旧版是 6 个 32px 圆钮常驻在模型旁边：一列裸图标摊在页面上，占地方、
+              没有主次（"隐藏"和"聊天"长得一样）、没有按下态，触屏上只剩原生 title 提示。 */}
+          <div
+            ref={dockRef}
+            className="rin-l2d-dock pointer-events-auto relative flex flex-col items-center gap-1.5"
+          >
+            {/* 面板：data-open 驱动显隐。收起态用 visibility:hidden 而不是只给 opacity:0——
+                看不见的按钮仍然能被 Tab 聚焦、仍然吃点击（live2d-widget 原版就踩了这个坑）。 */}
+            <div
+              data-open={dockOpen}
+              aria-hidden={!dockOpen}
+              style={{ "--rin-n": 6 } as React.CSSProperties}
+              className="rin-l2d-panel rin-glass-pill flex flex-col items-center gap-1 rounded-[26px] p-1.5"
+            >
+              {dockItems.map((item, index) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={item.onClick}
+                  aria-label={item.label}
+                  aria-pressed={item.pressed}
+                  data-active={item.pressed ? "true" : undefined}
+                  style={{ "--rin-i": index } as React.CSSProperties}
+                  className="rin-l2d-btn rin-l2d-item relative flex h-10 w-10 items-center justify-center rounded-full"
+                >
+                  <i aria-hidden="true" className={`${item.icon} text-[17px]`} />
+                  <span className="rin-l2d-tip" aria-hidden="true">
+                    {item.label}
+                  </span>
+                </button>
+              ))}
+
+              {/* 动作：本项不收起面板，只向左弹出一排动作按钮 */}
+              <div
+                className="rin-l2d-item relative flex items-center"
+                style={{ "--rin-i": dockItems.length } as React.CSSProperties}
+              >
+                <div
+                  data-open={showActions && !error}
+                  aria-hidden={!showActions}
+                  className="rin-l2d-flyout rin-glass-pill absolute right-full top-1/2 mr-1.5 flex -translate-y-1/2 items-center gap-0.5 rounded-full p-1"
+                >
+                  {dockActionItems.map((action) => (
+                    <button
+                      key={action.name}
+                      type="button"
+                      onClick={() => playCustomAction(action.name)}
+                      aria-label={t(`theme.live2d.actions.${action.name}`)}
+                      className="rin-l2d-btn relative flex h-10 w-10 items-center justify-center rounded-full"
+                    >
+                      <i aria-hidden="true" className={`${action.icon} text-[17px]`} />
+                      <span className="rin-l2d-tip" aria-hidden="true">
+                        {t(`theme.live2d.actions.${action.name}`)}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowActions((value) => !value)}
+                  aria-label={t("theme.live2d.actions.button")}
+                  aria-haspopup="true"
+                  aria-expanded={showActions}
+                  data-active={showActions ? "true" : undefined}
+                  className="rin-l2d-btn relative flex h-10 w-10 items-center justify-center rounded-full"
+                >
+                  <i aria-hidden="true" className="ri-magic-line text-[17px]" />
+                  <span className="rin-l2d-tip" aria-hidden="true">
+                    {t("theme.live2d.actions.button")}
+                  </span>
+                </button>
               </div>
-            ) : null}
+
+              {/* 隐藏：低频动作 + 会让挂件整体消失，权重压到最低 */}
+              <button
+                type="button"
+                data-tone="quiet"
+                onClick={() => {
+                  setDockOpen(false);
+                  setShowActions(false);
+                  setHidden(true);
+                }}
+                aria-label={t("theme.live2d.hide")}
+                style={{ "--rin-i": dockItems.length + 1 } as React.CSSProperties}
+                className="rin-l2d-btn rin-l2d-item relative flex h-10 w-10 items-center justify-center rounded-full"
+              >
+                <i aria-hidden="true" className="ri-eye-off-line text-[17px]" />
+                <span className="rin-l2d-tip" aria-hidden="true">
+                  {t("theme.live2d.hide")}
+                </span>
+              </button>
+            </div>
+
+            {/* 触发球：✦ ↔ × 交叉淡切 + 旋转，展开态由 aria-expanded 与 CSS 状态共同表达 */}
             <button
               type="button"
-              onClick={goHome}
-              className="flex h-8 w-8 items-center justify-center rounded-full bg-w text-sm shadow t-muted transition hover:text-theme"
-              aria-label={t("theme.live2d.home")}
-              title={t("theme.live2d.home")}
+              onClick={() => {
+                setDockOpen((value) => !value);
+                setShowActions(false);
+              }}
+              aria-label={t(dockOpen ? "theme.live2d.dock.close" : "theme.live2d.dock.open")}
+              aria-expanded={dockOpen}
+              className="rin-l2d-trigger rin-glass-pill flex h-12 w-12 items-center justify-center rounded-full"
             >
-              <i className="ri-home-4-line" />
-            </button>
-            <button
-              type="button"
-              onClick={() => setChatOpen((value) => !value)}
-              className={`flex h-8 w-8 items-center justify-center rounded-full bg-w text-sm shadow transition ${chatOpen ? "text-theme" : "t-muted hover:text-theme"}`}
-              aria-label={t("theme.live2d.chat.button")}
-              title={t("theme.live2d.chat.button")}
-            >
-              <i className="ri-chat-3-line" />
-            </button>
-            <button
-              type="button"
-              onClick={switchToNextModel}
-              className="flex h-8 w-8 items-center justify-center rounded-full bg-w text-sm shadow t-muted transition hover:text-theme"
-              aria-label={t("theme.live2d.switch.button")}
-              title={t("theme.live2d.switch.button")}
-            >
-              <i className="ri-refresh-line" />
-            </button>
-            <button
-              type="button"
-              onClick={petModel}
-              className="flex h-8 w-8 items-center justify-center rounded-full bg-w text-sm shadow t-muted transition hover:text-theme"
-              aria-label={t("theme.live2d.poke")}
-              title={t("theme.live2d.poke")}
-            >
-              <i className="ri-hand-heart-line" />
-            </button>
-            <button
-              type="button"
-              onClick={() => setShowActions((value) => !value)}
-              className={`flex h-8 w-8 items-center justify-center rounded-full bg-w text-sm shadow transition ${showActions ? "text-theme" : "t-muted hover:text-theme"}`}
-              aria-label={t("theme.live2d.actions.button")}
-              title={t("theme.live2d.actions.button")}
-            >
-              <i className="ri-magic-line" />
-            </button>
-            <button
-              type="button"
-              onClick={() => setHidden(true)}
-              className="flex h-8 w-8 items-center justify-center rounded-full bg-w text-sm shadow t-muted transition hover:text-theme"
-              aria-label={t("theme.live2d.hide")}
-              title={t("theme.live2d.hide")}
-            >
-              <i className="ri-close-line" />
+              <span className="relative h-5 w-5">
+                <i
+                  aria-hidden="true"
+                  className={`ri-sparkling-2-line absolute inset-0 grid place-items-center text-[18px] transition-all duration-200 ease-out ${
+                    dockOpen ? "rotate-45 opacity-0" : "rotate-0 opacity-100"
+                  }`}
+                />
+                <i
+                  aria-hidden="true"
+                  className={`ri-close-line absolute inset-0 grid place-items-center text-[18px] transition-all duration-200 ease-out ${
+                    dockOpen ? "rotate-0 opacity-100" : "-rotate-45 opacity-0"
+                  }`}
+                />
+              </span>
             </button>
           </div>
 

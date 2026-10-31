@@ -971,6 +971,10 @@
         "builtin": "Built-in",
         "set_default": "Set as default"
       },
+      "dock": {
+        "open": "Open toolbar",
+        "close": "Close toolbar"
+      },
       "show": "Show mascot",
       "hide": "Hide mascot",
       "poke": "Pat",
