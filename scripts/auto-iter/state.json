@@ -1,6 +1,6 @@
 {
-  "iteration": 14,
-  "since_merge": 1,
+  "iteration": 15,
+  "since_merge": 2,
   "last_merge_iter": 13,
   "history": [
     {
@@ -135,6 +135,15 @@
       "tests": "PASS",
       "sha": "",
       "ts": "2026-10-31T02:26:00Z"
+    },
+    {
+      "iter": 15,
+      "action": "修复 Bug",
+      "summary": "看板娘：furina-mini 画布继承 pointer-events:none 导致模型完全无法拖动/点击（改为画布显式 auto，并关掉渲染器自带 draggable 避免双倍位移）；换模型加 800ms 连点闸门、两个渲染分支进入时重置 rendered/error、卸载时清空 window.__rinLive2dApp 防幽灵实例",
+      "build": "PASS",
+      "tests": "PASS",
+      "sha": "",
+      "ts": "2026-10-31T03:30:00Z"
     }
   ],
   "rejected": [
