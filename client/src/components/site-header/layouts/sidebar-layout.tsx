@@ -43,7 +43,10 @@ export const sidebarLayoutDefinition: HeaderLayoutDefinition = {
         <div className="mx-auto flex w-full max-w-6xl flex-1 items-start gap-6 px-4 py-4 sm:px-6 lg:px-10">
           {/* 页面自己已经有一层 <main>，这里再用 main 会嵌套出两个主地标 */}
           <div className="min-w-0 flex-1 [&_.wauto]:w-full">{rawContent ?? content}</div>
-          <aside className="sticky top-24 hidden w-72 shrink-0 lg:block">
+          {/* 浏览器「电脑版」通常把布局视口固定成 980px，比 Tailwind lg(1024) 差 44px，
+              按 lg 判断会导致手机开电脑版依然是单栏。这里把侧栏门槛单独降到 980px：
+              手机竖屏(390~430)/平板竖屏(768) 仍不显示，等宽 ≥980 才铺两栏。 */}
+          <aside className="sticky top-24 hidden w-72 shrink-0 min-[980px]:block">
             <div className="scrollbar-none flex max-h-[calc(100vh-7.5rem)] flex-col overflow-y-auto">
               <SiteSidebar />
             </div>

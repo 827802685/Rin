@@ -1,6 +1,6 @@
 {
-  "iteration": 13,
-  "since_merge": 0,
+  "iteration": 14,
+  "since_merge": 1,
   "last_merge_iter": 13,
   "history": [
     {
@@ -126,6 +126,15 @@
       "tests": "PASS",
       "sha": "983f583",
       "ts": "2026-10-31T01:33:00Z"
+    },
+    {
+      "iter": 14,
+      "action": "修复 Bug",
+      "summary": "sidebar 布局侧栏断点由 lg(1024px) 降为 980px：浏览器「电脑版」把布局视口固定成 980px，比 1024 差 44px 导致手机开电脑版仍是单栏；手机竖屏/平板竖屏不变",
+      "build": "PASS",
+      "tests": "PASS",
+      "sha": "",
+      "ts": "2026-10-31T02:26:00Z"
     }
   ],
   "rejected": [
