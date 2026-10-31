@@ -756,6 +756,10 @@ body.rin-reading-mode [data-rin-widget] {
 #rin-furina-mini canvas {
   pointer-events: auto;
   cursor: grab;
+  /* 触屏拖动要靠 pointermove 持续收到事件：默认 touch-action 会让浏览器把竖向手势
+     判成页面滚动并抛 pointercancel，模型就只能横向动、竖向纹丝不动。
+     关闭本元素的浏览器手势（页面其它区域照常滚动）。 */
+  touch-action: none;
 }
 
 #rin-furina-mini canvas:active {
