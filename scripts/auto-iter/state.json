@@ -1,6 +1,6 @@
 {
-  "iteration": 13,
-  "since_merge": 0,
+  "iteration": 14,
+  "since_merge": 1,
   "last_merge_iter": 13,
   "history": [
     {
@@ -117,6 +117,32 @@
       "tests": "PASS",
       "sha": "",
       "ts": "2026-10-31T07:57:00Z"
+    },
+    {
+      "iter": 13,
+      "action": "回退",
+      "summary": "按用户要求回退 #13 的窄屏折叠侧栏面板：删除 NarrowScreenSidebar、withTocSlot、目录断点判断与 narrow_title 文案，sidebar 布局恢复「<lg 不渲染侧栏」，桌面双栏不变",
+      "build": "PASS",
+      "tests": "PASS",
+      "sha": "983f583",
+      "ts": "2026-10-31T01:33:00Z"
+    },
+    {
+      "iter": 14,
+      "action": "修复 Bug",
+      "summary": "sidebar 布局侧栏断点由 lg(1024px) 降为 980px：浏览器「电脑版」把布局视口固定成 980px，比 1024 差 44px 导致手机开电脑版仍是单栏；手机竖屏/平板竖屏不变",
+      "build": "PASS",
+      "tests": "PASS",
+      "sha": "",
+      "ts": "2026-10-31T02:26:00Z"
+    }
+  ],
+  "rejected": [
+    {
+      "what": "窄屏（<1024px）把侧栏折叠到正文底部的面板",
+      "iter": 13,
+      "reason": "用户明确否决：观感不合理。窄屏维持不渲染侧栏，只保留桌面双栏；不要用折叠块/抽屉等替代形式重提",
+      "ts": "2026-10-31T01:33:00Z"
     }
   ]
 }
