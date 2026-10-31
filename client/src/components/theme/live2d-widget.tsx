@@ -560,6 +560,11 @@ export function Live2DWidget() {
   // FurinaMini（自研渲染器）实例：furina-mini 模型不走 Cubism，动作按钮降级走它的 setExpression
   const furinaMiniRef = useRef<FurinaMiniInstance | null>(null);
   const lastProgressAtRef = useRef(Date.now());
+  // 换模型的连点闸门：两次切换至少间隔 800ms。
+  // 没有它时快速双击会在同一批渲染里读到旧 activeModel，连开两次重挂载，
+  // 前一次的异步回调（插件初始化/自研渲染器加载）随后打到已被移除的 DOM 上：
+  // 实测触发 `Cannot set properties of null (setting 'innerHTML')`，模型直接消失。
+  const switchGuardRef = useRef(0);
   // 拖动状态镜像（ref 版，供动画帧读取）
   const draggingRef = useRef(false);
   // 拖动期间被接管的模型 setDragging 原函数（用于恢复与重置）
@@ -743,6 +748,11 @@ export function Live2DWidget() {
     const isBase = (BUILTIN_MODELS as readonly string[]).includes(name);
     const custom = customModelsRef.current.find((c) => c.id === name);
     if (!isBase && !custom) return;
+    if (name === activeModel) return;
+    // 连点闸门：上一次切换还在重挂载/加载中时，再来一次只会让两套异步互相覆盖 DOM
+    const now = Date.now();
+    if (now < switchGuardRef.current) return;
+    switchGuardRef.current = now + 800;
     setActiveModel(name);
     // 进度口径跟着换目标：分母换成目标模型的字节、分子清零。快路径复用的是同一个
     // tracker（不重挂载加载 effect），不换就会「分子是新模型、分母是旧模型」。
@@ -895,6 +905,12 @@ export function Live2DWidget() {
     if (activeModel === "furina-mini") return;
 
     let disposed = false;
+
+    // 每次重挂载都从"未就绪"开始：否则从上一个模型带着 rendered=true 进来，
+    // 加载遮罩不显示、失败也看不出来（表现为"点了换模型就没了"）。
+    renderedRef.current = false;
+    setRendered(false);
+    setError(null);
 
     // ---- 首次挂载，清掉可能残留的插件会话状态，保证每次挂载都从干净状态开始 ----
     // 本次挂载加载 activeModel（首屏即渲染期解析出的默认模型）。首屏由 pickCdnRoot(activeModel)
@@ -1276,6 +1292,10 @@ export function Live2DWidget() {
       document.getElementById("waifu")?.remove();
       document.getElementById("waifu-toggle")?.remove();
       document.getElementById(OVERRIDE_STYLE_ID)?.remove();
+      // 实例跟着 #waifu 一起被丢弃了，必须把全局引用一起清掉：否则下次从别的模型
+      // 切回 Cubism 时 switchModel 会把「已脱离文档的旧实例」当成 canChange=true，
+      // 调 changeModel 到幽灵画布上 —— 模型不出现、也不再重挂载，卡死在加载态。
+      (window as unknown as Record<string, unknown>).__rinLive2dApp = undefined;
       document
         .querySelector(`link[data-rin-live2d-widget="${CSS_MARK}"]`)
         ?.remove();
@@ -1308,6 +1328,10 @@ export function Live2DWidget() {
     if (!cage) return;
 
     let disposed = false;
+    // 与 Cubism 分支同一口径：进来先回到"未就绪"，由本分支的异步加载决定何时放行
+    renderedRef.current = false;
+    setRendered(false);
+    setError(null);
     const host = document.createElement("div");
     host.id = "rin-furina-mini";
     // 与 #waifu 同居一个缩放容器：外层已负责定位/缩放/轮廓贴合，这里只铺满
@@ -1366,6 +1390,9 @@ export function Live2DWidget() {
             base,
             // 画布宽度：夹在加载盒的宽度里，避免小容器被 420px 默认值撑破
             size: Math.max(200, Math.min(420, boxW)),
+            // 关掉渲染器自带的拖动：它只改自己画布的 transform，既不保存位置，
+            // 也会和外层的整体拖拽叠加成"双倍位移"。拖动统一交给外层 React 处理。
+            draggable: false,
             frames: [
               "blink",
               "eyeLeft",
@@ -1385,6 +1412,14 @@ export function Live2DWidget() {
             return;
           }
           furinaMiniRef.current = instance;
+          // 让画布接管指针：模型容器是 pointer-events-none，而 pointer-events 是可继承属性，
+          // 画布不显式声明就会继承成 none —— 表现为"模型完全点不动、拖不走"（Cubism 分支
+          // 靠 override-style 里 #live2d{pointer-events:auto} 才没这个问题）。
+          // 只开画布本体，容器留白仍然点击穿透给页面。
+          const cv = host.querySelector("canvas");
+          if (cv) {
+            cv.style.pointerEvents = "auto";
+          }
           renderedRef.current = true;
           setRendered(true);
           setError(null);
@@ -1394,6 +1429,9 @@ export function Live2DWidget() {
         }
       }
       if (!disposed) {
+        // 两个候选根都失败：把空容器收掉，交给 error 分支显示提示，
+        // 否则会留一个空白方块盖在页面上
+        host.remove();
         setError(t("theme.live2d.loading.stalled"));
       }
     })();
