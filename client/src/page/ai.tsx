@@ -58,7 +58,7 @@ export function AIPage() {
                                         setMessages([]);
                                         setError(null);
                                     }}
-                                    className="rounded-full px-3 py-1 text-sm text-neutral-500 transition-colors hover:bg-neutral-100 dark:text-neutral-400 dark:hover:bg-white/5"
+                                    className="rounded-full px-3 py-1 text-sm text-neutral-500 transition-colors hover:bg-neutral-100 dark:text-neutral-400 dark:hover:bg-white/5 rin-glass-pill"
                                 >
                                     {t("ai.chat.clear")}
                                 </button>
@@ -121,7 +121,7 @@ export function AIPage() {
                                 <button
                                     onClick={handleSend}
                                     disabled={!aiEnabled || loading || !input.trim()}
-                                    className="shrink-0 rounded-full bg-theme px-5 py-2.5 text-sm text-white transition-colors hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+                                    className="shrink-0 rounded-full bg-theme px-5 py-2.5 text-sm text-white transition-colors hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 rin-glass-accent"
                                 >
                                     {t("ai.chat.send")}
                                 </button>

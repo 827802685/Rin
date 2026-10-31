@@ -86,7 +86,7 @@ export function FriendsPage() {
         <Waiting for={friendsAvailable.length !== 0 || friendsUnavailable.length !== 0 || status === "idle"}>
             <main className="w-full flex flex-col justify-center items-center mb-8 t-primary ani-show">
                 <div className="wauto flex justify-end py-2">
-                    <a href="/circle" className="inline-flex items-center gap-1.5 text-sm px-4 py-2 rounded-full bg-button bg-w hover:scale-[1.03] transition-transform">
+                    <a href="/circle" className="inline-flex items-center gap-1.5 text-sm px-4 py-2 rounded-full bg-button bg-w hover:scale-[1.03] transition-transform rin-glass-pill">
                         <i className="ri-rss-line"></i>
                         {t('friends.circle')}
                     </a>
@@ -108,7 +108,7 @@ export function FriendsPage() {
                                 <Input value={avatar} setValue={setAvatar} placeholder={t('avatar.url')} variant="flat" className="mt-2" />
                                 <Input value={url} setValue={setUrl} placeholder={t('url')} variant="flat" className="my-2" />
                                 <div className='flex flex-row justify-center'>
-                                    <button onClick={publishButton} className='basis-1/2 rounded-full bg-theme py-4 text-white'>{t('create.title')}</button>
+                                    <button onClick={publishButton} className='basis-1/2 rounded-full bg-theme py-4 text-white rin-glass-accent'>{t('create.title')}</button>
                                 </div>
                             </div>
                         </FlatPanel>

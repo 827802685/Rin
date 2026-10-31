@@ -83,7 +83,7 @@ export function ShareBar({ title, url }: { title: string; url: string }) {
                 key={network}
                 type="button"
                 onClick={() => void handleWeixin()}
-                className="flex items-center gap-1.5 rounded-full border border-line bg-secondary px-3 py-1.5 text-sm t-primary transition hover:bg-hover"
+                className="flex items-center gap-1.5 rounded-full border border-line bg-secondary px-3 py-1.5 text-sm t-primary transition hover:bg-hover rin-glass-pill"
                 title={meta.label}
               >
                 <i className={meta.icon} />
@@ -97,7 +97,7 @@ export function ShareBar({ title, url }: { title: string; url: string }) {
                 key={network}
                 type="button"
                 onClick={() => void handleWeixin()}
-                className="flex items-center gap-1.5 rounded-full border border-line bg-secondary px-3 py-1.5 text-sm t-primary transition hover:bg-hover"
+                className="flex items-center gap-1.5 rounded-full border border-line bg-secondary px-3 py-1.5 text-sm t-primary transition hover:bg-hover rin-glass-pill"
                 title={meta.label}
               >
                 <i className={meta.icon} />
@@ -115,7 +115,7 @@ export function ShareBar({ title, url }: { title: string; url: string }) {
               href={href}
               target="_blank"
               rel="noopener noreferrer"
-              className="flex items-center gap-1.5 rounded-full border border-line bg-secondary px-3 py-1.5 text-sm t-primary transition hover:bg-hover"
+              className="flex items-center gap-1.5 rounded-full border border-line bg-secondary px-3 py-1.5 text-sm t-primary transition hover:bg-hover rin-glass-pill"
               title={meta.label}
             >
               <i className={meta.icon} />

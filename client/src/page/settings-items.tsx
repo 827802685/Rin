@@ -103,7 +103,7 @@ export function ItemInput({
             <button
               type="button"
               onClick={() => setIsOpen(false)}
-              className="mt-3 inline-flex items-center gap-1 rounded-full bg-theme px-4 py-1.5 text-sm font-medium text-white transition hover:bg-theme-hover"
+              className="mt-3 inline-flex items-center gap-1 rounded-full bg-theme px-4 py-1.5 text-sm font-medium text-white transition hover:bg-theme-hover rin-glass-accent"
             >
               <i className="ri-check-line" />
               {t("confirm")}

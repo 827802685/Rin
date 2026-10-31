@@ -48,7 +48,7 @@ function NavItem({
     <Link
       href={href}
       className={`${menu ? "" : "hidden"} md:block cursor-pointer hover:text-theme duration-300 px-2 py-4 md:p-4 text-sm ${
-        selected ? "text-theme" : "dark:text-white"
+        selected ? "text-theme rin-nav-tab rin-glass-pill" : "dark:text-white"
       } ${itemClassName}`}
       state={{ animate: true }}
       onClick={onClick}

@@ -257,7 +257,8 @@
     "retry": "Retry",
     "tags_title": "Popular tags",
     "view_tags": "Tags",
-    "view_timeline": "Timeline"
+    "view_timeline": "Timeline",
+    "narrow_title": "Site info & tags"
   },
   "friends": {
     "apply": "Apply for Friend Link",
@@ -551,7 +552,7 @@
       "preview": {
         "classic": "Brand, centered navigation, and actions stay balanced like the current header.",
         "compact": "A text-first header with almost no decoration, keeping only the essential information.",
-        "sidebar": "Main content on the left with a sticky sidebar (profile, tags, table of contents). Collapses to one column on narrow screens."
+        "sidebar": "Article on the left, sidebar on the right; below 1024px the sidebar folds under the article and can be expanded."
       }
     },
     "header_behavior": {

@@ -98,7 +98,7 @@ export function ArticleSideRail({ feed }: { feed: Feed }) {
                 <Link
                   key={tag.id}
                   href={`/hashtag/${tag.name}`}
-                  className="rounded-full bg-secondary px-2 py-1 text-[12px] t-primary transition-colors hover:bg-theme hover:text-white"
+                  className="rounded-full bg-secondary px-2 py-1 text-[12px] t-primary transition-colors hover:bg-theme hover:text-white rin-glass-pill"
                 >
                   #{tag.name}
                 </Link>
